@@ -1,10 +1,14 @@
 [profile.default]
 src = "src"
+test = "test"
 out = "out"
-libs = ["lib"]
+libs = ["../node_modules"]
+remappings = ["@openzeppelin/contracts/=../node_modules/@openzeppelin/contracts/"]
 solc_version = "0.8.28"
 evm_version = "paris"
 optimizer = true
 optimizer_runs = 200
-[fuzz]
-runs = 256
+bytecode_hash = "ipfs"
+
+[profile.default.fuzz]
+runs = 512
