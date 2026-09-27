@@ -16,30 +16,23 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version-file: .node-version
-      - name: Resolve exact dependency candidates in disposable workspace
+      - name: Install exact candidate dependencies without writing the repository
         run: |
           set -euo pipefail
           git archive HEAD > source.tar
           npm install --global pnpm@10.11.1
           node --input-type=module <<'JS'
           import fs from 'node:fs';
-          import {execFileSync} from 'node:child_process';
-          const resolve = name => {
-            const all=JSON.parse(execFileSync('npm',['view',name,'version','--json'],{encoding:'utf8'}));
-            const version=Array.isArray(all)?all.at(-1):all;
-            if(!/^\d+\.\d+\.\d+$/.test(version)) throw Error('Not stable: '+name);
-            return version;
-          };
           const p=JSON.parse(fs.readFileSync('package.json','utf8'));
-          p.dependencies.viem=resolve('viem@2');
-          p.devDependencies['@openzeppelin/contracts']=resolve('@openzeppelin/contracts@5');
+          p.dependencies.viem='2.56.9';
+          p.devDependencies['@openzeppelin/contracts']='5.7.0';
           p.devDependencies.solc='0.8.28';
           fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\n');
-          fs.writeFileSync('toolchain.json',JSON.stringify({viem:p.dependencies.viem,openzeppelin:p.devDependencies['@openzeppelin/contracts'],solc:'0.8.28',foundry:'1.8.3'},null,2));
+          fs.writeFileSync('toolchain.json',JSON.stringify({viem:'2.56.9',openzeppelin:'5.7.0',solc:'0.8.28',foundry:'1.8.3'},null,2));
           JS
           pnpm install --lockfile-only --ignore-scripts
           pnpm install --frozen-lockfile
-      - name: Download pinned official Foundry and Solidity binaries, verify hashes
+      - name: Verify pinned official tool binaries
         run: |
           set -euo pipefail
           mkdir -p tools
@@ -47,21 +40,21 @@ jobs:
           curl -fLsS --retry 2 https://github.com/foundry-rs/foundry/releases/download/v1.8.3/foundry_v1.8.3_linux_amd64.sha256 -o tools/foundry.sha256
           (cd tools && sha256sum --check foundry.sha256)
           tar -xzf tools/foundry_v1.8.3_linux_amd64.tar.gz -C tools forge cast anvil
-          curl -fLsS --retry 2 https://binaries.soliditylang.org/linux-amd64/list.json -o tools/solc-list.json
+          curl -fLsS --retry 2 https://raw.githubusercontent.com/ethereum/solc-bin/gh-pages/linux-amd64/list.json -o tools/solc-list.json
           python3 - <<'PY'
-          import json,urllib.request,hashlib,os
+          import json,subprocess,hashlib,os
           data=json.load(open('tools/solc-list.json'))
           path=data['releases']['0.8.28']
           build=next(b for b in data['builds'] if b['path']==path)
           assert '/' not in path and path.startswith('solc-linux-amd64-v0.8.28+')
-          raw=urllib.request.urlopen('https://binaries.soliditylang.org/linux-amd64/'+path,timeout=60).read()
-          assert hashlib.sha256(raw).hexdigest()==build['sha256'].removeprefix('0x')
-          open('tools/solc','wb').write(raw);os.chmod('tools/solc',0o755)
+          subprocess.run(['curl','-fLsS','--retry','2','https://raw.githubusercontent.com/ethereum/solc-bin/gh-pages/linux-amd64/'+path,'-o','tools/solc'],check=True)
+          assert hashlib.sha256(open('tools/solc','rb').read()).hexdigest()==build['sha256'].removeprefix('0x')
+          os.chmod('tools/solc',0o755)
           PY
           tools/forge --version
           tools/solc --version
           rm tools/foundry_v1.8.3_linux_amd64.tar.gz
-      - name: Read-only Monad Testnet RPC probes (never signs or broadcasts)
+      - name: Read-only Monad RPC inspection
         run: |
           node --input-type=module <<'JS'
           import fs from 'node:fs';
@@ -83,9 +76,11 @@ jobs:
           fs.writeFileSync('rpc-readonly.json',JSON.stringify(output,null,2));
           console.log(JSON.stringify(output,null,2));
           JS
-      - name: Archive tools and exact source for local verification
+      - name: Archive tools
+        if: always()
         run: tar -czf m0c-tools.tar.gz node_modules tools package.json pnpm-lock.yaml toolchain.json
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
         with:
           name: m0c-preparation
           path: |
