@@ -1,0 +1,120 @@
+.cloud-page {
+  padding-top: 40px;
+  padding-bottom: 64px;
+}
+.cloud-page h1 {
+  margin-bottom: 24px;
+}
+.cloud-card {
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #dde1eb);
+  border-radius: 16px;
+  padding: 24px;
+  min-width: 0;
+  margin-bottom: 24px;
+}
+.cloud-card h2 {
+  font-size: 22px;
+}
+.cloud-card label,
+.cloud-editor label {
+  display: block;
+  margin: 14px 0;
+}
+.cloud-card input:not([type='checkbox']),
+.cloud-card select,
+.cloud-card textarea {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  padding: 12px;
+  border: 1px solid #bec5d3;
+  border-radius: 8px;
+  font: inherit;
+  background: white;
+  color: inherit;
+  margin-top: 6px;
+}
+.cloud-card button,
+.cloud-card .button {
+  margin: 8px 8px 8px 0;
+}
+.cloud-page code,
+.cloud-page pre,
+.cloud-session span {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.cloud-message {
+  white-space: pre-wrap;
+  font-size: 13px;
+  padding: 16px;
+  background: #f7f8fc;
+}
+.cloud-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  gap: 24px;
+}
+.cloud-session {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin: 20px 0;
+}
+.cloud-check {
+  display: flex !important;
+  gap: 12px;
+  align-items: start;
+}
+.cloud-check input {
+  margin-top: 5px;
+  flex-shrink: 0;
+}
+.cloud-list {
+  list-style: none;
+  padding: 0;
+}
+.cloud-list a {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  border: 1px solid #dde1eb;
+  padding: 16px;
+  border-radius: 12px;
+  margin-bottom: 10px;
+  overflow-wrap: anywhere;
+}
+.cloud-list span {
+  color: #596174;
+}
+.cloud-editor {
+  border-top: 1px solid #dde1eb;
+  margin-top: 16px;
+}
+.cloud-page [role='alert'] {
+  background: #fff2ef;
+  padding: 16px;
+  border-radius: 8px;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 760px) {
+  .cloud-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .cloud-card {
+    padding: 16px;
+  }
+  .cloud-list a {
+    display: block;
+  }
+  .cloud-list span {
+    display: block;
+    margin-top: 8px;
+  }
+  .cloud-page {
+    padding-top: 24px;
+  }
+}

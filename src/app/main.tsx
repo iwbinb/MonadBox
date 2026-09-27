@@ -24,6 +24,15 @@ const GroupDraftPage = lazy(() =>
 const GroupDraftListPage = lazy(() =>
   import('./group/GroupPages').then((m) => ({ default: m.GroupDraftListPage })),
 );
+const CloudGroupsPage = lazy(() =>
+  import('./cloud/CloudPages').then((m) => ({ default: m.CloudGroupsPage })),
+);
+const CloudGroupPage = lazy(() =>
+  import('./cloud/CloudPages').then((m) => ({ default: m.CloudGroupPage })),
+);
+const PublicGroupPage = lazy(() =>
+  import('./cloud/CloudPages').then((m) => ({ default: m.PublicGroupPage })),
+);
 function groupSurface(children: ReactNode) {
   return (
     <Suspense fallback={<p className="container">Loading drafts / 加载草稿…</p>}>
@@ -81,7 +90,9 @@ createRoot(root).render(
                 element={groupSurface(<GroupBuilderPage />)}
               />
               <Route path="create/:id" element={<UnavailablePage />} />
-              <Route path="b/:id" element={<UnavailablePage />} />
+              <Route path="app/groups" element={groupSurface(<CloudGroupsPage />)} />
+              <Route path="app/groups/:id" element={groupSurface(<CloudGroupPage />)} />
+              <Route path="b/:id" element={groupSurface(<PublicGroupPage />)} />
               <Route path="*" element={<NotFoundPage />} />
             </Route>
           </Routes>

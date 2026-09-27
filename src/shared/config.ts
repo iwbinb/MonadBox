@@ -1,5 +1,7 @@
 import { z } from 'zod';
-export const STAGE = 'M1-A' as const;
+import { deploymentSchema } from './cloud/model';
+import { GROUP_ASSET } from './group/draft';
+export const STAGE = 'M1-B' as const;
 export const TESTNET_CHAIN_ID = 10143 as const;
 const falseFlag = z.literal('false');
 const booleanFlag = z.enum(['false', 'true']).transform((value) => value === 'true');
@@ -13,6 +15,20 @@ const emptyList = z.string().refine((value) => {
 }, 'Business tools have no verified assets or contracts.');
 const schema = z
   .object({
+    CLOUD_ENABLED: booleanFlag.default(false),
+    GROUP_PUBLISH_ENABLED: booleanFlag.default(false),
+    APP_ORIGIN: z.string().default(''),
+    GROUP_DEPLOYMENT: z
+      .string()
+      .default('null')
+      .transform((s, ctx) => {
+        try {
+          return deploymentSchema.nullable().parse(JSON.parse(s));
+        } catch {
+          ctx.addIssue({ code: 'custom', message: 'Invalid Group deployment' });
+          return z.NEVER;
+        }
+      }),
     APP_ENV: z.enum(['local', 'test', 'preview', 'production']),
     CHAIN_ID: z.literal('10143'),
     STORAGE_NAMESPACE: z.string().regex(/^monadbox-(local|test|preview|production)$/),
@@ -25,6 +41,36 @@ const schema = z
     CONTRACT_REGISTRY: emptyList,
   })
   .superRefine((value, ctx) => {
+    if (value.CLOUD_ENABLED) {
+      try {
+        const u = new URL(value.APP_ORIGIN);
+        if (
+          u.origin !== value.APP_ORIGIN ||
+          (u.protocol !== 'https:' &&
+            !(
+              ['local', 'test'].includes(value.APP_ENV) &&
+              ['localhost', '127.0.0.1'].includes(u.hostname)
+            ))
+        )
+          throw Error();
+      } catch {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['APP_ORIGIN'],
+          message: 'Exact HTTPS origin required',
+        });
+      }
+    }
+    if (
+      value.GROUP_PUBLISH_ENABLED &&
+      (!value.CLOUD_ENABLED ||
+        !value.GROUP_DEPLOYMENT ||
+        value.GROUP_DEPLOYMENT.asset.toLowerCase() !== GROUP_ASSET.toLowerCase())
+    )
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Publishing requires cloud and official testnet deployment',
+      });
     if (value.STORAGE_NAMESPACE !== `monadbox-${value.APP_ENV}`)
       ctx.addIssue({
         code: 'custom',
@@ -59,7 +105,9 @@ export const publicConfigSchema = z.object({
     wallets: z.boolean(),
     testnetLab: z.boolean(),
     payments: z.literal(false),
-    drafts: z.literal(false),
+    drafts: z.boolean(),
+    cloudGroups: z.boolean().default(false),
+    groupPublishing: z.boolean().default(false),
     localGroupDrafts: z.literal(true),
   }),
 });
@@ -76,7 +124,9 @@ export function toPublicConfig(config: RuntimeConfig, revision: string): PublicC
       wallets: config.TESTNET_LAB_ENABLED,
       testnetLab: config.TESTNET_LAB_ENABLED,
       payments: false,
-      drafts: false,
+      drafts: config.CLOUD_ENABLED,
+      cloudGroups: config.CLOUD_ENABLED,
+      groupPublishing: config.GROUP_PUBLISH_ENABLED,
       localGroupDrafts: true,
     },
   };
