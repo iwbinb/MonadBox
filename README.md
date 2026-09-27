@@ -1,42 +1,57 @@
 # MonadBox
 
-Stablecoin payment tools for individuals, creators, communities and small teams.
-
 **一个链接，按约定完成收款、退款与分账。**
 
-## 当前阶段
+面向个人、创作者、社区和小团队的稳定币支付工具集合站。品牌独立，目标工具为Group、Split、Deliver、Attend、Milestones、Rewards。
 
-M0-A：产品与技术规格交付。仓库目前是**规格文档**，不是已上线产品；没有业务代码、已部署合约或已经验证的 Cloudflare 环境。具体交付边界见 [M0-A 验收记录](docs/planning/M0-A_ACCEPTANCE.md)。
+## 当前状态：M0-B工程基础
 
-## 六个工具
+已建立React/TypeScript/Vite前端、Hono Worker、只读配置/健康API、六工具说明页、工作台空态与中英文切换、测试和CI。**还不能创建真实Box、连接钱包、付款、退款或领取资金。** 不展示虚构余额或交易。
 
-| 工具 | 用途 | 实施顺序 |
-| --- | --- | --- |
-| Group / 成团收款 | 固定金额集体付款，未成团退款，成团后按约定结算 | M1 |
-| Split / 合伙分账 | 按预先固定比例分配已解除退款义务的款项 | M2 |
-| Deliver / 交付收款 | 单次交付、验收窗口、异议与退出规则 | M3 |
-| Attend / 报名保证金 | 报名押金、签到、未到场处理及申诉 | M4 |
-| Milestones / 分阶段付款 | 逐阶段交付、确认和释放款项 | M5 |
-| Rewards / 奖励领取 | 全额预存、指定地址领取、过期余额处理 | M6 |
+网站生产环境仍运行测试网标识；尚未实际部署到用户Cloudflare账户。D1/R2/Queues基础仅在本地Miniflare验证，远端资源功能默认关闭。详细边界见[M0-B验收记录](docs/planning/M0-B_ACCEPTANCE.md)。
 
-所有工具共享账户、订单、活动记录和收付款视图。首条演示主线为 Group → Split；六工具定位不变。不绑定 NodeStake 品牌，不把 ArcBox 换链等同于本赛事新增成果。
+## 本地运行
 
-## 文档入口
+Node **22.16.0**，pnpm **10.11.1**。依赖精确锁定；不要删除pnpm-lock.yaml或使用未固定的latest替代。
 
-从 [文档索引](docs/README.md) 开始。开发前必读 [AGENTS.md](AGENTS.md)、[资金规则](docs/product/FUNDS_AND_STATES.md) 和 [分阶段计划](docs/planning/DEVELOPMENT_PLAN.md)。
+```sh
+pnpm install --frozen-lockfile
+pnpm dev
+```
 
-## 分支与发布
+本地地址由Wrangler输出（默认8787）。`pnpm dev`会先构建，修改后重启命令即可重新生成前后端；当前不提供前端HMR。无需真实token、数据库或钱包。
 
-`dev` 开发、测试及预览 → `dev → main` PR → Bill 确认合并 → Cloudflare 自动构建正式网站。
+```sh
+pnpm format:check
+pnpm lint
+pnpm typecheck
+pnpm build
+pnpm test
+pnpm exec playwright install chromium
+pnpm test:e2e
+pnpm deploy:dry-run
+```
 
-只保留 `dev`、`main` 两条长期分支。不自行合并 PR，不强推，不自动删除 `dev`。网站更新不自动部署或升级链上合约，也不执行资金操作。Cloudflare 绑定与实际部署验证属于 M0-B。
+`pnpm test`运行前先build，以便Miniflare载入实际Worker产物。E2E测试自行启动本地Worker，覆盖桌面/移动尺寸Chromium。`deploy:dry-run`只生成检查产物，不上传。Foundry仅预留目录，未实现或测试资金合约。
 
-## 技术基线
+## Cloudflare：一个Worker
 
-React + TypeScript + Vite；Cloudflare Workers Static Assets + API、D1、私有 R2、Queues；Solidity + Foundry；viem / wagmi。见 [架构](docs/engineering/ARCHITECTURE.md)。所有版本在 M0-B 锁定，真实 Monad 兼容性在 M0-C 验证。
+连接仓库`iwbinb/MonadBox`，项目名`monadbox`，生产分支`main`，开启dev预览：
 
-默认仅 Monad Testnet。AUSD 为待实测的首选资产；正式网站环境不代表已启用主网或真实资金。MVP 平台费为 0；网络费用仍需承担。
+| 字段 | 命令 |
+| --- | --- |
+| Build | `pnpm build` |
+| Deploy | `pnpm run deploy` |
+| Preview | `pnpm run deploy:preview` |
 
-## 风险边界
+脚本调用固定版本Wrangler并校验分支。**本次首次部署不需要D1、R2、Queues或秘密变量。** 后续使用资源必须隔离生产/预览并完成实测；Preview不消费队列、不运行Cron。详细说明见[部署文档](docs/engineering/DEPLOYMENT.md)。
 
-合约管理的托管款不是平台数据库余额；链上规则不能自行判定现实交付质量。测试网交易、模拟数据与真实主网交易必须明确区分。不存在获奖、法币兑付、无风险或已经审计的承诺。
+## 工作流程
+
+长期`dev`开发 → 测试 → `dev → main` PR → Bill手动合并 → Cloudflare正式部署。不自动合并、不删除dev、不强推、不随构建执行数据库迁移或链上交易。每阶段完成后停止。
+
+工程结构：`src/app`页面、`src/shared`配置/金额/目录、`src/worker`后端、`migrations`数据库、`tests`检查、`contracts`待实现合约目录。所有文档从[索引](docs/README.md)开始，开发先读[AGENTS](AGENTS.md)。
+
+## 下一阶段
+
+完成用户账户内的首次Git部署验收后，进入M0-C Monad最小真实兼容验证；再依次实现Group、Split组合与其余工具。平台费、资金规则和真实用户需求均不因工程完成而得到实测证明。

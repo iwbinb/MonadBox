@@ -1,6 +1,6 @@
 # MonadBox 文档索引
 
-版本：M0-A v1.0 · 2026-09-27 · 状态：规格基线，待用户审阅 PR。
+版本：M0-A规格 + M0-B工程基础 · 2026-09-27 · 状态：M0-A已合并，M0-B工程基础等待PR审阅；远端部署未验收。
 
 ## 阅读顺序
 
@@ -17,7 +17,11 @@
 | [开发计划](planning/DEVELOPMENT_PLAN.md) | 每阶段任务、验收、产物和停止点 |
 | [决策与放行条件](planning/DECISIONS_AND_GATES.md) | 已定稿事项、待实测项和阻塞范围 |
 | [来源与复用记录](planning/SOURCES_AND_PROVENANCE.md) | 官方依据、核验时间、ArcBox 复用边界 |
-| [M0-A 验收记录](planning/M0-A_ACCEPTANCE.md) | 本次实际交付与未执行事项 |
+| [M0-A 验收记录](planning/M0-A_ACCEPTANCE.md) | M0-A实际交付与当时未执行事项 |
+
+## 当前工程
+
+[M0-B验收记录](planning/M0-B_ACCEPTANCE.md)与[Cloudflare设置](engineering/DEPLOYMENT.md)。旧两Worker方案已被一个Worker+dev Preview替代。
 
 ## 术语
 

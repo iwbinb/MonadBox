@@ -1,0 +1,12 @@
+:root {
+  --bg: #f7f8fc;
+  --surface: #ffffff;
+  --text: #171923;
+  --muted: #596174;
+  --border: #dde1eb;
+  --brand: #5b3fd6;
+  --font:
+    Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei',
+    sans-serif;
+  color-scheme: light;
+}

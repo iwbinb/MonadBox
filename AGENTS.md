@@ -5,7 +5,7 @@
 1. 这是 `iwbinb/MonadBox`，不是 ArcBox、NodePact 或 NodeStake Explorer。
 2. 保留 Group、Split、Deliver、Attend、Milestones、Rewards 六工具。阶段顺序以 [开发计划](docs/planning/DEVELOPMENT_PLAN.md) 为准。
 3. 冲突时：用户最新明确指令 > 已合并的决策记录 > 资金与安全规格 > API/UI 规格 > 示例。发现冲突先记录和修正规格，不能静默改变资金规则。
-4. M0-A 仅交付文档。未通过相应阶段，不把计划、代码片段、模拟交易或概念图称为已实现、已测试、已部署。
+4. M0-A 交付文档；M0-B 仅工程基础和只读页面，资金业务尚未实现。未通过相应阶段，不把计划、代码片段、模拟交易或概念图称为已实现、已测试、已部署。
 
 ## Git 工作流
 
@@ -29,7 +29,8 @@
 ## 实施约束
 
 - Cloudflare 优先；本版采用 Workers Static Assets + API，不同时维护 Pages 和 Workers 两套发布流程。
-- dev/prod 必须使用不同的 D1、R2、Queues、cookie、配置和凭据；正式网站在主网放行前仍运行测试网。
+- 一个名为 monadbox 的 Worker：main 正式部署，dev 使用 Worker Previews。不得再按旧稿创建两套 Worker。
+- Preview 与 production 必须使用不同的数据资源、cookie、配置和凭据；Preview 不支持队列消费/Cron。当前远端 storage/background 均关闭，不能把本地测试当远端验收。正式网站在主网放行前仍为测试网。
 - 选定工具链在 M0-B 锁版本及 lockfile，禁止生产流水线运行未固定的 `@latest` 或远端 shell 脚本。
 - 无脚本时不得声称 `pnpm test`、`forge test` 或部署已通过。报告实际命令、退出码、环境和证据。
 - 只做当前被要求的阶段。每项资金相关功能都要有正常、拒绝、超时、重复请求和恢复测试。
