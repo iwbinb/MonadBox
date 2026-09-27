@@ -104,13 +104,11 @@ test('invalid JSON import never changes saved drafts', async ({ page }) => {
   await basics(page);
   await finish(page);
   await page.getByRole('link', { name: 'All drafts', exact: true }).click();
-  await page
-    .getByLabel('Import draft JSON', { exact: true })
-    .setInputFiles({
-      name: 'bad.json',
-      mimeType: 'application/json',
-      buffer: Buffer.from('{"chainId":143}'),
-    });
+  await page.getByLabel('Import draft JSON', { exact: true }).setInputFiles({
+    name: 'bad.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from('{"chainId":143}'),
+  });
   await expect(page.getByRole('alert')).toContainText('No draft was imported');
   await expect(page.locator('.group-draft-list>li')).toHaveCount(1);
 });
