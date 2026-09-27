@@ -1,76 +1,66 @@
-# 分支、环境与Cloudflare发布
+# Cloudflare 发布：一个 Worker + dev Preview
 
-M0-A v1.0 · 当前只定义配置合同；未连接Cloudflare、未创建资源、未实际部署。
+M0-B 更新 · 2026-09-27。本文件替代 M0-A 的两个 Worker 方案。用户自行在 Cloudflare 控制台连接 GitHub；不需要把管理 API Token 或私钥发送给开发者。
 
-## 1. 固定流程
+## 1. 当前可部署的范围
 
-`dev`开发和测试 → `dev → main` PR → Bill合并 → main触发正式网站构建/部署。阶段完成后停止，不自行合并或继续下一阶段。仅维护这两条长期分支。
+只读网页和健康/配置 API；所有钱包、付款、主网和创建订单功能关闭。首次部署不要求 D1、R2、Queues 或 secrets。缺少未来业务资源不会伪装成可用业务服务。
 
-主干保护、必须检查、禁止强推和合并后不删dev建议在M0-B由用户授权设置。当前读取到main未保护，不把建议写成已配置事实。
+`main` → monadbox 正式版本；`dev` → 同一个 Worker 的 Worker Previews。旧 `versions upload` 的版本URL不是本方案。项目名必须为 `monadbox`，仓库根目录构建。Wrangler固定4.135.0，compatibility_date固定2026-09-18。
 
-## 2. 部署拓扑
+## 2. 控制台填写
 
-采用**两个独立Workers项目**连接同一个GitHub仓库，各自只监听一个分支；这样dev的数据库、文件、队列和定时任务都可在稳定地址完整验证。不是把生产Worker的一个版本URL误当隔离环境。
-
-| 项目拟名 | Git分支 | Wrangler环境 | 内容 | 默认链 |
-| --- | --- | --- | --- | --- |
-| monadbox-dev | dev | dev | 稳定开发/预览网站+API | 10143 |
-| monadbox-prod | main | prod | 正式网站+API | 10143，主网单独放行 |
-
-Cloudflare支持选择监听分支及自定义构建/部署命令；绑定并成功构建后新提交才会发布。[S05](../planning/SOURCES_AND_PROVENANCE.md) 两项目都先关闭其他分支预览，避免在不明确资源隔离时额外产生部署。未来使用原生Worker Previews需另行验证绑定隔离，不与本方案混用。
-
-域名、Cloudflare account ID、项目名称是否可用尚未核验。不擅自声称 `monadbox.xyz` 或任何workers.dev地址已归用户所有。
-
-## 3. M0-B 应形成的配置合同
-
-仓库根目录构建，Vite产物由Workers Static Assets提供，API `/api/*` 必须在SPA fallback前路由。默认不存在的API返回JSON 404，不返回index.html；静态路由深链接可刷新。
-
-拟脚本（需M0-B实际创建并验证）：
-
-| 用途 | 预期命令/要求 |
+| 字段 | 值 |
 | --- | --- |
-| 安装 | 锁定pnpm版本；`pnpm install --frozen-lockfile` |
-| 开发 | `pnpm dev`；本地worker及绑定模拟 |
-| 质量 | `pnpm lint`、`pnpm typecheck`、`pnpm test` |
-| 构建 | `pnpm build`；运行环境校验后产出静态资源/worker |
-| E2E | `pnpm test:e2e`；Playwright本地/隔离预览 |
-| 部署dev/prod | 对应封装脚本调用锁定Wrangler和明确 `--env dev` / `--env prod` |
-| 合约测试 | `forge test`；仅工程建立后可执行 |
+| Repository | iwbinb/MonadBox |
+| Project name | monadbox |
+| Production branch | main |
+| Build command | pnpm build |
+| Deploy command | pnpm run deploy |
+| Preview command | pnpm run deploy:preview |
+| Root directory | 仓库根目录，保持默认 |
+| Node version | 22.16.0，仓库.node-version已声明 |
+| Preview Builds | 开启，并只允许dev分支（可配置时） |
 
-Cloudflare部署脚本必须检查当前branch、worker name、environment和资源ID；dev不能部署到prod，缺参数则失败，不自动回退默认环境。构建时变量和运行时secret是不同配置，不假设二者自动相通。
+必须保留 `pnpm run deploy` 中的 `run`，避免调用pnpm自身同名的工作区部署命令。
 
-## 4. 环境隔离
+这两个部署脚本分别调用仓库已锁定的 `wrangler deploy` 和 `wrangler preview --name dev`，增加分支与配置校验。不要使用 `npx wrangler@latest`。若控制台仍保留 `npx wrangler deploy/preview` 默认值，改成上述脚本可防止将dev误发到正式站。
 
-D1、R2、Queues及死信队列必须按dev/prod分别创建，运行凭据、cookie域、钱包供应商项目和监控数据也分开。测试不能读取或清理生产资源。私有文件不经公共静态目录发布。
+构建环境应识别packageManager=pnpm@10.11.1与pnpm-lock.yaml；自动安装采用lockfile，不需要手动复制node_modules。安装失败时先检查Node/pnpm版本与安装日志，不删除锁文件。
 
-公开配置：APP_ENV、APP_ORIGIN、CHAIN_ID、ASSET_ALLOWLIST、CONTRACT_REGISTRY、FEATURE_FLAGS、BUILD_SHA。
+初始main只有文档，不能首次构建。须由Bill合并工程PR后才具备可构建入口。后续先dev预览测试再合并main；首次工程发布本身不启用资金操作。
 
-运行秘密：RPC私有key、会话签名/加密材料、供应商服务端key（仅在使用时）。不得以VITE_等客户端可读前缀存秘密。链上部署私钥和用户私钥**不属于**Cloudflare环境变量。
+## 3. 配置与安全
 
-资源ID的配置入口及类型在M0-B形成wrangler文件与 `.dev.vars.example`；示例只放说明性占位符，生产构建检测到占位符或缺少批准资源时终止。
+`wrangler.jsonc`顶层配置production，`previews.vars`完整声明Preview变量，不依赖继承。两个环境都强制10143、空资产/合约清单、所有资金操作关闭。STORAGE_NAMESPACE分别为monadbox-production/monadbox-preview。
 
-## 5. 数据库迁移
+`scripts/validate-config.mjs`拒绝错误项目名、重复环境Worker、主网、未经验证的资源和后台任务；`scripts/deploy.mjs`要求production对应main、preview对应dev。构建只生成dist，不发布、不迁移数据库、不签名。分支与构建版本读取Cloudflare官方注入的WORKERS_CI_BRANCH和WORKERS_CI_COMMIT_SHA。
 
-迁移文件有顺序编号并进入PR。dev自动应用前向兼容迁移；prod初始建库在M0-B明确授权后执行。后续破坏性迁移必须独立审阅与备份，不随任意main提交自动执行。
+`wrangler.local.jsonc`仅供本地模拟：D1假ID仅在本地使用，不能上传为真实绑定。`pnpm dev`先构建再启动本地Workers；`pnpm db:migrate:local`只应用本地迁移。业务写功能仍关闭。
 
-兼容性采用先扩展后迁移最后清理：新旧前端/worker短暂共存不丢数据。应用回滚不等于D1回滚；不得用清库解决schema问题。
+## 4. 后续添加资源
 
-## 6. 合约与前后端发布分离
+Preview URL独立不等于数据自动隔离。后续在单独PR配置生产/预览各自的D1与私有R2、完整变量及secret；不同环境不得共享同一数据库或桶。命名空间校验是额外防护，不替代真实资源隔离。
 
-main更新只部署网站/API。CI、Cloudflare构建和自动脚本不得运行链上broadcast、升级、approve、资金转移或主网验证写操作。
+迁移0001不写入环境标记；首次资源验收须给各自数据库写入唯一environment_guard（monadbox-production或monadbox-preview），再验证读写隔离。未绑定/标记错误，storage功能fail closed。仅为读文件服务时应在后续拆分所需binding校验，不能为绕过检查绑定生产队列。
 
-合约部署独立执行：确认网络/版本/权限/预算→用户授权签名→记录交易和源码验证→小额测试→通过PR更新部署清单→再开放前端功能。M0-C的测试网部署也需明确授权和安全签名渠道；没有渠道就报告该验证受阻，不能导出用户私钥。
+新Worker Previews不能作为Queue消费者，也不运行Cron。本地Miniflare可验证消费者/重试/DLQ逻辑，但不是远端触发器验收。实际远端后台测试需单独审批隔离部署或其他测试方案，不为此现在强制创建第二个完整网站Worker。
 
-旧订单永远按原版本调用。前端主网开关、资产allowlist、合约登记缺一项即禁止新入金。正式网站可以长期提供测试网演示，不为了赶赛事截止强上主网。
+远端迁移和资源创建不包含在本次工程基础中，不随main提交自动进行。任何破坏性迁移需审阅、备份和独立操作。
 
-## 7. M0-B 部署验收
+## 5. 验收与回滚
 
-1. dev一次实际提交只更新开发网站，prod构建hash不变。
-2. 同阶段PR由用户合并后，main自动触发生产部署，展示实际buildSha。
-3. dev/prod各做D1写读、R2私密访问、Queues重复消息测试；不能串用数据。
-4. 深链接刷新、API404、环境标识、缺配置fail-closed、错误构建不替换工作版本。
-5. 记录Cloudflare项目、URL、构建ID、hash与测试结果。首次M0-B PR只能标“dev已验收、prod待用户合并验证”，在合并后补充实际prod结果，不能预先勾全。
+工程验收：安装、格式、lint、types、构建、单元/运行时测试、browser E2E、Wrangler dry-run。Cloudflare实际部署验收另做：记录URL、构建ID、revision、生产与Preview变量；dev提交只更新预览，main合并才更新正式站。
 
-## 8. 回滚与事故
+`/status`和`/api/v1/health`用于核对环境与buildSha，不显示虚构部署状态。任意API未知路由返回JSON404，不被SPA吞掉；私密附件没有公开诊断入口。
 
-回滚只选择已知兼容部署，并核对ABI/DB schema。自动部署并不保证每次构建成功；失败需检查日志，不把正在构建称为上线。资金事故先关闭新入金入口，保留合约退出路径；回滚网站不能撤销链上交易。
+构建失败不得称为发布成功。应用回滚不能回滚数据库或链上交易；M0-B尚未进行任何真实资金操作。未来合约部署仍独立审批，Git/Cloudflare流水线永远不broadcast。
+
+## 6. 官方依据
+
+- https://developers.cloudflare.com/workers/previews/get-started/
+- https://developers.cloudflare.com/workers/previews/configuration/
+- https://developers.cloudflare.com/workers/previews/resources/
+- https://developers.cloudflare.com/workers/ci-cd/builds/configuration/
+
+公开资料核对与CLI dry-run不等于已在用户账户上实际部署。
