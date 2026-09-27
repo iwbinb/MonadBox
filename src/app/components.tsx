@@ -2,7 +2,6 @@ import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useEffect, useRef } from 'react';
 import { useApp } from './context';
 import type { Tool } from '../shared/tools';
-
 export function Arrow() {
   return (
     <svg
@@ -72,8 +71,8 @@ export function Unavailable({ title }: { title: string }) {
       <h2>{title}</h2>
       <p>
         {t(
-          'This foundation release has no connected wallets, live orders or balances. No funds can be sent or claimed here.',
-          '当前工程基础版本尚未连接钱包，也没有真实订单或余额，不能付款或领取资金。',
+          'This workspace has no live orders or balances. Wallet testing is available only in the separate testnet lab.',
+          '此工作台尚无真实订单或余额；钱包测试仅在独立测试网实验室中开放。',
         )}
       </p>
       <Link className="button secondary" to="/">
@@ -99,10 +98,7 @@ export function Layout() {
       </a>
       <div className="environment-bar" role="status">
         <span className="status-dot" />
-        {t(
-          'Monad Testnet · Foundation release · Payments disabled',
-          'Monad 测试网 · 工程基础版本 · 付款未开放',
-        )}
+        {t('Monad Testnet · Business Payments disabled', 'Monad 测试网 · 业务付款未开放')}
       </div>
       <header className="site-header">
         <div className="container nav-row">
@@ -117,6 +113,7 @@ export function Layout() {
               {t('Tools', '工具')}
             </NavLink>
             <NavLink to="/app">{t('My boxes', '我的 Box')}</NavLink>
+            <NavLink to="/lab">{t('Test lab', '测试实验室')}</NavLink>
             <NavLink to="/help/refunds">{t('Help', '帮助')}</NavLink>
           </nav>
           <button

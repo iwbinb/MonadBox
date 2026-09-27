@@ -2,6 +2,7 @@ import { build as viteBuild } from 'vite';
 import { build as esbuild } from 'esbuild';
 import { execFileSync } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
+import './compile-probe.mjs';
 import { validateDeployment } from './validate-config.mjs';
 await validateDeployment();
 let revision = process.env.WORKERS_CI_COMMIT_SHA ?? process.env.GITHUB_SHA;
@@ -30,5 +31,5 @@ await esbuild({
   define: { __BUILD_SHA__: JSON.stringify(revision) },
 });
 await mkdir('dist', { recursive: true });
-await writeFile('dist/build.json', JSON.stringify({ revision, stage: 'M0-B' }, null, 2));
-console.log(`Built M0-B ${revision}; no deployment or chain writes performed.`);
+await writeFile('dist/build.json', JSON.stringify({ revision, stage: 'M0-C' }, null, 2));
+console.log(`Built M0-C ${revision}; no deployment or chain writes performed.`);

@@ -75,8 +75,8 @@ export function HomePage() {
       <div className="notice">
         <p>
           {t(
-            'M0-B is an engineering foundation, not a live financial service. Tools are not open for payment. Do not send funds to any address claiming to be a MonadBox contract.',
-            'M0-B 是工程基础版本，并非已开放的资金服务。工具尚不支持付款，请勿向任何自称 MonadBox 合约的地址发送资金。',
+            'M0-C adds a separate testnet wallet lab. The six tools are not open for business payments. Never send real funds to a test probe.',
+            'M0-C 新增独立的钱包测试实验室，六个工具仍未开放业务付款。请勿向测试探针发送真实资产。',
           )}
         </p>
         <Link to="/status">
@@ -126,8 +126,8 @@ export function ToolPage() {
           </button>
           <p className="small muted">
             {t(
-              'No wallet signatures or fund transfers in this release.',
-              '本版本不请求钱包签名，不进行资金转移。',
+              'No business signatures or transfers on this tool page. Testnet wallet actions are separate in the lab.',
+              '此工具页不请求业务签名或转账；测试网钱包操作在独立实验室进行。',
             )}
           </p>
           <Link to="/help/refunds">{t('Review all refund rules', '查看全部退款规则')}</Link>
@@ -151,7 +151,9 @@ export function DashboardPage() {
             )}
           </p>
         </div>
-        <span className="status-label">{t('Wallet not connected', '尚未连接钱包')}</span>
+        <span className="status-label">
+          {t('Business account not enabled', '业务账户尚未启用')}
+        </span>
       </div>
       <div className="tabs" aria-label={t('Box views', 'Box 视图')}>
         {[
@@ -202,8 +204,8 @@ export function RefundsPage() {
       <div className="notice">
         <p>
           {t(
-            'A claimable credit is not money already in your wallet. Network fees are separate. All tools remain disabled in M0-B.',
-            '“可领取款”不等于钱包已经到账，网络费用另行承担。M0-B 的所有资金功能均保持关闭。',
+            'A claimable credit is not money already in your wallet. Network fees are separate. All tools remain disabled in M0-C.',
+            '“可领取款”不等于钱包已经到账，网络费用另行承担。M0-C 的六工具业务付款均保持关闭，实验室仅用于测试。',
           )}
         </p>
       </div>
@@ -236,7 +238,7 @@ export function StatusPage() {
       <dl className="status-table">
         <div>
           <dt>{t('Release stage', '当前阶段')}</dt>
-          <dd>M0-B</dd>
+          <dd>M0-C</dd>
         </div>
         <div>
           <dt>{t('Application API', '应用接口')}</dt>
@@ -265,11 +267,21 @@ export function StatusPage() {
           </dd>
         </div>
         <div>
-          <dt>{t('Payments / wallet signing', '付款 / 钱包签名')}</dt>
+          <dt>{t('Business payments', '业务付款')}</dt>
           <dd>{t('Disabled', '未开放')}</dd>
         </div>
         <div>
-          <dt>{t('Verified contracts', '已验证合约')}</dt>
+          <dt>{t('Testnet wallet lab', '测试网钱包实验室')}</dt>
+          <dd>
+            {state.status === 'ready' && state.config.capabilities.testnetLab ? (
+              <Link to="/lab">{t('Explicit wallet signatures only', '仅显式钱包签名')}</Link>
+            ) : (
+              t('Disabled', '未开放')
+            )}
+          </dd>
+        </div>
+        <div>
+          <dt>{t('Business contracts', '业务合约')}</dt>
           <dd>{t('None', '无')}</dd>
         </div>
         <div>

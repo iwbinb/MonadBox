@@ -1,5 +1,6 @@
 export interface Env {
   APP_ENV?: string;
+  TESTNET_LAB_ENABLED?: string;
   CHAIN_ID?: string;
   STORAGE_NAMESPACE?: string;
   STORAGE_ENABLED?: string;

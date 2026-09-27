@@ -22,13 +22,17 @@ export function validateConfig(config, pkg) {
       settings.vars.MAINNET_ENABLED !== 'false' ||
       settings.vars.NETWORK_WRITES_ENABLED !== 'false'
     )
-      throw new Error('M0-B is testnet read-only');
+      throw new Error(
+        'Business payments remain disabled; testnet lab is a separate explicit wallet action',
+      );
+    if (!['true', 'false'].includes(settings.vars.TESTNET_LAB_ENABLED ?? 'false'))
+      throw new Error('Invalid testnet lab flag');
     if (settings.vars.ASSET_ALLOWLIST !== '[]' || settings.vars.CONTRACT_REGISTRY !== '[]')
       throw new Error('Unverified asset or contract');
     if (settings.vars.STORAGE_NAMESPACE !== `monadbox-${target}`)
       throw new Error('Invalid namespace');
     if (settings.vars.STORAGE_ENABLED !== 'false' || settings.vars.BACKGROUND_ENABLED !== 'false')
-      throw new Error('Remote bindings not yet accepted; do not enable them in M0-B foundation');
+      throw new Error('Remote bindings not yet accepted; keep them disabled');
     if (
       settings.d1_databases?.length ||
       settings.r2_buckets?.length ||
@@ -50,7 +54,7 @@ export async function validateDeployment() {
     JSON.parse(await readFile('package.json', 'utf8')),
   );
   console.log(
-    'Deployment config: one Worker, isolated Preview vars, no remote resources or money operations.',
+    'Deployment config: one Worker, isolated Preview vars, no server-side signing or remote resource writes.',
   );
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href)

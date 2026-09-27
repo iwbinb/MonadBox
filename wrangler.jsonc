@@ -13,9 +13,7 @@
     "not_found_handling": "single-page-application",
     "run_worker_first": true
   },
-  "observability": {
-    "enabled": true
-  },
+  "observability": { "enabled": true },
   "vars": {
     "APP_ENV": "production",
     "CHAIN_ID": "10143",
@@ -25,7 +23,8 @@
     "NETWORK_WRITES_ENABLED": "false",
     "MAINNET_ENABLED": "false",
     "ASSET_ALLOWLIST": "[]",
-    "CONTRACT_REGISTRY": "[]"
+    "CONTRACT_REGISTRY": "[]",
+    "TESTNET_LAB_ENABLED": "true"
   },
   "previews": {
     "vars": {
@@ -37,7 +36,8 @@
       "NETWORK_WRITES_ENABLED": "false",
       "MAINNET_ENABLED": "false",
       "ASSET_ALLOWLIST": "[]",
-      "CONTRACT_REGISTRY": "[]"
+      "CONTRACT_REGISTRY": "[]",
+      "TESTNET_LAB_ENABLED": "true"
     }
   }
 }

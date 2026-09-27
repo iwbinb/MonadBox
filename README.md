@@ -2,24 +2,28 @@
 
 **一个链接，按约定完成收款、退款与分账。**
 
-面向个人、创作者、社区和小团队的稳定币支付工具集合站。品牌独立，目标工具为Group、Split、Deliver、Attend、Milestones、Rewards。
+面向个人、创作者、社区和小团队的稳定币支付工具集合站。目标为 Group、Split、Deliver、Attend、Milestones、Rewards；六工具业务功能尚未开放。
 
-## 当前状态：M0-B工程基础
+## 当前状态：M0-C 开发与本地验证
 
-已建立React/TypeScript/Vite前端、Hono Worker、只读配置/健康API、六工具说明页、工作台空态与中英文切换、测试和CI。**还不能创建真实Box、连接钱包、付款、退款或领取资金。** 不展示虚构余额或交易。
+已实现独立的 `/lab` 测试网钱包实验室：浏览器钱包发现、连接/切链、官方测试资产检查、用户签名部署最小探针、精确额度授权、限额入金、退款、回执核验和刷新恢复。
 
-网站生产环境仍运行测试网标识；尚未实际部署到用户Cloudflare账户。D1/R2/Queues基础仅在本地Miniflare验证，远端资源功能默认关闭。详细边界见[M0-B验收记录](docs/planning/M0-B_ACCEPTANCE.md)。
+**真实 Monad 测试网的部署、授权、入金和退款交易仍待用户钱包签名验收。** 本地 Anvil/Mock 测试不算真实测试网交易；没有已验证的公开探针地址，没有主网部署或资金操作。代码可用不等于 C-T03 已通过。
+
+M0-B 正式站已部署到 `https://monadbox.iwbinb.workers.dev/`；用户提供的健康响应为生产环境、10143、版本 e2e2430。M0-C 仍在 dev，须经 PR 和用户合并后才更新正式站。D1/R2/Queues 远端仍关闭，不需要为实验室创建这些资源。
+
+详细状态见 [全阶段计划](docs/planning/DEVELOPMENT_PLAN.md)、[M0-C 验收](docs/planning/M0-C_ACCEPTANCE.md)、[实验室操作说明](docs/engineering/M0-C_LAB.md)。
 
 ## 本地运行
 
-Node **22.16.0**，pnpm **10.11.1**。依赖精确锁定；不要删除pnpm-lock.yaml或使用未固定的latest替代。
+Node **22.16.0**、pnpm **10.11.1**；所有直接依赖及 lockfile 固定版本。Solidity **0.8.28**、EVM target **paris**、optimizer **200**；Foundry **1.8.3**。ABI 和字节码在构建时由源码生成，不手工维护或从服务器任意下载。
 
 ```sh
 pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-本地地址由Wrangler输出（默认8787）。`pnpm dev`会先构建，修改后重启命令即可重新生成前后端；当前不提供前端HMR。无需真实token、数据库或钱包。
+默认本地端口 8787，修改后重启上述命令；当前不提供前端 HMR。打开 `/lab` 不会自动连接钱包或请求签名；访问账户/网络只读信息与实际交易分开。
 
 ```sh
 pnpm format:check
@@ -27,16 +31,22 @@ pnpm lint
 pnpm typecheck
 pnpm build
 pnpm test
-pnpm exec playwright install chromium
+# Linux x86_64：下载固定版本的官方测试工具并验证 SHA-256。
+bash scripts/install-test-tools.sh
+pnpm test:contracts
+pnpm test:chain-local
+pnpm exec playwright install --with-deps chromium
 pnpm test:e2e
 pnpm deploy:dry-run
 ```
 
-`pnpm test`运行前先build，以便Miniflare载入实际Worker产物。E2E测试自行启动本地Worker，覆盖桌面/移动尺寸Chromium。`deploy:dry-run`只生成检查产物，不上传。Foundry仅预留目录，未实现或测试资金合约。
+非 Linux x86_64 环境自行安装 Foundry 1.8.3；原生合约测试脚本可使用 PATH 中的 forge。当前完整浏览器测试用到 `tools/anvil`，其已验证环境为 Linux CI；不要把它称为已验证的 Mac/Safari 测试。CI 下载工具只用于本地链测试，**不广播 Monad 交易**。
 
-## Cloudflare：一个Worker
+`pnpm test` 前先 build；运行 lab 的完整浏览器测试前先完成合约测试，生成本地 MockToken 产物。局部只看页面可用 `pnpm dev`。MockToken、Anvil 默认账户和测试哈希不能用于真实网络。
 
-连接仓库`iwbinb/MonadBox`，项目名`monadbox`，生产分支`main`，开启dev预览：
+## Cloudflare：一个 Worker
+
+仓库 `iwbinb/MonadBox`，Worker 名称 `monadbox`。`main` 生产；`dev` 使用 Worker Previews。
 
 | 字段 | 命令 |
 | --- | --- |
@@ -44,14 +54,10 @@ pnpm deploy:dry-run
 | Deploy | `pnpm run deploy` |
 | Preview | `pnpm run deploy:preview` |
 
-脚本调用固定版本Wrangler并校验分支。**本次首次部署不需要D1、R2、Queues或秘密变量。** 后续使用资源必须隔离生产/预览并完成实测；Preview不消费队列、不运行Cron。详细说明见[部署文档](docs/engineering/DEPLOYMENT.md)。
+脚本只部署网站/API，不部署合约、不迁移数据库、不签名。M0-C 使用单独的 `TESTNET_LAB_ENABLED` 开关；业务 `NETWORK_WRITES_ENABLED` 与主网开关仍为 false。用户在 `/lab` 显式确认后，才由其浏览器钱包签署测试网交易。见 [部署说明](docs/engineering/DEPLOYMENT.md)。
 
-## 工作流程
+## 工作流程与风险
 
-长期`dev`开发 → 测试 → `dev → main` PR → Bill手动合并 → Cloudflare正式部署。不自动合并、不删除dev、不强推、不随构建执行数据库迁移或链上交易。每阶段完成后停止。
+长期 dev 开发 → 测试 → dev→main PR → Bill 手动合并 → Cloudflare 正式发布。不开启自动合并、不删除 dev、不强推。每阶段停止等待确认。
 
-工程结构：`src/app`页面、`src/shared`配置/金额/目录、`src/worker`后端、`migrations`数据库、`tests`检查、`contracts`待实现合约目录。所有文档从[索引](docs/README.md)开始，开发先读[AGENTS](AGENTS.md)。
-
-## 下一阶段
-
-完成用户账户内的首次Git部署验收后，进入M0-C Monad最小真实兼容验证；再依次实现Group、Split组合与其余工具。平台费、资金规则和真实用户需求均不因工程完成而得到实测证明。
+探针是测试用的即时原地址退款合约，不是已经完成的成团/交付/分账业务合约。每钱包每探针最多保留 **1 测试 AUSD**，默认测试 0.1；不使用主网资产。钱包私钥、助记词、生产凭据不得交给网站、CI、仓库或开发者。测试通过不代表已经安全审计。

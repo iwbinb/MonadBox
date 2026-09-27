@@ -1,14 +1,13 @@
 import { Hono } from 'hono';
-import { readConfig, toPublicConfig } from '../shared/config';
+import { readConfig, toPublicConfig, STAGE } from '../shared/config';
 import { requireStorage } from './storage';
 import { handleQueue, handleScheduled } from './jobs';
 import type { Env } from './env';
-
 declare const __BUILD_SHA__: string;
 const revision = typeof __BUILD_SHA__ === 'undefined' ? 'local' : __BUILD_SHA__;
 const app = new Hono<{ Bindings: Env; Variables: { requestId: string } }>();
 const csp =
-  "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'";
+  "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https://testnet-rpc.monad.xyz; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'";
 app.use('*', async (c, next) => {
   c.set('requestId', crypto.randomUUID());
   await next();
@@ -47,7 +46,8 @@ app.get('/api/v1/health', async (c) => {
     return c.json({
       data: {
         service: 'monadbox',
-        stage: 'M0-B',
+        stage: STAGE,
+        testnetLab: config.TESTNET_LAB_ENABLED ? 'wallet-signed-only' : 'disabled',
         status: 'ok',
         revision,
         environment: config.APP_ENV,

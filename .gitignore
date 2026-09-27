@@ -11,7 +11,11 @@ coverage/
 playwright-report/
 test-results/
 artifacts/
-contracts/cache/
-contracts/out/
-contracts/broadcast/
 .DS_Store
+contracts/out/
+contracts/cache/
+source.tar
+/tools/
+/toolchain.json
+/src/shared/lab/generated/
+/chain-evidence/

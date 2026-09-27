@@ -11,9 +11,7 @@
     "not_found_handling": "single-page-application",
     "run_worker_first": true
   },
-  "observability": {
-    "enabled": true
-  },
+  "observability": { "enabled": true },
   "vars": {
     "APP_ENV": "local",
     "CHAIN_ID": "10143",
@@ -23,7 +21,8 @@
     "NETWORK_WRITES_ENABLED": "false",
     "MAINNET_ENABLED": "false",
     "ASSET_ALLOWLIST": "[]",
-    "CONTRACT_REGISTRY": "[]"
+    "CONTRACT_REGISTRY": "[]",
+    "TESTNET_LAB_ENABLED": "true"
   },
   "d1_databases": [
     {
@@ -33,19 +32,9 @@
       "migrations_dir": "migrations"
     }
   ],
-  "r2_buckets": [
-    {
-      "binding": "FILES",
-      "bucket_name": "monadbox-local-files"
-    }
-  ],
+  "r2_buckets": [{ "binding": "FILES", "bucket_name": "monadbox-local-files" }],
   "queues": {
-    "producers": [
-      {
-        "binding": "JOBS",
-        "queue": "monadbox-local-jobs"
-      }
-    ],
+    "producers": [{ "binding": "JOBS", "queue": "monadbox-local-jobs" }],
     "consumers": [
       {
         "queue": "monadbox-local-jobs",

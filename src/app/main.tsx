@@ -1,4 +1,4 @@
-import React, { Component } from 'react';
+import React, { Component, lazy, Suspense } from 'react';
 import type { ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
@@ -14,7 +14,7 @@ import {
   NotFoundPage,
 } from './pages';
 import './styles.css';
-
+const LabPage = lazy(() => import('./lab/LabPage'));
 class ErrorBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
   state = { failed: false };
   static getDerivedStateFromError() {
@@ -49,6 +49,14 @@ createRoot(root).render(
               <Route path="app" element={<DashboardPage />} />
               <Route path="help/refunds" element={<RefundsPage />} />
               <Route path="status" element={<StatusPage />} />
+              <Route
+                path="lab"
+                element={
+                  <Suspense fallback={<p className="container">Loading lab / 加载实验室…</p>}>
+                    <LabPage />
+                  </Suspense>
+                }
+              />
               <Route path="create/:id" element={<UnavailablePage />} />
               <Route path="b/:id" element={<UnavailablePage />} />
               <Route path="*" element={<NotFoundPage />} />

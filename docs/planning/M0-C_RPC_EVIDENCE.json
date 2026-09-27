@@ -1,0 +1,18 @@
+{
+  "testedAt": "2026-09-27T13:33:26.313Z",
+  "endpoint": "https://testnet-rpc.monad.xyz",
+  "mode": "read-only",
+  "runId": 36322782982,
+  "chainIdHex": "0x279f",
+  "headAtRead": "0x3f13be2",
+  "gasPriceAtRead": "0x17bfac7c00",
+  "finalized": {"number":"0x3f13be1","hash":"0x634d3efa5ae007eaf8ebf8a8427717cc294297bfc3154cdfd323d205dd2100a2","timestamp":"0x6ab91b26"},
+  "safe": {"number":"0x3f13be3","hash":"0x9012bcc96062d1a56220fd1e96a0b8e83da12b4adc3ee7e11935043dec8d0aa7","timestamp":"0x6ab91b27"},
+  "token": {"address":"0xa9012a055bd4e0eDfF8Ce09f960291C09D5322dC","codeBytes":5937,"codeHash":"0xa3bda7298d1c5f8585852ee04439f9cc493e5c291c9cac74fa54a0bc67024a7b","decimals":6,"symbol":"AUSD"},
+  "faucet": {"address":"0xd236c18D274E54FAccC3dd9DDA4b27965a73ee6C","codeBytes":1200,"codeHash":"0x7ea12d4d718fd07f2a0076772648286b771d074b1edbda6582104eb9d7f574a3"},
+  "httpStatuses": [200,200,200,200,200,200,200,200,200],
+  "rawArtifactId":10933625103,
+  "rawArtifactSHA256":"0c84ab202ae4dee940d0715d1e40e3a43f8b867c20dbdc2d16be17fa05e520da",
+  "publicTransactionsBroadcast":0,
+  "notes":["Sequential reads are not the same block snapshot.","Code hashes and fees are observations, not permanent guarantees.","Faucet code presence does not prove claim eligibility or liquidity.","No public probe deployment, approve, fund, refund or explorer source verification has been performed."]
+}

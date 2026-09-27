@@ -6,3 +6,5 @@ README.md
 AGENTS.md
 artifacts
 contracts
+src/shared/lab/generated
+tools

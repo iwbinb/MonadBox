@@ -1,4 +1,4 @@
-name: Foundation CI
+name: MonadBox CI
 on:
   push:
     branches: [dev, main]
@@ -29,6 +29,10 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm build
       - run: pnpm test
+      - name: Install pinned native test tools
+        run: bash scripts/install-test-tools.sh
+      - run: pnpm test:contracts
+      - run: pnpm test:chain-local
       - name: Validate deployment without publishing
         run: pnpm deploy:dry-run
       - name: Install Chromium for browser tests
@@ -44,5 +48,6 @@ jobs:
             playwright-report
             test-results
             dist/build.json
+            artifacts/local-chain.json
           if-no-files-found: ignore
           retention-days: 7
