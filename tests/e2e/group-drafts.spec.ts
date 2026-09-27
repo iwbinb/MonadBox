@@ -1,6 +1,19 @@
 import { test, expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
 const beneficiary = '0x0000000000000000000000000000000000000011';
+async function captureGroupPage(page: Page, name: string) {
+  // Normalize scroll before a full-page capture so off-viewport fixed controls stay off screen.
+  await page.evaluate(() => window.scrollTo({ top: 0, left: 0, behavior: 'instant' }));
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+  await expect(page.locator('.skip-link')).not.toBeFocused();
+  expect(
+    await page.locator('.skip-link').evaluate((element) => element.getBoundingClientRect().bottom),
+  ).toBeLessThanOrEqual(0);
+  await page.screenshot({
+    path: `artifacts/screenshots/${name}-${test.info().project.name}.png`,
+    fullPage: true,
+  });
+}
 async function basics(page: Page, title = 'Workshop draft') {
   await page.goto('/create/group');
   await page.getByLabel('Group title', { exact: true }).fill(title);
@@ -50,10 +63,7 @@ test('Group wizard validates fields, previews exact rules and saves without requ
     'true',
   );
   await page.getByLabel('Amount per participant', { exact: true }).fill('30');
-  await page.screenshot({
-    path: `artifacts/screenshots/group-builder-${test.info().project.name}.png`,
-    fullPage: true,
-  });
+  await captureGroupPage(page, 'group-builder');
   await finish(page);
   await expect(page.getByText('90 test AUSD', { exact: true })).toBeVisible();
   await expect(page.getByText('600 test AUSD', { exact: true })).toBeVisible();
@@ -65,10 +75,7 @@ test('Group wizard validates fields, previews exact rules and saves without requ
   await expect(
     page.getByRole('heading', { name: 'Weekend builders workshop', exact: true }),
   ).toBeVisible();
-  await page.screenshot({
-    path: `artifacts/screenshots/group-preview-${test.info().project.name}.png`,
-    fullPage: true,
-  });
+  await captureGroupPage(page, 'group-preview');
   expect(errors).toEqual([]);
 });
 test('saved draft can be edited and remains an explicitly local record', async ({ page }) => {
