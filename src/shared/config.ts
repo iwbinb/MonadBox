@@ -1,5 +1,5 @@
 import { z } from 'zod';
-export const STAGE = 'M0-C' as const;
+export const STAGE = 'M1-A' as const;
 export const TESTNET_CHAIN_ID = 10143 as const;
 const falseFlag = z.literal('false');
 const booleanFlag = z.enum(['false', 'true']).transform((value) => value === 'true');
@@ -60,6 +60,7 @@ export const publicConfigSchema = z.object({
     testnetLab: z.boolean(),
     payments: z.literal(false),
     drafts: z.literal(false),
+    localGroupDrafts: z.literal(true),
   }),
 });
 export type PublicConfig = z.infer<typeof publicConfigSchema>;
@@ -76,6 +77,7 @@ export function toPublicConfig(config: RuntimeConfig, revision: string): PublicC
       testnetLab: config.TESTNET_LAB_ENABLED,
       payments: false,
       drafts: false,
+      localGroupDrafts: true,
     },
   };
 }

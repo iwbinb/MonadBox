@@ -1,5 +1,6 @@
 import { Link, useParams } from 'react-router-dom';
 import { useEffect, useState } from 'react';
+import { STAGE } from '../shared/config';
 import { useApp } from './context';
 import { tools, getTool } from '../shared/tools';
 import { Arrow, ToolCard, ToolIcon, Unavailable } from './components';
@@ -75,8 +76,8 @@ export function HomePage() {
       <div className="notice">
         <p>
           {t(
-            'M0-C adds a separate testnet wallet lab. The six tools are not open for business payments. Never send real funds to a test probe.',
-            'M0-C 新增独立的钱包测试实验室，六个工具仍未开放业务付款。请勿向测试探针发送真实资产。',
+            'Group drafts are now available on this browser. On-chain publishing and business payments are not enabled. Wallet testing remains separate in the lab.',
+            '成团收款现可创建本地草稿；链上发布和业务付款仍未开放，钱包测试保留在独立实验室中。',
           )}
         </p>
         <Link to="/status">
@@ -117,13 +118,22 @@ export function ToolPage() {
         </section>
         <aside className="rule-panel">
           <span className="status-label">
-            {t('Not open yet', '尚未开放')} · {tool.stage}
+            {tool.id === 'group'
+              ? t('Local drafts available', '可创建本地草稿')
+              : t('Not open yet', '尚未开放')}{' '}
+            · {tool.stage}
           </span>
           <h2>{t('Before any payment', '付款前必须了解')}</h2>
           <p>{tool.caution[locale]}</p>
-          <button className="button primary" disabled>
-            {t('Creation not available yet', '暂未开放创建')}
-          </button>
+          {tool.id === 'group' ? (
+            <Link className="button primary" to="/create/group">
+              {t('Prepare a group draft', '创建成团草稿')}
+            </Link>
+          ) : (
+            <button className="button primary" disabled>
+              {t('Creation not available yet', '暂未开放创建')}
+            </button>
+          )}
           <p className="small muted">
             {t(
               'No business signatures or transfers on this tool page. Testnet wallet actions are separate in the lab.',
@@ -151,9 +161,10 @@ export function DashboardPage() {
             )}
           </p>
         </div>
-        <span className="status-label">
-          {t('Business account not enabled', '业务账户尚未启用')}
-        </span>
+        <Link className="button secondary" to="/app/group-drafts">
+          {t('Group drafts', '成团草稿')}
+          <Arrow />
+        </Link>
       </div>
       <div className="tabs" aria-label={t('Box views', 'Box 视图')}>
         {[
@@ -204,8 +215,8 @@ export function RefundsPage() {
       <div className="notice">
         <p>
           {t(
-            'A claimable credit is not money already in your wallet. Network fees are separate. All tools remain disabled in M0-C.',
-            '“可领取款”不等于钱包已经到账，网络费用另行承担。M0-C 的六工具业务付款均保持关闭，实验室仅用于测试。',
+            'A claimable credit is not money already in your wallet. Network fees are separate. Business payments remain disabled; Group drafts do not accept funds.',
+            '“可领取款”不等于钱包已经到账，网络费用另行承担。六工具业务付款仍关闭，成团草稿不收款。',
           )}
         </p>
       </div>
@@ -238,7 +249,7 @@ export function StatusPage() {
       <dl className="status-table">
         <div>
           <dt>{t('Release stage', '当前阶段')}</dt>
-          <dd>M0-C</dd>
+          <dd>{STAGE}</dd>
         </div>
         <div>
           <dt>{t('Application API', '应用接口')}</dt>
@@ -281,7 +292,15 @@ export function StatusPage() {
           </dd>
         </div>
         <div>
-          <dt>{t('Business contracts', '业务合约')}</dt>
+          <dt>{t('Local Group drafts', '本地成团草稿')}</dt>
+          <dd>
+            <Link to="/app/group-drafts">
+              {t('Available on this browser only', '仅当前浏览器保存')}
+            </Link>
+          </dd>
+        </div>
+        <div>
+          <dt>{t('Deployed business contracts', '已部署业务合约')}</dt>
           <dd>{t('None', '无')}</dd>
         </div>
         <div>

@@ -15,6 +15,22 @@ import {
 } from './pages';
 import './styles.css';
 const LabPage = lazy(() => import('./lab/LabPage'));
+const GroupBuilderPage = lazy(() =>
+  import('./group/GroupPages').then((m) => ({ default: m.GroupBuilderPage })),
+);
+const GroupDraftPage = lazy(() =>
+  import('./group/GroupPages').then((m) => ({ default: m.GroupDraftPage })),
+);
+const GroupDraftListPage = lazy(() =>
+  import('./group/GroupPages').then((m) => ({ default: m.GroupDraftListPage })),
+);
+function groupSurface(children: ReactNode) {
+  return (
+    <Suspense fallback={<p className="container">Loading drafts / 加载草稿…</p>}>
+      {children}
+    </Suspense>
+  );
+}
 class ErrorBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
   state = { failed: false };
   static getDerivedStateFromError() {
@@ -56,6 +72,13 @@ createRoot(root).render(
                     <LabPage />
                   </Suspense>
                 }
+              />
+              <Route path="create/group" element={groupSurface(<GroupBuilderPage />)} />
+              <Route path="app/group-drafts" element={groupSurface(<GroupDraftListPage />)} />
+              <Route path="app/group-drafts/:draftId" element={groupSurface(<GroupDraftPage />)} />
+              <Route
+                path="app/group-drafts/:draftId/edit"
+                element={groupSurface(<GroupBuilderPage />)}
               />
               <Route path="create/:id" element={<UnavailablePage />} />
               <Route path="b/:id" element={<UnavailablePage />} />

@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import type { ReactNode } from 'react';
 import { publicConfigSchema } from '../shared/config';
 import type { PublicConfig } from '../shared/config';
@@ -67,6 +67,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
 }
 export function useApp() {
   const value = useContext(AppContext);
+  const t = useCallback(
+    (en: string, zh: string) => (value?.locale === 'en' ? en : zh),
+    [value?.locale],
+  );
   if (!value) throw new Error('Missing AppProvider');
-  return { ...value, t: (en: string, zh: string) => (value.locale === 'en' ? en : zh) };
+  return { ...value, t };
 }

@@ -40,6 +40,15 @@ try {
     packages: 'external',
   });
   execFileSync(process.execPath, ['artifacts/local-chain-runner.mjs'], { stdio: 'inherit' });
+  await build({
+    entryPoints: ['tests/integration/group-scenario.ts'],
+    outfile: 'artifacts/group-local-runner.mjs',
+    bundle: true,
+    platform: 'node',
+    format: 'esm',
+    packages: 'external',
+  });
+  execFileSync(process.execPath, ['artifacts/group-local-runner.mjs'], { stdio: 'inherit' });
 } finally {
   child.kill('SIGTERM');
 }
