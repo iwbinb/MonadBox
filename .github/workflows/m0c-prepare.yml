@@ -1,0 +1,96 @@
+name: M0-C preparation
+on:
+  push:
+    branches: [dev]
+    paths: [.github/workflows/m0c-prepare.yml]
+permissions:
+  contents: read
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version-file: .node-version
+      - name: Resolve exact dependency candidates in disposable workspace
+        run: |
+          set -euo pipefail
+          git archive HEAD > source.tar
+          npm install --global pnpm@10.11.1
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          import {execFileSync} from 'node:child_process';
+          const resolve = name => {
+            const all=JSON.parse(execFileSync('npm',['view',name,'version','--json'],{encoding:'utf8'}));
+            const version=Array.isArray(all)?all.at(-1):all;
+            if(!/^\d+\.\d+\.\d+$/.test(version)) throw Error('Not stable: '+name);
+            return version;
+          };
+          const p=JSON.parse(fs.readFileSync('package.json','utf8'));
+          p.dependencies.viem=resolve('viem@2');
+          p.devDependencies['@openzeppelin/contracts']=resolve('@openzeppelin/contracts@5');
+          p.devDependencies.solc='0.8.28';
+          fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\n');
+          fs.writeFileSync('toolchain.json',JSON.stringify({viem:p.dependencies.viem,openzeppelin:p.devDependencies['@openzeppelin/contracts'],solc:'0.8.28',foundry:'1.8.3'},null,2));
+          JS
+          pnpm install --lockfile-only --ignore-scripts
+          pnpm install --frozen-lockfile
+      - name: Download pinned official Foundry and Solidity binaries, verify hashes
+        run: |
+          set -euo pipefail
+          mkdir -p tools
+          curl -fLsS --retry 2 https://github.com/foundry-rs/foundry/releases/download/v1.8.3/foundry_v1.8.3_linux_amd64.tar.gz -o tools/foundry_v1.8.3_linux_amd64.tar.gz
+          curl -fLsS --retry 2 https://github.com/foundry-rs/foundry/releases/download/v1.8.3/foundry_v1.8.3_linux_amd64.sha256 -o tools/foundry.sha256
+          (cd tools && sha256sum --check foundry.sha256)
+          tar -xzf tools/foundry_v1.8.3_linux_amd64.tar.gz -C tools forge cast anvil
+          curl -fLsS --retry 2 https://binaries.soliditylang.org/linux-amd64/list.json -o tools/solc-list.json
+          python3 - <<'PY'
+          import json,urllib.request,hashlib,os
+          data=json.load(open('tools/solc-list.json'))
+          path=data['releases']['0.8.28']
+          build=next(b for b in data['builds'] if b['path']==path)
+          assert '/' not in path and path.startswith('solc-linux-amd64-v0.8.28+')
+          raw=urllib.request.urlopen('https://binaries.soliditylang.org/linux-amd64/'+path,timeout=60).read()
+          assert hashlib.sha256(raw).hexdigest()==build['sha256'].removeprefix('0x')
+          open('tools/solc','wb').write(raw);os.chmod('tools/solc',0o755)
+          PY
+          tools/forge --version
+          tools/solc --version
+          rm tools/foundry_v1.8.3_linux_amd64.tar.gz
+      - name: Read-only Monad Testnet RPC probes (never signs or broadcasts)
+        run: |
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          const endpoint='https://testnet-rpc.monad.xyz';
+          const output={testedAt:new Date().toISOString(),endpoint,mode:'read-only',calls:[]};
+          for(const [method,params] of [
+            ['eth_chainId',[]],['eth_blockNumber',[]],['eth_gasPrice',[]],
+            ['eth_getBlockByNumber',['finalized',false]],['eth_getBlockByNumber',['safe',false]],
+            ['eth_getCode',['0xa9012a055bd4e0eDfF8Ce09f960291C09D5322dC','latest']],
+            ['eth_getCode',['0xd236c18D274E54FAccC3dd9DDA4b27965a73ee6C','latest']],
+            ['eth_call',[{to:'0xa9012a055bd4e0eDfF8Ce09f960291C09D5322dC',data:'0x313ce567'},'latest']],
+            ['eth_call',[{to:'0xa9012a055bd4e0eDfF8Ce09f960291C09D5322dC',data:'0x95d89b41'},'latest']]]){
+            try{
+              const r=await fetch(endpoint,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method,params}),signal:AbortSignal.timeout(15000)});
+              output.calls.push({method,params,httpStatus:r.status,response:await r.json()});
+            }catch(e){output.calls.push({method,params,error:String(e)});}
+            await new Promise(r=>setTimeout(r,150));
+          }
+          fs.writeFileSync('rpc-readonly.json',JSON.stringify(output,null,2));
+          console.log(JSON.stringify(output,null,2));
+          JS
+      - name: Archive tools and exact source for local verification
+        run: tar -czf m0c-tools.tar.gz node_modules tools package.json pnpm-lock.yaml toolchain.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: m0c-preparation
+          path: |
+            source.tar
+            m0c-tools.tar.gz
+            toolchain.json
+            rpc-readonly.json
+          retention-days: 2
