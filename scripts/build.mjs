@@ -9,15 +9,25 @@ let revision = process.env.WORKERS_CI_COMMIT_SHA ?? process.env.GITHUB_SHA;
 if (!revision) {
   try {
     revision = execFileSync('git', ['rev-parse', 'HEAD'], {
-      encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
     }).trim();
-  } catch { revision = 'local'; }
+  } catch {
+    revision = 'local';
+  }
 }
-if (revision !== 'local' && !/^[a-f0-9]{40}$/.test(revision)) throw new Error('Invalid build revision');
+if (revision !== 'local' && !/^[a-f0-9]{40}$/.test(revision))
+  throw new Error('Invalid build revision');
 await viteBuild();
 await esbuild({
-  entryPoints: ['src/worker/index.ts'], outdir: 'dist/worker', bundle: true,
-  format: 'esm', platform: 'browser', target: 'es2022', sourcemap: false, minify: true,
+  entryPoints: ['src/worker/index.ts'],
+  outdir: 'dist/worker',
+  bundle: true,
+  format: 'esm',
+  platform: 'browser',
+  target: 'es2022',
+  sourcemap: false,
+  minify: true,
   define: { __BUILD_SHA__: JSON.stringify(revision) },
 });
 await mkdir('dist', { recursive: true });

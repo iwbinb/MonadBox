@@ -10,7 +10,10 @@ export function deploymentData(): Hex {
 }
 export function expectedRuntime(): Hex {
   let code = artifact.runtime.slice(2);
-  const refs = Object.values(artifact.immutableReferences).flat() as { start: number; length: number }[];
+  const refs = Object.values(artifact.immutableReferences).flat() as {
+    start: number;
+    length: number;
+  }[];
   if (!refs.length) throw Error('Invalid artifact: immutable token missing');
   for (const ref of refs) {
     if (ref.length !== 32) throw Error('Invalid immutable size');
@@ -24,5 +27,6 @@ export async function verifyProbe(client: ChainClient, probe: Address): Promise<
   const code = await client.getCode({ address: probe });
   if (!code || keccak256(code) !== keccak256(expectedRuntime())) throw Error('UNVERIFIED_PROBE');
   const token = await client.readContract({ address: probe, abi: probeAbi, functionName: 'token' });
-  if (typeof token !== 'string' || token.toLowerCase() !== TOKEN.toLowerCase()) throw Error('TOKEN_NOT_VERIFIED');
+  if (typeof token !== 'string' || token.toLowerCase() !== TOKEN.toLowerCase())
+    throw Error('TOKEN_NOT_VERIFIED');
 }

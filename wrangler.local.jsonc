@@ -1,8 +1,47 @@
 {
- "$schema":"node_modules/wrangler/config-schema.json","name":"monadbox-local","main":"dist/worker/index.js","compatibility_date":"2026-09-18","compatibility_flags":["nodejs_compat"],"no_bundle":true,
- "assets":{"directory":"./dist/client","binding":"ASSETS","not_found_handling":"single-page-application","run_worker_first":true},"observability":{"enabled":true},
- "vars":{"APP_ENV":"local","CHAIN_ID":"10143","STORAGE_NAMESPACE":"monadbox-local","STORAGE_ENABLED":"false","BACKGROUND_ENABLED":"false","NETWORK_WRITES_ENABLED":"false","MAINNET_ENABLED":"false","ASSET_ALLOWLIST":"[]","CONTRACT_REGISTRY":"[]","TESTNET_LAB_ENABLED":"true"},
- "d1_databases":[{"binding":"DB","database_name":"monadbox-local","database_id":"00000000-0000-0000-0000-000000000001","migrations_dir":"migrations"}],
- "r2_buckets":[{"binding":"FILES","bucket_name":"monadbox-local-files"}],
- "queues":{"producers":[{"binding":"JOBS","queue":"monadbox-local-jobs"}],"consumers":[{"queue":"monadbox-local-jobs","max_batch_size":10,"max_retries":3,"dead_letter_queue":"monadbox-local-dlq"}]}
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "monadbox-local",
+  "main": "dist/worker/index.js",
+  "compatibility_date": "2026-09-18",
+  "compatibility_flags": ["nodejs_compat"],
+  "no_bundle": true,
+  "assets": {
+    "directory": "./dist/client",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": true
+  },
+  "observability": { "enabled": true },
+  "vars": {
+    "APP_ENV": "local",
+    "CHAIN_ID": "10143",
+    "STORAGE_NAMESPACE": "monadbox-local",
+    "STORAGE_ENABLED": "false",
+    "BACKGROUND_ENABLED": "false",
+    "NETWORK_WRITES_ENABLED": "false",
+    "MAINNET_ENABLED": "false",
+    "ASSET_ALLOWLIST": "[]",
+    "CONTRACT_REGISTRY": "[]",
+    "TESTNET_LAB_ENABLED": "true"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "monadbox-local",
+      "database_id": "00000000-0000-0000-0000-000000000001",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "r2_buckets": [{ "binding": "FILES", "bucket_name": "monadbox-local-files" }],
+  "queues": {
+    "producers": [{ "binding": "JOBS", "queue": "monadbox-local-jobs" }],
+    "consumers": [
+      {
+        "queue": "monadbox-local-jobs",
+        "max_batch_size": 10,
+        "max_retries": 3,
+        "dead_letter_queue": "monadbox-local-dlq"
+      }
+    ]
+  }
 }
