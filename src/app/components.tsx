@@ -50,7 +50,11 @@ export function ToolCard({ tool }: { tool: Tool }) {
         <span className="tool-icon">
           <ToolIcon id={tool.id} />
         </span>
-        <span className="status-label">{t('Not open yet', '尚未开放')}</span>
+        <span className="status-label">
+          {tool.id === 'group'
+            ? t('Drafts available', '可创建草稿')
+            : t('Not open yet', '尚未开放')}
+        </span>
       </div>
       <h3>{locale === 'en' ? tool.name : tool.label.zh}</h3>
       <p>{tool.description[locale]}</p>

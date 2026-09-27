@@ -49,5 +49,6 @@ jobs:
             test-results
             dist/build.json
             artifacts/local-chain.json
+            artifacts/group-local-chain.json
           if-no-files-found: ignore
           retention-days: 7

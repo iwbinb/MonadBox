@@ -12,10 +12,12 @@ test('home shows all six tools without fake balances or payment buttons', async 
     fullPage: true,
   });
 });
-test('tool details support deep-link refresh and clearly block creation', async ({ page }) => {
+test('tool details support deep-link refresh and separate drafts from payments', async ({
+  page,
+}) => {
   await page.goto('/tools/group');
   await expect(page.locator('h1')).toHaveText('Group');
-  await expect(page.getByRole('button', { name: 'Creation not available yet' })).toBeDisabled();
+  await expect(page.getByRole('link', { name: 'Prepare a group draft' })).toBeVisible();
   await page.reload();
   await expect(page.locator('h1')).toHaveText('Group');
   await expect(page.locator('body')).toContainText('not proof of real-world delivery');

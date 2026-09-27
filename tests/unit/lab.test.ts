@@ -83,6 +83,7 @@ describe('M0-C wallet boundary', () => {
       wallets: true,
       payments: false,
       drafts: false,
+      localGroupDrafts: true,
     });
   });
   it('rejects invalid lab flag', () =>
