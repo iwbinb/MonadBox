@@ -1,38 +1,24 @@
 # MonadBox 文档索引
 
-版本：M0-A规格 + M0-B工程基础 · 2026-09-27 · 状态：M0-A已合并，M0-B工程基础等待PR审阅；远端部署未验收。
+更新：2026-09-27 · M0-C 开发及本地验证已交付；真实测试网签名交易待验收，详见当前验收记录。
 
-## 阅读顺序
+## 当前最常用
 
-| 文档 | 回答的问题 |
+| 文档 | 内容 |
 | --- | --- |
-| [产品规格](product/PRODUCT_SPEC.md) | 为谁服务、六工具分别做什么、首版不做什么 |
-| [资金与状态规则](product/FUNDS_AND_STATES.md) | 钱归谁、何时可退、何时可结算、谁有权限 |
-| [UI / UX 规格](design/UX_UI_SPEC.md) | 页面、创建流程、付款体验、移动端和异常状态 |
-| [技术架构](engineering/ARCHITECTURE.md) | 前端、Workers、存储、链各自承担什么 |
-| [数据与 API](engineering/DATA_AND_API.md) | 账户、订单、事件、接口和幂等约定 |
-| [合约规格](engineering/CONTRACT_SPEC.md) | 模块、方法、事件、安全不变量及组合结算 |
-| [部署与环境](engineering/DEPLOYMENT.md) | dev/main、Cloudflare 自动部署、回滚与主网边界 |
-| [安全要求](engineering/SECURITY.md) | 威胁、权限、私密资料、事故与上线门槛 |
-| [开发计划](planning/DEVELOPMENT_PLAN.md) | 每阶段任务、验收、产物和停止点 |
-| [决策与放行条件](planning/DECISIONS_AND_GATES.md) | 已定稿事项、待实测项和阻塞范围 |
-| [来源与复用记录](planning/SOURCES_AND_PROVENANCE.md) | 官方依据、核验时间、ArcBox 复用边界 |
-| [M0-A 验收记录](planning/M0-A_ACCEPTANCE.md) | M0-A实际交付与当时未执行事项 |
+| [全阶段开发与验收计划](planning/DEVELOPMENT_PLAN.md) | M0-A 至 M7、依赖、任务和当前状态 |
+| [M0-C 验收记录](planning/M0-C_ACCEPTANCE.md) | 已实现/已测试/待签名的清晰界线 |
+| [M0-C 实验室操作说明](engineering/M0-C_LAB.md) | 钱包、测试资产、部署、授权、入金、退款、恢复 |
+| [Cloudflare 发布](engineering/DEPLOYMENT.md) | 一个 Worker、dev Preview、正式分支和发布命令 |
 
-## 当前工程
+## 产品与工程
 
-[M0-B验收记录](planning/M0-B_ACCEPTANCE.md)与[Cloudflare设置](engineering/DEPLOYMENT.md)。旧两Worker方案已被一个Worker+dev Preview替代。
+[产品规格](product/PRODUCT_SPEC.md) · [资金与状态规则](product/FUNDS_AND_STATES.md) · [页面与交互](design/UX_UI_SPEC.md) · [技术架构](engineering/ARCHITECTURE.md) · [数据/API](engineering/DATA_AND_API.md) · [业务合约规格](engineering/CONTRACT_SPEC.md) · [安全要求](engineering/SECURITY.md) · [决策与放行条件](planning/DECISIONS_AND_GATES.md) · [官方来源与复用](planning/SOURCES_AND_PROVENANCE.md)
 
-## 术语
+历史：[M0-A 验收](planning/M0-A_ACCEPTANCE.md) · [M0-B 验收](planning/M0-B_ACCEPTANCE.md)。其中历史阶段的未验证描述不等于当前阶段仍未实现；当前状态以全阶段表和 M0-C 验收为准。
 
-- **Box**：一个已发布的工具实例，例如一次成团活动或一份交付报价。
-- **Order**：一名参与者的一次经济关系或一笔 Split 收据；不等于整个 Box。
-- **Intent**：一次待签名操作的业务意图；它不是付款凭证。
-- **Credit**：合约内归某受益人的可领取款；不是钱包已到账。
-- **Withdrawal**：代币实际转出合约，并经过交易核验。
-- **Finalized**：按已验证网络策略确认的链上状态，不是前端倒计时结束。
-- **Production**：网站发布环境；**Mainnet**：区块链网络。两者互不等价。
+## 术语与边界
 
-## 使用说明
+Box 是工具实例；Order 是单个参与者的经济关系；Intent 是签名意图不是付款凭证；Credit 是合约内可领取款，Withdrawal 才是实际转出。Production 指网站环境，Mainnet 指区块链网络，二者不等价。
 
-规格中的默认值和性能预算是拟实现要求，不是已经测试的能力。技术事实的来源集中于来源文档；凡标记 G-xx 的事项，必须在对应阶段取得证据后放行。没有真实网络访问、部署与签名授权时，不能用数据库或截图替代验证。
+M0-C 的 `/lab` 和 M0CProbe 只验证单钱包、限额测试入金/退款，不是一个业务 Box。钱包连接不等于 SIWE 登录。浏览器模拟注入钱包不等于实测 MetaMask/Safari。所有计划指标与假设不得写成既有实测结果。
