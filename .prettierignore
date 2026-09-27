@@ -1,0 +1,8 @@
+pnpm-lock.yaml
+dist
+node_modules
+docs
+README.md
+AGENTS.md
+artifacts
+contracts
