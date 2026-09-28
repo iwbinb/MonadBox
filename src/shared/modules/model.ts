@@ -83,15 +83,47 @@ export const deliverySchema = z
     (d) => d.buyer.toLowerCase() !== d.seller.toLowerCase(),
     'Buyer and seller must differ / 客户与服务者必须不同',
   );
+export const attendanceSchema = z
+  .strictObject({
+    tool: z.literal('attend'),
+    ...common,
+    deposit: amountSchema,
+    capacity: z.number().int().min(1).max(200),
+    registrationDeadline: timeSchema,
+    eventStart: timeSchema,
+    eventEnd: timeSchema,
+    checkinStart: timeSchema,
+    checkinDeadline: timeSchema,
+    challengeDeadline: timeSchema,
+    disputeDuration: z
+      .number()
+      .int()
+      .min(86400)
+      .max(30 * 86400),
+    noShowPenaltyBps: z.number().int().min(0).max(10000),
+    penaltyBeneficiary: addressSchema,
+    checkinSigner: addressSchema,
+  })
+  .refine(
+    (d) =>
+      d.registrationDeadline <= d.eventStart &&
+      d.eventStart < d.eventEnd &&
+      d.checkinStart <= d.eventStart &&
+      d.checkinDeadline >= d.eventEnd &&
+      d.challengeDeadline > d.checkinDeadline &&
+      BigInt(d.deposit) * BigInt(d.capacity) <= MAX_UINT256,
+    'Invalid event dates or capacity / 活动时间或人数不合法',
+  );
 export const moduleDataSchema = z.discriminatedUnion('tool', [
   splitSchema,
   groupV2Schema,
   deliverySchema,
+  attendanceSchema,
 ]);
 export type ModuleData = z.infer<typeof moduleDataSchema>;
 export const moduleDeploymentSchema = z
   .strictObject({
-    tool: z.enum(['split', 'group', 'deliver']),
+    tool: z.enum(['split', 'group', 'deliver', 'attend']),
     chainId: z.literal(10143),
     version: z.number().int(),
     address: addressSchema,
@@ -129,6 +161,12 @@ export const moduleActionSchema = z.enum([
   'creditRefund',
   'settle',
   'withdrawFor',
+  'register',
+  'checkIn',
+  'cancelEvent',
+  'challengeNoShow',
+  'finalizeNoShow',
+  'refundDispute',
   'fund',
   'cancelOffer',
   'submitDelivery',
@@ -170,6 +208,20 @@ export interface AgreementSignatures {
   first: `0x${string}`;
   second: `0x${string}`;
 }
+export type ModuleSignatures = Partial<AgreementSignatures> & { checkIn?: `0x${string}` };
+export const checkInSchema = z
+  .strictObject({
+    schemaVersion: z.literal(1),
+    boxId: hashSchema,
+    termsHash: hashSchema,
+    attendee: addressSchema,
+    signer: addressSchema,
+    issuedAt: timeSchema,
+    deadline: timeSchema,
+    nonce: uintSchema,
+  })
+  .refine((p) => p.issuedAt < p.deadline, 'Invalid check-in expiry');
+export type CheckInProof = z.infer<typeof checkInSchema>;
 export const moduleIntentSchema = z.strictObject({
   id: z.string().uuid(),
   publication: modulePublicationSchema,
@@ -178,6 +230,8 @@ export const moduleIntentSchema = z.strictObject({
   amount: amountSchema.optional(),
   paymentNonce: hashSchema.optional(),
   evidenceHash: hashSchema.optional(),
+  participant: addressSchema.optional(),
+  checkIn: checkInSchema.optional(),
   agreement: agreementSchema.optional(),
   calldataHash: hashSchema.optional(),
   nonce: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),

@@ -2,13 +2,15 @@ import { encodeAbiParameters, encodeFunctionData, erc20Abi, keccak256, stringToH
 import type { Abi, AbiParameter, Address, Hex } from 'viem';
 import { artifact as split } from './generated/SplitPaymentsV1';
 import { artifact as group } from './generated/GroupEscrowV2';
+import { artifact as attend } from './generated/AttendanceBondV1';
 import { artifact as deliver } from './generated/DeliveryEscrowV1';
 import { moduleDataSchema, modulePublicationSchema } from './model';
 import type {
   ModuleData,
   ModuleIntent,
   ModulePublication,
-  AgreementSignatures,
+  ModuleSignatures,
+  CheckInProof,
   Agreement,
 } from './model';
 import { TOKEN } from '../lab/network';
@@ -16,7 +18,12 @@ import { same } from '../cloud/chain';
 export const definitions = {
   split: { artifact: split, create: 'createSplit', get: 'getSplit', version: 1 },
   group: { artifact: group, create: 'createGroup', get: 'getGroup', version: 2 },
+  attend: { artifact: attend, create: 'createEvent', get: 'getEvent', version: 1 },
   deliver: { artifact: deliver, create: 'createOffer', get: 'getOffer', version: 1 },
+} as const;
+export const signedModuleNames = {
+  deliver: 'DeliveryEscrowV1',
+  attend: 'AttendanceBondV1',
 } as const;
 export function moduleAbi(tool: ModuleData['tool']): Abi {
   return definitions[tool].artifact.abi;
@@ -31,6 +38,22 @@ export function metadataFor(input: ModuleData): string {
   });
 }
 export function termsFor(data: ModuleData) {
+  if (data.tool === 'attend')
+    return {
+      deposit: BigInt(data.deposit),
+      capacity: data.capacity,
+      registrationDeadline: BigInt(data.registrationDeadline),
+      eventStart: BigInt(data.eventStart),
+      eventEnd: BigInt(data.eventEnd),
+      checkinStart: BigInt(data.checkinStart),
+      checkinDeadline: BigInt(data.checkinDeadline),
+      challengeDeadline: BigInt(data.challengeDeadline),
+      disputeDuration: BigInt(data.disputeDuration),
+      noShowPenaltyBps: data.noShowPenaltyBps,
+      penaltyBeneficiary: data.penaltyBeneficiary,
+      checkinSigner: data.checkinSigner,
+      metadataHash: keccak256(stringToHex(metadataFor(data))),
+    };
   if (data.tool === 'deliver')
     return {
       buyer: data.buyer,
@@ -109,14 +132,22 @@ export function validatePublication(input: ModulePublication): ModulePublication
     p.termsHash !== termsHashFor(p) ||
     (p.data.tool === 'deliver'
       ? [p.data.buyer, p.data.seller].some((a) => same(a, p.deployment.address))
-      : p.data.recipients.some((r) => same(r.address, p.deployment.address)))
+      : p.data.tool === 'attend'
+        ? same(p.data.penaltyBeneficiary, p.deployment.address)
+        : p.data.recipients.some((r) => same(r.address, p.deployment.address)))
   )
     throw Error('INTEGRITY_ERROR');
   return p;
 }
 export function approvalAmount(i: Pick<ModuleIntent, 'publication' | 'amount'>) {
   const d = i.publication.data;
-  return d.tool === 'group' ? d.unitPrice : d.tool === 'deliver' ? d.amount : i.amount;
+  return d.tool === 'attend'
+    ? d.deposit
+    : d.tool === 'group'
+      ? d.unitPrice
+      : d.tool === 'deliver'
+        ? d.amount
+        : i.amount;
 }
 export function agreementTerms(a: Agreement) {
   return {
@@ -130,9 +161,23 @@ export function agreementTerms(a: Agreement) {
     stageIndex: BigInt(a.stageIndex),
   };
 }
+export function checkInTerms(p: CheckInProof) {
+  return {
+    ...p,
+    schemaVersion: 1n,
+    issuedAt: BigInt(p.issuedAt),
+    deadline: BigInt(p.deadline),
+    nonce: BigInt(p.nonce),
+  };
+}
+export function attendanceOrderId(id: Hex, participant: Address) {
+  return keccak256(
+    encodeAbiParameters([{ type: 'bytes32' }, { type: 'address' }], [id, participant]),
+  );
+}
 export function moduleCall(
   i: ModuleIntent,
-  signatures?: AgreementSignatures,
+  signatures?: ModuleSignatures,
 ): { to: Address; data: Hex } {
   const p = validatePublication(i.publication),
     abi = moduleAbi(p.data.tool),
@@ -155,20 +200,39 @@ export function moduleCall(
     if (!same(i.actor, p.creator)) throw Error('WRONG_ACCOUNT');
     name = definitions[p.data.tool].create;
     args = [termsFor(p.data), p.salt];
-  } else if (i.action === 'withdrawFor' || i.action === 'creditRefund') args = [id, i.actor];
+  } else if (i.action === 'withdrawFor') args = [id, i.actor];
+  else if (i.action === 'resolveByAgreement') {
+    if (
+      !i.agreement ||
+      !signatures?.first ||
+      !signatures.second ||
+      !/^0x[0-9a-f]{130}$/i.test(signatures.first) ||
+      !/^0x[0-9a-f]{130}$/i.test(signatures.second)
+    )
+      throw Error('SIGNATURES_REQUIRED');
+    args = [agreementTerms(i.agreement), signatures.first, signatures.second];
+  } else if (p.data.tool === 'attend') {
+    if (i.action === 'checkIn') {
+      if (!i.checkIn || !signatures?.checkIn || !/^0x[0-9a-f]{130}$/i.test(signatures.checkIn))
+        throw Error('SIGNATURES_REQUIRED');
+      args = [checkInTerms(i.checkIn), signatures.checkIn];
+    } else if (
+      ['creditRefund', 'finalizeNoShow', 'refundDispute', 'refundAfterDisputeTimeout'].includes(
+        i.action,
+      )
+    ) {
+      if (!i.participant) throw Error('PARTICIPANT_REQUIRED');
+      args = [id, i.participant];
+    } else if (i.action === 'challengeNoShow') {
+      if (!i.evidenceHash || /^0x0{64}$/.test(i.evidenceHash)) throw Error('EVIDENCE_REQUIRED');
+      args = [id, i.evidenceHash];
+    } else if (!['register', 'leave', 'cancelEvent'].includes(i.action))
+      throw Error('ACTION_UNAVAILABLE');
+  } else if (i.action === 'creditRefund' && p.data.tool === 'group') args = [id, i.actor];
   else if (p.data.tool === 'deliver') {
     if (['submitDelivery', 'dispute'].includes(i.action)) {
       if (!i.evidenceHash || /^0x0{64}$/.test(i.evidenceHash)) throw Error('EVIDENCE_REQUIRED');
       args = [id, i.evidenceHash];
-    } else if (i.action === 'resolveByAgreement') {
-      if (
-        !i.agreement ||
-        !signatures ||
-        !/^0x[0-9a-f]{130}$/i.test(signatures.first) ||
-        !/^0x[0-9a-f]{130}$/i.test(signatures.second)
-      )
-        throw Error('SIGNATURES_REQUIRED');
-      args = [agreementTerms(i.agreement), signatures.first, signatures.second];
     } else if (
       ![
         'fund',

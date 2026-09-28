@@ -3,7 +3,7 @@ import { keccak256, toHex } from 'viem';
 import type { Hex } from 'viem';
 import { hashSchema } from '../../shared/cloud/model';
 import { moduleIntentSchema } from '../../shared/modules/model';
-import type { AgreementSignatures, ModuleIntent } from '../../shared/modules/model';
+import type { ModuleSignatures, ModuleIntent } from '../../shared/modules/model';
 import { moduleCall } from '../../shared/modules/terms';
 import { confirmModuleAction, verifyModule } from '../../shared/modules/chain';
 import { makeClient } from '../../shared/lab/network';
@@ -67,7 +67,7 @@ export async function sendModuleAction(
   provider: InjectedProvider,
   environment: string,
   input: ModuleIntent,
-  signatures?: AgreementSignatures,
+  signatures?: ModuleSignatures,
 ): Promise<Hex> {
   const i = moduleIntentSchema.parse(input);
   if (!navigator.locks) throw Error('LOCKS_REQUIRED');
@@ -92,7 +92,7 @@ export async function sendModuleAction(
     if (nonce !== i.nonce || block.timestamp >= BigInt(i.expiresAt)) throw Error('ACTION_CHANGED');
     const call = moduleCall(i, signatures);
     if (
-      i.action === 'resolveByAgreement' &&
+      ['resolveByAgreement', 'checkIn'].includes(i.action) &&
       (!i.calldataHash || keccak256(call.data) !== i.calldataHash)
     )
       throw Error('ACTION_CHANGED');

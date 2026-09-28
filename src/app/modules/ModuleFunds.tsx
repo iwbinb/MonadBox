@@ -1,10 +1,13 @@
+import { CheckInPanel } from './CheckInPanel';
+import { attendanceDates } from './AttendanceEditor';
+import { addressSchema } from '../../shared/cloud/model';
 import { AgreementPanel } from './AgreementPanel';
 import { RecoveryHistory } from '../shared/RecoveryHistory';
 import { statusLabel } from '../shared/status';
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { formatUnits, keccak256, stringToHex } from 'viem';
-import type { Hex } from 'viem';
+import type { Address, Hex } from 'viem';
 import { useApp } from '../context';
 import { useFundsWallet, WalletChoice } from '../shared/FundsWallet';
 import { userError } from '../../shared/lab/wallet';
@@ -16,6 +19,12 @@ import type { ModuleActionOptions, ModuleSnapshot } from '../../shared/modules/c
 import { journalKey, readRecords, recheckModule, sendModuleAction, terminal } from './journal';
 import type { TransactionRecord } from './journal';
 export const actionLabels: Record<ModuleAction, [string, string]> = {
+  register: ['Register with deposit', '支付押金报名'],
+  checkIn: ['Submit check-in proof', '提交签到证明'],
+  cancelEvent: ['Cancel event', '取消活动'],
+  challengeNoShow: ['Appeal missing check-in', '申诉未签到'],
+  finalizeNoShow: ['Finalize no-show deduction', '结算缺席扣款'],
+  refundDispute: ['Refund disputed participant', '退还申诉人押金'],
   create: ['Publish fixed rules', '发布固定规则'],
   fund: ['Pay full escrow', '全额付款至托管'],
   cancelOffer: ['Cancel unfunded offer', '取消未付款订单'],
@@ -112,7 +121,13 @@ export function ModuleFunds({
     [notice, setNotice] = useState('');
   const [evidence, setEvidence] = useState(''),
     [options, setOptions] = useState<ModuleActionOptions>({});
+  const [participant, setParticipant] = useState<Address | undefined>(),
+    [participantInput, setParticipantInput] = useState('');
   const renderEpoch = epoch.current;
+  useEffect(() => {
+    setParticipant(undefined);
+    setParticipantInput('');
+  }, [wallet.actor, publication]);
   useEffect(() => {
     const version = ++epoch.current;
     setSnapshot(null);
@@ -130,7 +145,7 @@ export function ModuleFunds({
       setError(moduleError(e));
     }
     if (!creation)
-      void moduleSnapshot(makeClient(), publication, wallet.actor)
+      void moduleSnapshot(makeClient(), publication, wallet.actor, participant)
         .then((s) => {
           if (epoch.current === version) setSnapshot(s);
         })
@@ -140,7 +155,7 @@ export function ModuleFunds({
     return () => {
       epoch.current = version + 1;
     };
-  }, [wallet.actor, environment, publication, creation]);
+  }, [wallet.actor, environment, publication, creation, participant]);
   async function run(fn: () => Promise<void>) {
     setBusy(true);
     setError('');
@@ -157,7 +172,7 @@ export function ModuleFunds({
     const actor = wallet.actor,
       version = epoch.current;
     if (!actor) return;
-    const s = await moduleSnapshot(makeClient(), publication, actor);
+    const s = await moduleSnapshot(makeClient(), publication, actor, participant);
     if (epoch.current !== version) return;
     setSnapshot(s);
     setOptions({});
@@ -206,6 +221,44 @@ export function ModuleFunds({
             })
           }
         />
+        {!creation && publication.data.tool === 'attend' ? (
+          <div>
+            <label>
+              {t('Participant wallet to inspect', '要查询的参加者钱包')}
+              <input
+                value={participantInput}
+                placeholder={wallet.actor ?? '0x…'}
+                onChange={(e) => {
+                  setParticipantInput(e.target.value);
+                  setPrepared(null);
+                  setAck(false);
+                }}
+              />
+            </label>
+            <button
+              className="button secondary"
+              disabled={busy || !wallet.actor}
+              onClick={() => {
+                const parsed = addressSchema.safeParse(participantInput || wallet.actor);
+                if (!parsed.success) {
+                  setError(t('Enter a valid participant wallet.', '请输入有效的参加者地址。'));
+                  return;
+                }
+                setParticipant(parsed.data);
+                setPrepared(null);
+                setAck(false);
+              }}
+            >
+              {t('Inspect participant', '查询此参加者')}
+            </button>
+            <p>
+              {t(
+                'Credit and withdrawals always belong to your connected wallet. Participant state below may refer to the address you selected.',
+                '可领取及已提款金额始终属于当前连接钱包。下方报名状态对应你选择的参加者地址。',
+              )}
+            </p>
+          </div>
+        ) : null}
         {snapshot ? (
           <>
             <p>
@@ -256,7 +309,7 @@ export function ModuleFunds({
                 {t('Dispute digest', '争议摘要')}：<code>{snapshot.reasonHash}</code>
               </p>
             ) : null}
-            {actions.some((a) => ['submitDelivery', 'dispute'].includes(a)) ? (
+            {actions.some((a) => ['submitDelivery', 'dispute', 'challengeNoShow'].includes(a)) ? (
               <label>
                 {t('Delivery or dispute evidence (temporary text)', '交付或争议证据（临时文本）')}
                 <textarea
@@ -286,6 +339,89 @@ export function ModuleFunds({
             wallet.wallet ? (
               <AgreementPanel
                 key={`${wallet.actor}:${snapshot.block}`}
+                publication={publication}
+                snapshot={snapshot}
+                actor={wallet.actor}
+                provider={wallet.wallet.provider}
+                onChange={(o) => {
+                  if (epoch.current !== renderEpoch) return;
+                  setOptions(o);
+                  setPrepared(null);
+                  setAck(false);
+                }}
+              />
+            ) : null}
+          </>
+        ) : null}
+        {snapshot && publication.data.tool === 'attend' ? (
+          <>
+            <p>
+              {t('Selected participant', '已选择参加者')}：<code>{snapshot.participant}</code> ·{' '}
+              {statusLabel(snapshot.positionState ?? 'NONE', t)}
+            </p>
+            <p>
+              {t('This participant’s pending deposit', '此参加者尚未结算押金')}：
+              {formatUnits(BigInt(snapshot.positionLocked ?? '0'), 6)} AUSD ·{' '}
+              {t('Registered / capacity', '已报名 / 上限')}：{snapshot.activeCount}/
+              {publication.data.capacity}
+            </p>
+            {attendanceDates
+              .filter(([key]) =>
+                ['registrationDeadline', 'checkinDeadline', 'challengeDeadline'].includes(key),
+              )
+              .map(([key, en, zh]) => (
+                <p key={key}>
+                  {t(en, zh)}：
+                  {new Date(
+                    publication.data.tool === 'attend' ? publication.data[key] * 1000 : 0,
+                  ).toLocaleString()}
+                </p>
+              ))}
+            {snapshot.disputeDue ? (
+              <p>
+                {t('Individual dispute deadline', '个人争议截止')}：
+                {new Date(snapshot.disputeDue * 1000).toLocaleString()}
+              </p>
+            ) : null}
+            {actions.includes('challengeNoShow') ? (
+              <label>
+                {t('Appeal evidence (temporary text)', '申诉证据（临时文本）')}
+                <textarea
+                  aria-label={t('Appeal evidence (temporary text)', '申诉证据（临时文本）')}
+                  maxLength={16000}
+                  value={evidence}
+                  onChange={(e) => {
+                    setEvidence(e.target.value);
+                    setPrepared(null);
+                    setAck(false);
+                  }}
+                />
+                <small>
+                  {t(
+                    'Only its digest is public on-chain. Keep the original evidence privately.',
+                    '仅摘要在链上公开，请私下保留原始证据。',
+                  )}
+                </small>
+              </label>
+            ) : null}
+            {actions.includes('checkIn') && wallet.actor && wallet.wallet ? (
+              <CheckInPanel
+                key={`${wallet.actor}:${snapshot.participant}:${snapshot.block}`}
+                publication={publication}
+                snapshot={snapshot}
+                actor={wallet.actor}
+                provider={wallet.wallet.provider}
+                onChange={(o) => {
+                  if (epoch.current !== renderEpoch) return;
+                  setOptions(o);
+                  setPrepared(null);
+                  setAck(false);
+                }}
+              />
+            ) : null}
+            {actions.includes('resolveByAgreement') && wallet.actor && wallet.wallet ? (
+              <AgreementPanel
+                key={`${wallet.actor}:${snapshot.participant}:${snapshot.block}`}
                 publication={publication}
                 snapshot={snapshot}
                 actor={wallet.actor}
@@ -344,9 +480,13 @@ export function ModuleFunds({
             disabled={
               busy ||
               unresolved ||
-              (!paymentsEnabled && ['approve', 'pay', 'contribute', 'fund'].includes(action)) ||
-              (['submitDelivery', 'dispute'].includes(action) && !evidence.trim()) ||
-              (action === 'resolveByAgreement' && !options.signatures)
+              (!paymentsEnabled &&
+                ['approve', 'pay', 'contribute', 'fund', 'register'].includes(action)) ||
+              (['submitDelivery', 'dispute', 'challengeNoShow'].includes(action) &&
+                !evidence.trim()) ||
+              (action === 'resolveByAgreement' &&
+                (!options.signatures?.first || !options.signatures.second)) ||
+              (action === 'checkIn' && !options.signatures?.checkIn)
             }
             onClick={() =>
               void run(async () => {
@@ -364,6 +504,9 @@ export function ModuleFunds({
                         value,
                         {
                           ...options,
+                          ...(publication.data.tool === 'attend'
+                            ? { participant: snapshot?.participant ?? wallet.actor! }
+                            : {}),
                           ...(evidence.trim()
                             ? { evidenceHash: keccak256(stringToHex(evidence)) }
                             : {}),
@@ -387,6 +530,12 @@ export function ModuleFunds({
               {t('Signing wallet', '签名钱包')}：<code>{prepared.actor}</code> · nonce{' '}
               {prepared.nonce}
             </p>
+            {prepared.participant ? (
+              <p>
+                {t('Participant for this action', '本次操作的参加者')}：
+                <code>{prepared.participant}</code>
+              </p>
+            ) : null}
             {prepared.amount ? (
               <p>
                 {t('Amount', '金额')}：{formatUnits(BigInt(prepared.amount), 6)} AUSD

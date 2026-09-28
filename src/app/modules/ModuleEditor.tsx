@@ -1,3 +1,4 @@
+import { AttendanceEditor, AttendanceRules } from './AttendanceEditor';
 import { DeliveryEditor, DeliveryRules } from './DeliveryEditor';
 import { useState } from 'react';
 import { formatUnits, isAddress } from 'viem';
@@ -9,9 +10,10 @@ import type { ModuleData } from '../../shared/modules/model';
 import { allocateSplit } from '../../shared/modules/terms';
 import { exportModule } from './drafts';
 export function ModuleRules({ data }: { data: ModuleData }) {
+  if (data.tool === 'attend') return <AttendanceRules data={data} />;
   return data.tool === 'deliver' ? <DeliveryRules data={data} /> : <SplitGroupRules data={data} />;
 }
-function SplitGroupRules({ data }: { data: Exclude<ModuleData, { tool: 'deliver' }> }) {
+function SplitGroupRules({ data }: { data: Extract<ModuleData, { tool: 'split' | 'group' }> }) {
   const { t } = useApp();
   const [example, setExample] = useState('1');
   let shares: bigint[] | null = null;
@@ -99,6 +101,14 @@ interface EditorProps {
   onSave: (data: ModuleData) => void;
 }
 export function ModuleEditor(props: EditorProps) {
+  if (props.tool === 'attend')
+    return (
+      <AttendanceEditor
+        busy={props.busy}
+        onSave={props.onSave}
+        initial={props.initial?.tool === 'attend' ? props.initial : undefined}
+      />
+    );
   return props.tool === 'deliver' ? (
     <DeliveryEditor
       busy={props.busy}
@@ -108,7 +118,11 @@ export function ModuleEditor(props: EditorProps) {
   ) : (
     <SplitGroupEditor
       {...props}
-      initial={props.initial?.tool === 'deliver' ? undefined : props.initial}
+      initial={
+        props.initial?.tool === 'group' || props.initial?.tool === 'split'
+          ? props.initial
+          : undefined
+      }
     />
   );
 }
@@ -119,7 +133,7 @@ function SplitGroupEditor({
   onSave,
 }: {
   tool: ModuleData['tool'];
-  initial?: Exclude<ModuleData, { tool: 'deliver' }> | undefined;
+  initial?: Extract<ModuleData, { tool: 'split' | 'group' }> | undefined;
   busy: boolean;
   onSave: (data: ModuleData) => void;
 }) {

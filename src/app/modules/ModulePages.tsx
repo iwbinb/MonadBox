@@ -23,7 +23,7 @@ export function ModuleBuilderPage({ kind }: { kind?: ModuleData['tool'] }) {
     { id, draftId } = useParams();
   if (state.status !== 'ready')
     return <p className="container">{t('Loading configuration…', '加载配置…')}</p>;
-  if (!draftId && !kind && !['split', 'group-split', 'deliver'].includes(id ?? ''))
+  if (!draftId && !kind && !['split', 'group-split', 'deliver', 'attend'].includes(id ?? ''))
     return (
       <section className="container cloud-page">
         <h1>{t('This tool is being prepared', '工具开发中')}</h1>
@@ -34,7 +34,16 @@ export function ModuleBuilderPage({ kind }: { kind?: ModuleData['tool'] }) {
     <Builder
       key={`${state.config.environment}:${draftId ?? kind ?? id}`}
       environment={state.config.environment}
-      tool={kind ?? (id === 'group-split' ? 'group' : id === 'deliver' ? 'deliver' : 'split')}
+      tool={
+        kind ??
+        (id === 'group-split'
+          ? 'group'
+          : id === 'deliver'
+            ? 'deliver'
+            : id === 'attend'
+              ? 'attend'
+              : 'split')
+      }
       draftId={draftId}
     />
   );

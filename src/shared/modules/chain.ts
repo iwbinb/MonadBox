@@ -5,11 +5,22 @@ import type { ChainClient } from '../lab/network';
 import { recoverNonce } from '../nonce-recovery';
 import { same } from '../cloud/chain';
 import type { ReceiptResult } from '../cloud/chain';
-import { approvalAmount, definitions, moduleAbi, moduleCall, validatePublication } from './terms';
+import {
+  attendanceOrderId,
+  signedModuleNames,
+  approvalAmount,
+  definitions,
+  moduleAbi,
+  moduleCall,
+  validatePublication,
+} from './terms';
 import { moduleIntentSchema } from './model';
+import { validateAgreement } from './agreement';
+import { validateCheckIn } from './checkin';
 import type {
   Agreement,
-  AgreementSignatures,
+  ModuleSignatures,
+  CheckInProof,
   ModuleAction,
   ModuleDeployment,
   ModuleIntent,
@@ -39,9 +50,9 @@ export async function verifyModule(client: ChainClient, d: ModuleDeployment) {
   )
     throw Error('UNVERIFIED_CONTRACT');
   if (
-    d.tool === 'deliver' &&
+    (d.tool === 'deliver' || d.tool === 'attend') &&
     (await client.readContract({ address, abi, functionName: 'domainNameHash' })) !==
-      keccak256(stringToHex('DeliveryEscrowV1'))
+      keccak256(stringToHex(signedModuleNames[d.tool]))
   )
     throw Error('UNVERIFIED_CONTRACT');
   let normalized: string = code.toLowerCase();
@@ -77,11 +88,17 @@ export interface ModuleSnapshot {
   evidenceHash?: Hex;
   reasonHash?: Hex;
   settlementNonce?: string;
+  participant?: Address;
+  positionState?: string;
+  positionLocked?: string;
+  cancelled?: boolean;
+  checkinNonce?: string;
 }
 export async function moduleSnapshot(
   client: ChainClient,
   input: ModulePublication,
   actor: Address,
+  participant: Address = actor,
 ): Promise<ModuleSnapshot> {
   const p = validatePublication(input);
   await verifyModule(client, p.deployment);
@@ -122,6 +139,7 @@ export async function moduleSnapshot(
     terms: { metadataHash: Hex };
     state?: number;
     activeCount?: number;
+    cancelled?: boolean;
     submitDue?: bigint;
     reviewDue?: bigint;
     disputeDue?: bigint;
@@ -181,6 +199,49 @@ export async function moduleSnapshot(
       ][storedState] ?? 'NONE';
     if (state === 'NONE') throw Error('INTEGRITY_ERROR');
   }
+  let attendance: Partial<ModuleSnapshot> = {};
+  if (p.data.tool === 'attend') {
+    const order = attendanceOrderId(id, participant),
+      [attendanceRecord, settlementNonce, checkinNonce] = await Promise.all([
+        read('getAttendance', [id, participant]),
+        read('settlementNonce', [order]),
+        read('checkinNonce', [order]),
+      ]);
+    const a = attendanceRecord as { state: number; disputeDue: bigint; reasonHash: Hex },
+      position = Number(a.state),
+      now = Number(block.timestamp),
+      d = p.data;
+    const positionState = ['NONE', 'REGISTERED', 'LEFT', 'CHECKED_IN', 'DISPUTED', 'SETTLED'][
+      position
+    ];
+    if (!positionState) throw Error('INTEGRITY_ERROR');
+    attendance = {
+      participant,
+      position,
+      positionState,
+      positionLocked: [1, 4].includes(position) ? d.deposit : '0',
+      cancelled: !!r.cancelled,
+      disputeDue: Number(a.disputeDue),
+      reasonHash: a.reasonHash,
+      settlementNonce: String(settlementNonce),
+      checkinNonce: String(checkinNonce),
+    };
+    state = r.cancelled
+      ? 'CANCELLED'
+      : position >= 2
+        ? positionState
+        : now >= d.challengeDeadline
+          ? 'EVENT_ENDED'
+          : now >= d.checkinDeadline
+            ? 'CHALLENGE_OPEN'
+            : now >= d.checkinStart
+              ? 'CHECKIN_OPEN'
+              : now >= d.registrationDeadline
+                ? 'REGISTRATION_CLOSED'
+                : activeCount >= d.capacity
+                  ? 'FULL'
+                  : 'OPEN';
+  }
   if ((await client.getBlock({ blockNumber })).hash !== block.hash)
     throw Error('FINALITY_UNAVAILABLE');
   return {
@@ -198,6 +259,7 @@ export async function moduleSnapshot(
     block: blockNumber.toString(),
     blockHash: block.hash,
     timestamp: Number(block.timestamp),
+    ...attendance,
   };
 }
 export function moduleActions(
@@ -214,6 +276,36 @@ export function moduleActions(
     return actions;
   }
   const d = p.data;
+  if (d.tool === 'attend') {
+    const now = s.timestamp,
+      owns = s.participant && same(actor, s.participant),
+      organizer = same(actor, p.creator);
+    if (
+      !s.cancelled &&
+      owns &&
+      !s.paused &&
+      s.position === 0 &&
+      now < d.registrationDeadline &&
+      s.activeCount < d.capacity &&
+      BigInt(s.balance) >= BigInt(d.deposit)
+    )
+      actions.push(BigInt(s.allowance) < BigInt(d.deposit) ? 'approve' : 'register');
+    if (owns && s.position === 1 && now < d.registrationDeadline) actions.push('leave');
+    if (!s.cancelled && s.position === 1) {
+      if (now >= d.checkinStart && now < d.checkinDeadline) actions.push('checkIn');
+      if (owns && now >= d.checkinDeadline && now < d.challengeDeadline)
+        actions.push('challengeNoShow');
+      if (now >= d.challengeDeadline) actions.push('finalizeNoShow');
+    }
+    if (organizer && !s.cancelled && now < d.challengeDeadline) actions.push('cancelEvent');
+    if (s.cancelled && [1, 4].includes(s.position)) actions.push('creditRefund');
+    if (s.position === 4) {
+      if (organizer) actions.push('refundDispute');
+      if (now >= s.disputeDue!) actions.push('refundAfterDisputeTimeout');
+      else if (!s.cancelled) actions.push('resolveByAgreement');
+    }
+    return actions;
+  }
   if (d.tool === 'deliver') {
     const buyer = same(actor, d.buyer),
       seller = same(actor, d.seller),
@@ -257,7 +349,9 @@ export function moduleActions(
 export interface ModuleActionOptions {
   evidenceHash?: Hex;
   agreement?: Agreement;
-  signatures?: AgreementSignatures;
+  signatures?: ModuleSignatures;
+  participant?: Address;
+  checkIn?: CheckInProof;
 }
 export async function prepareModuleAction(
   client: ChainClient,
@@ -276,15 +370,20 @@ export async function prepareModuleAction(
     client.getCode({ address: actor }),
   ]);
   if (code && code !== '0x') throw Error('EOA_REQUIRED');
-  if (
-    action !== 'create' &&
-    !moduleActions(p, actor, await moduleSnapshot(client, p, actor), amount).includes(action)
-  )
-    throw Error('ACTION_UNAVAILABLE');
+  if (action !== 'create') {
+    const snapshot = await moduleSnapshot(client, p, actor, options.participant);
+    if (!moduleActions(p, actor, snapshot, amount).includes(action))
+      throw Error('ACTION_UNAVAILABLE');
+    if (action === 'checkIn') validateCheckIn(p, snapshot, options.checkIn);
+    if (action === 'resolveByAgreement') validateAgreement(p, snapshot, options.agreement);
+  }
   const paymentAmount =
     p.data.tool === 'split'
       ? amount
-      : action === 'approve' || action === 'fund' || action === 'contribute'
+      : action === 'approve' ||
+          action === 'fund' ||
+          action === 'contribute' ||
+          action === 'register'
         ? approvalAmount({ publication: p })
         : undefined;
   const i = moduleIntentSchema.parse({
@@ -293,9 +392,11 @@ export async function prepareModuleAction(
     actor,
     action,
     ...(paymentAmount ? { amount: paymentAmount } : {}),
-    ...(['submitDelivery', 'dispute'].includes(action) && options.evidenceHash
+    ...(['submitDelivery', 'dispute', 'challengeNoShow'].includes(action) && options.evidenceHash
       ? { evidenceHash: options.evidenceHash }
       : {}),
+    ...(p.data.tool === 'attend' ? { participant: options.participant ?? actor } : {}),
+    ...(action === 'checkIn' && options.checkIn ? { checkIn: options.checkIn } : {}),
     ...(action === 'resolveByAgreement' && options.agreement
       ? { agreement: options.agreement }
       : {}),
@@ -307,7 +408,7 @@ export async function prepareModuleAction(
     expiresAt: Number(block.timestamp) + 600,
   });
   const call = moduleCall(i, options.signatures);
-  if (action === 'resolveByAgreement') i.calldataHash = keccak256(call.data);
+  if (['resolveByAgreement', 'checkIn'].includes(action)) i.calldataHash = keccak256(call.data);
   await client.estimateGas({ account: actor, ...call, value: 0n });
   return i;
 }
@@ -335,6 +436,13 @@ function eventMatches(
         a.value === BigInt(approvalAmount(i)!)
       );
     if (a.boxId !== p.chainBoxId) return false;
+    if (p.data.tool === 'attend' && !['create', 'withdrawFor'].includes(i.action))
+      return (
+        event.eventName === 'ActionExecuted' &&
+        addressMatches('actor', i.actor) &&
+        a.action === keccak256(stringToHex(i.action)) &&
+        a.stageIndex === 0n
+      );
     switch (i.action) {
       case 'create':
         return (
@@ -432,16 +540,19 @@ export async function confirmModuleAction(
   if (receipt.status !== 'success') return { ...evidence, state: 'reverted' };
   let call;
   try {
-    let signatures: AgreementSignatures | undefined;
-    if (i.action === 'resolveByAgreement') {
+    let signatures: ModuleSignatures | undefined;
+    if (['resolveByAgreement', 'checkIn'].includes(i.action)) {
       if (!i.calldataHash || keccak256(tx.input) !== i.calldataHash)
         return { ...evidence, state: 'replaced' };
       const decoded = decodeFunctionData({
         abi: moduleAbi(i.publication.data.tool),
         data: tx.input,
       });
-      if (decoded.functionName !== 'resolveByAgreement') return { ...evidence, state: 'replaced' };
-      signatures = { first: decoded.args![1] as Hex, second: decoded.args![2] as Hex };
+      if (decoded.functionName !== i.action) return { ...evidence, state: 'replaced' };
+      signatures =
+        i.action === 'checkIn'
+          ? { checkIn: decoded.args![1] as Hex }
+          : { first: decoded.args![1] as Hex, second: decoded.args![2] as Hex };
     }
     call = moduleCall(i, signatures);
   } catch {
@@ -450,7 +561,7 @@ export async function confirmModuleAction(
   if (!tx.to || !same(tx.to, call.to) || !same(tx.input, call.data) || tx.value !== 0n)
     return { ...evidence, state: 'replaced' };
   if (!receipt.logs.some((log) => eventMatches(i, log))) throw Error('TRANSACTION_MISMATCH');
-  if (i.action !== 'approve') await moduleSnapshot(client, i.publication, i.actor);
+  if (i.action !== 'approve') await moduleSnapshot(client, i.publication, i.actor, i.participant);
   return { ...evidence, state: 'finalized' };
 }
 export function makeModuleChain(client: ChainClient = makeClient()) {
@@ -463,7 +574,8 @@ export function makeModuleChain(client: ChainClient = makeClient()) {
       options?: ModuleActionOptions,
     ) => prepareModuleAction(client, p, actor, action, amount, options),
     confirm: (i: ModuleIntent, hash?: Hex) => confirmModuleAction(client, i, hash),
-    snapshot: (p: ModulePublication, actor: Address) => moduleSnapshot(client, p, actor),
+    snapshot: (p: ModulePublication, actor: Address, participant?: Address) =>
+      moduleSnapshot(client, p, actor, participant),
   };
 }
 export type ModuleChain = ReturnType<typeof makeModuleChain>;

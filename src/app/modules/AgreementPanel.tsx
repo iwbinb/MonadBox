@@ -5,6 +5,7 @@ import { useApp } from '../context';
 import { parseAmount } from '../../shared/amount';
 import { localDateInput, parseLocalDate } from '../../shared/group/draft';
 import {
+  agreementContext,
   agreementTypedData,
   agreementHash,
   validateAgreement,
@@ -28,8 +29,9 @@ export function AgreementPanel({
   provider: InjectedProvider;
   onChange: (options: ModuleActionOptions) => void;
 }) {
-  const { t } = useApp();
-  const [buyerAmount, setBuyerAmount] = useState(formatUnits(BigInt(s.locked), 6)),
+  const { t } = useApp(),
+    c = agreementContext(p, s);
+  const [buyerAmount, setBuyerAmount] = useState(formatUnits(BigInt(c.remaining), 6)),
     [deadline, setDeadline] = useState(
       localDateInput(Math.min(s.disputeDue!, s.timestamp + 86400)),
     ),
@@ -39,8 +41,9 @@ export function AgreementPanel({
     [second, setSecond] = useState(''),
     [busy, setBusy] = useState(false),
     [error, setError] = useState('');
-  if (p.data.tool !== 'deliver') return null;
-  const d = p.data;
+  const attendance = p.data.tool === 'attend';
+  const firstRole = attendance ? t('Participant', '参加者') : t('Buyer', '客户'),
+    secondRole = attendance ? t('Organizer', '组织者') : t('Seller', '服务者');
   function clear() {
     setProposal(null);
     setFirst('');
@@ -64,7 +67,7 @@ export function AgreementPanel({
     }
   }
   async function fresh(a: Agreement) {
-    return validateAgreement(p, await moduleSnapshot(makeClient(), p, actor), a);
+    return validateAgreement(p, await moduleSnapshot(makeClient(), p, actor, s.participant), a);
   }
   return (
     <section className="cloud-card">
@@ -76,10 +79,12 @@ export function AgreementPanel({
         )}
       </p>
       <p>
-        {t('All remaining funds', '全部剩余款')}：{formatUnits(BigInt(s.locked), 6)} AUSD
+        {t('All remaining funds', '全部剩余款')}：{formatUnits(BigInt(c.remaining), 6)} AUSD
       </p>
       <label>
-        {t('Refund to buyer (AUSD)', '退客户（AUSD）')}
+        {attendance
+          ? t('Refund to participant (AUSD)', '退参加者（AUSD）')
+          : t('Refund to buyer (AUSD)', '退客户（AUSD）')}
         <input
           inputMode="decimal"
           value={buyerAmount}
@@ -109,17 +114,17 @@ export function AgreementPanel({
               a = validateAgreement(p, s, {
                 schemaVersion: 1,
                 boxId: p.chainBoxId,
-                orderId: p.chainBoxId,
+                orderId: c.orderId,
                 termsHash: p.termsHash,
                 asset: p.deployment.asset,
-                remaining: s.locked,
-                buyer: d.buyer,
-                seller: d.seller,
+                remaining: c.remaining,
+                buyer: c.buyer,
+                seller: c.seller,
                 buyerAmount: b.toString(),
-                sellerAmount: (BigInt(s.locked) - b).toString(),
+                sellerAmount: (BigInt(c.remaining) - b).toString(),
                 settlementNonce: s.settlementNonce,
                 deadline: parseLocalDate(deadline),
-                stageIndex: 0,
+                stageIndex: c.stageIndex,
               });
             await fresh(a);
             clear();
@@ -161,12 +166,14 @@ export function AgreementPanel({
             <code>{agreementHash(p, proposal)}</code>
           </p>
           <p>
-            {t('Buyer receives', '客户收取')} {formatUnits(BigInt(proposal.buyerAmount), 6)} AUSD ·{' '}
-            <code>{proposal.buyer}</code>
+            {firstRole} {t('receives', '收取')} {formatUnits(BigInt(proposal.buyerAmount), 6)} AUSD
+            · <code>{proposal.buyer}</code>
           </p>
           <p>
-            {t('Seller receives', '服务者收取')} {formatUnits(BigInt(proposal.sellerAmount), 6)}{' '}
-            AUSD · <code>{proposal.seller}</code>
+            {attendance
+              ? t('Penalty beneficiary receives', '罚款受益人收取')
+              : t('Seller receives', '服务者收取')}{' '}
+            {formatUnits(BigInt(proposal.sellerAmount), 6)} AUSD · <code>{proposal.seller}</code>
           </p>
           <p>
             {t('Expires', '到期')}：{new Date(proposal.deadline * 1000).toLocaleString()} · nonce{' '}
@@ -175,7 +182,8 @@ export function AgreementPanel({
           <button
             className="button secondary"
             disabled={
-              busy || ![d.buyer.toLowerCase(), d.seller.toLowerCase()].includes(actor.toLowerCase())
+              busy ||
+              ![c.buyer.toLowerCase(), c.secondSigner.toLowerCase()].includes(actor.toLowerCase())
             }
             onClick={() =>
               void run(async () => {
@@ -214,8 +222,8 @@ export function AgreementPanel({
                   }))
                 )
                   throw Error();
-                if (actor.toLowerCase() === d.buyer.toLowerCase()) setFirst(signature);
-                else setSecond(signature);
+                if (actor.toLowerCase() === c.buyer.toLowerCase()) setFirst(signature);
+                if (actor.toLowerCase() === c.secondSigner.toLowerCase()) setSecond(signature);
                 onChange({});
               })
             }
@@ -223,7 +231,7 @@ export function AgreementPanel({
             {t('Sign this allocation only', '仅签署此分配协议')}
           </button>
           <label>
-            {t('Buyer signature (temporary)', '客户签名（临时）')}
+            {firstRole} {t('signature (temporary)', '签名（临时）')}
             <textarea
               autoComplete="off"
               spellCheck={false}
@@ -235,7 +243,7 @@ export function AgreementPanel({
             />
           </label>
           <label>
-            {t('Seller signature (temporary)', '服务者签名（临时）')}
+            {secondRole} {t('signature (temporary)', '签名（临时）')}
             <textarea
               autoComplete="off"
               spellCheck={false}
@@ -258,12 +266,12 @@ export function AgreementPanel({
                   !/^0x[0-9a-f]{130}$/i.test(second) ||
                   !(await verifyTypedData({
                     ...typed,
-                    address: d.buyer,
+                    address: c.buyer,
                     signature: first as Hex,
                   })) ||
                   !(await verifyTypedData({
                     ...typed,
-                    address: d.seller,
+                    address: c.secondSigner,
                     signature: second as Hex,
                   }))
                 )

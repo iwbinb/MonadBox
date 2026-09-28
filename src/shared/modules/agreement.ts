@@ -2,7 +2,7 @@ import { hashTypedData } from 'viem';
 import type { ModulePublication, Agreement } from './model';
 import { agreementSchema } from './model';
 import type { ModuleSnapshot } from './chain';
-import { agreementTerms, validatePublication } from './terms';
+import { attendanceOrderId, signedModuleNames, agreementTerms, validatePublication } from './terms';
 import { same } from '../cloud/chain';
 export const agreementTypes = {
   Agreement: [
@@ -23,10 +23,10 @@ export const agreementTypes = {
 } as const;
 export function agreementTypedData(p: ModulePublication, a: Agreement) {
   validatePublication(p);
-  if (p.data.tool !== 'deliver') throw Error('ACTION_UNAVAILABLE');
+  if (p.data.tool !== 'deliver' && p.data.tool !== 'attend') throw Error('ACTION_UNAVAILABLE');
   return {
     domain: {
-      name: 'DeliveryEscrowV1',
+      name: signedModuleNames[p.data.tool],
       version: '1',
       chainId: 10143,
       verifyingContract: p.deployment.address,
@@ -36,26 +36,50 @@ export function agreementTypedData(p: ModulePublication, a: Agreement) {
     message: agreementTerms(agreementSchema.parse(a)),
   };
 }
+export function agreementContext(p: ModulePublication, s: ModuleSnapshot) {
+  const d = p.data;
+  if (d.tool === 'deliver')
+    return {
+      buyer: d.buyer,
+      seller: d.seller,
+      secondSigner: d.seller,
+      remaining: s.locked,
+      orderId: p.chainBoxId,
+      stageIndex: 0,
+      disputed: s.state === 'DISPUTED',
+    };
+  if (d.tool === 'attend' && s.participant && s.positionLocked !== undefined)
+    return {
+      buyer: s.participant,
+      seller: d.penaltyBeneficiary,
+      secondSigner: p.creator,
+      remaining: s.positionLocked,
+      orderId: attendanceOrderId(p.chainBoxId, s.participant),
+      stageIndex: 0,
+      disputed: s.position === 4 && !s.cancelled,
+    };
+  throw Error('ACTION_UNAVAILABLE');
+}
 export function validateAgreement(
   p: ModulePublication,
   s: ModuleSnapshot,
   input: unknown,
 ): Agreement {
   const a = agreementSchema.parse(input),
-    d = p.data;
+    c = agreementContext(p, s);
   if (
-    d.tool !== 'deliver' ||
-    s.state !== 'DISPUTED' ||
+    !c.disputed ||
     a.boxId !== p.chainBoxId ||
-    a.orderId !== p.chainBoxId ||
+    a.orderId !== c.orderId ||
     a.termsHash !== p.termsHash ||
     !same(a.asset, p.deployment.asset) ||
-    !same(a.buyer, d.buyer) ||
-    !same(a.seller, d.seller) ||
-    a.remaining !== s.locked ||
+    !same(a.buyer, c.buyer) ||
+    !same(a.seller, c.seller) ||
+    a.remaining !== c.remaining ||
     a.settlementNonce !== s.settlementNonce ||
-    a.stageIndex !== 0 ||
-    a.deadline > s.disputeDue! ||
+    a.stageIndex !== c.stageIndex ||
+    !s.disputeDue ||
+    a.deadline > s.disputeDue ||
     a.deadline <= s.timestamp
   )
     throw Error('AGREEMENT_CHANGED');

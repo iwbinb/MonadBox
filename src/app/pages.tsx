@@ -118,7 +118,7 @@ export function ToolPage() {
         </section>
         <aside className="rule-panel">
           <span className="status-label">
-            {['group', 'split', 'deliver'].includes(tool.id)
+            {['group', 'split', 'deliver', 'attend'].includes(tool.id)
               ? t('Local drafts available', '可创建本地草稿')
               : t('Not open yet', '尚未开放')}{' '}
             · {tool.stage}
@@ -136,6 +136,10 @@ export function ToolPage() {
           ) : tool.id === 'deliver' ? (
             <Link className="button primary" to="/create/deliver">
               {t('Prepare delivery escrow', '创建交付托管')}
+            </Link>
+          ) : tool.id === 'attend' ? (
+            <Link className="button primary" to="/create/attend">
+              {t('Prepare attendance bond', '创建报名押金')}
             </Link>
           ) : (
             <button className="button primary" disabled>

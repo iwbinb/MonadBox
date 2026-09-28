@@ -65,9 +65,9 @@ Milestones 上述动作额外绑定 currentStage；事件必须有 stageIndex。
 
 ### Attend
 
-`createEvent`；`register`；`leave`；`checkIn(attendee, issuedAt, nonce, signature)`；`cancelEvent`；`challengeNoShow`；`finalizeNoShow(attendee)`；`resolveByAgreement`；`refundAfterDisputeTimeout`；`creditRefund(attendee)`。
+`createEvent(terms,salt)`；`register(boxId)`；`leave(boxId)`；`checkIn(proof,signature)`；`cancelEvent(boxId)`；`challengeNoShow(boxId,reasonHash)`；`finalizeNoShow(boxId,attendee)`；`refundDispute(boxId,attendee)`；`resolveByAgreement(agreement,participantSignature,organizerSignature)`；`refundAfterDisputeTimeout(boxId,attendee)`；`creditRefund(boxId,attendee)`。
 
-checkIn 签名绑定固定 signer、chainId、contract、boxId、attendee、有效期、nonce；不使用易伪造的静态二维码作为提款依据。领取签名需按原参加者地址付款。每人的争议不阻塞其他人处理。
+checkIn 签名绑定固定 signer、chainId、contract、schemaVersion、boxId、termsHash、attendee、issuedAt、deadline、nonce；不使用静态二维码作为提款依据。退款归原参加者，双签需要参加者与组织者签署，扣款只归固定罚款受益人。每人的争议不阻塞其他人处理。具体操作见[Attend](ATTEND.md)。
 
 ### Rewards
 

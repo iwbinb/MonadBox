@@ -122,6 +122,10 @@ createRoot(root).render(
                 path="create/deliver"
                 element={groupSurface(<ModuleBuilderPage kind="deliver" />)}
               />
+              <Route
+                path="create/attend"
+                element={groupSurface(<ModuleBuilderPage kind="attend" />)}
+              />
               <Route path="create/:id" element={<UnavailablePage />} />
               <Route path="app/module-drafts" element={groupSurface(<ModuleDraftsPage />)} />
               <Route

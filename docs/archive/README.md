@@ -14,6 +14,7 @@
 | [M2-A](M2-A_ACCEPTANCE.md) | Split、Group V2、版本化发布和52项浏览器回归 |
 | [M2-B](M2-B_ACCEPTANCE.md) | 共用工作台、恢复组件、换账号及60项浏览器回归 |
 | [M3](M3_ACCEPTANCE.md) | Deliver五条资金路径、双签恢复、私密附件与62项浏览器回归 |
+| [M4](M4_ACCEPTANCE.md) | Attend签到、独立争议、无签名持久化恢复与64项浏览器回归 |
 
 ## 2026-09-28 文件整理
 

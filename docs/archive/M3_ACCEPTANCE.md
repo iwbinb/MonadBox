@@ -23,7 +23,7 @@
 - 本机HTTP真实Worker/D1/Anvil场景10项断言通过。曾遇到一次连接关闭，单独重跑通过；随后修复测试进程退出清理，再次从全新本机链验证通过。
 - Codex浏览器检查390px中文表单及规则预览，无横向溢出、无控制台error/warn。资金流程截图由测试保存到`artifacts/screenshots/delivery-*.png`，CI归档。
 
-本阶段提交后由同一PR完整CI复验；远端结果随后补充。当前记录不代表公众资金放行。
+提交 `38562fe24fd75e62dc16e40e14458ae67476828d` 的 PR CI [36414654355](https://github.com/iwbinb/MonadBox/actions/runs/36414654355) 和 push CI [36414649590](https://github.com/iwbinb/MonadBox/actions/runs/36414649590) 均已完成且成功，完整检查包括固定本机链、HTTP及dry-run。本记录不代表公众资金放行。
 
 ## 外部待验与下一阶段
 
