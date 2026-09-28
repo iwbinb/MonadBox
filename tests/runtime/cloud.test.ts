@@ -497,6 +497,28 @@ describe('cloud metadata and immutable publication', () => {
     const d = (await r.json()).data;
     expect(d.paymentsEnabled).toBe(false);
     expect(d.revision).toBeUndefined();
+    // Retiring a deployment must preserve its exact original publication and recovery.
+    const previous = env.GROUP_DEPLOYMENT;
+    env.GROUP_DEPLOYMENT = JSON.stringify({
+      ...deployment,
+      address: '0x3333333333333333333333333333333333333333',
+    });
+    env.GROUP_PREVIOUS_DEPLOYMENTS = JSON.stringify([deployment]);
+    try {
+      const historical = await b.req('/public/groups/' + row.publicId);
+      expect(historical.status).toBe(200);
+      expect((await historical.json()).data.module.toLowerCase()).toBe(
+        deployment.address.toLowerCase(),
+      );
+      expect((await b.req('/groups/' + row.id + '/confirm', 'POST', { hash })).status).toBe(200);
+      env.GROUP_PREVIOUS_DEPLOYMENTS = JSON.stringify([
+        { ...deployment, runtimeHash: '0x' + '99'.repeat(32) },
+      ]);
+      expect((await b.req('/public/groups/' + row.publicId)).status).toBe(503);
+    } finally {
+      env.GROUP_DEPLOYMENT = previous;
+      env.GROUP_PREVIOUS_DEPLOYMENTS = '[]';
+    }
     outcome = { state: 'unknown' };
     expect((await b.req('/public/groups/' + row.publicId)).status).toBe(503);
     outcome = { state: 'finalized', hash };

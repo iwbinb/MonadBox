@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { readConfig, toPublicConfig, publicConfigSchema } from '../../src/shared/config';
 import { tools, getTool } from '../../src/shared/tools';
+import { registeredGroup } from '../../src/shared/cloud/registry';
+import { deploymentSchema } from '../../src/shared/cloud/model';
 export const base = {
   APP_ENV: 'test',
   CHAIN_ID: '10143',
@@ -13,6 +15,53 @@ export const base = {
   CONTRACT_REGISTRY: '[]',
 };
 describe('fail-closed configuration', () => {
+  const deployment = deploymentSchema.parse({
+    chainId: 10143,
+    version: 1,
+    address: '0x1111111111111111111111111111111111111111',
+    asset: '0xa9012a055bd4e0eDfF8Ce09f960291C09D5322dC',
+    intakeAdmin: '0x2222222222222222222222222222222222222222',
+    runtimeHash: '0x' + 'ab'.repeat(32),
+  });
+  it('enables explicit wallet payments only with a configured testnet deployment and cloud origin', () => {
+    const input = {
+      ...base,
+      CLOUD_ENABLED: 'true',
+      APP_ORIGIN: 'http://localhost:8790',
+      GROUP_DEPLOYMENT: JSON.stringify(deployment),
+      NETWORK_WRITES_ENABLED: 'true',
+    };
+    expect(toPublicConfig(readConfig(input), 'test').capabilities.payments).toBe(true);
+    expect(() => readConfig({ ...input, CLOUD_ENABLED: 'false' })).toThrow();
+    expect(() => readConfig({ ...input, GROUP_DEPLOYMENT: 'null' })).toThrow();
+    expect(() =>
+      readConfig({
+        ...input,
+        GROUP_DEPLOYMENT: JSON.stringify({ ...deployment, asset: deployment.address }),
+      }),
+    ).toThrow();
+  });
+  it('keeps historical identity exact and independent of the current deployment', () => {
+    const config = readConfig({
+      ...base,
+      GROUP_PREVIOUS_DEPLOYMENTS: JSON.stringify([deployment]),
+    });
+    expect(registeredGroup(config, deployment)).toBe(true);
+    expect(registeredGroup(config, { ...deployment, runtimeHash: '0x' + 'cd'.repeat(32) })).toBe(
+      false,
+    );
+    expect(registeredGroup(config, { ...deployment, address: deployment.intakeAdmin })).toBe(false);
+    expect(() =>
+      readConfig({ ...base, GROUP_PREVIOUS_DEPLOYMENTS: JSON.stringify([deployment, deployment]) }),
+    ).toThrow();
+    expect(() =>
+      readConfig({
+        ...base,
+        GROUP_DEPLOYMENT: JSON.stringify(deployment),
+        GROUP_PREVIOUS_DEPLOYMENTS: JSON.stringify([deployment]),
+      }),
+    ).toThrow();
+  });
   it('accepts an explicitly read-only testnet environment', () =>
     expect(readConfig(base).CHAIN_ID).toBe('10143'));
   it.each(Object.keys(base))('rejects missing %s', (key) => {

@@ -7,6 +7,7 @@ import { verifyMessage, keccak256, stringToHex, getAddress } from 'viem';
 import type { Address, Hex } from 'viem';
 import { createSiweMessage } from 'viem/siwe';
 import { readConfig } from '../../shared/config';
+import { registeredGroup } from '../../shared/cloud/registry';
 import { groupDataSchema } from '../../shared/group/draft';
 import { groupMetadata, groupTermsHash, groupId } from '../../shared/group/terms';
 import {
@@ -488,11 +489,7 @@ export function createCloudRouter(chain: CloudChain = makeCloudChain()) {
       b = await box(db, c.req.param('id'), actor);
     if (!b.publication) throw new CloudError('NOT_PREPARED', 409);
     await limited(db, `confirm:${actor}`, 30, 60);
-    const registered = readConfig(c.env).GROUP_DEPLOYMENT;
-    if (
-      !registered ||
-      JSON.stringify(registered) !== JSON.stringify(b.publication.intent.deployment)
-    )
+    if (!registeredGroup(readConfig(c.env), b.publication.intent.deployment))
       throw new CloudError('UNVERIFIED_CONTRACT', 503);
     const result = await chain.confirm(
       b.publication.intent,
@@ -543,8 +540,7 @@ export function createCloudRouter(chain: CloudChain = makeCloudChain()) {
       pub = b.publication;
     if (!pub || pub.state !== 'finalized' || !pub.hash)
       throw new CloudError('CHAIN_RECHECK_REQUIRED', 503);
-    const registered = readConfig(c.env).GROUP_DEPLOYMENT;
-    if (!registered || JSON.stringify(registered) !== JSON.stringify(pub.intent.deployment))
+    if (!registeredGroup(readConfig(c.env), pub.intent.deployment))
       throw new CloudError('UNVERIFIED_CONTRACT', 503);
     if ((await chain.confirm(pub.intent, pub.hash)).state !== 'finalized')
       throw new CloudError('CHAIN_RECHECK_REQUIRED', 503);

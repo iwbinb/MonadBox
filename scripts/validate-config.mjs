@@ -57,9 +57,10 @@ export function validateConfig(config, pkg) {
       databases.push(db[0].database_id.toLowerCase());
     } else if (settings.d1_databases?.length)
       throw new Error('Unused remote database must not be bound');
-    let deployment;
+    let deployment, previous;
     try {
       deployment = JSON.parse(settings.vars.GROUP_DEPLOYMENT ?? 'null');
+      previous = JSON.parse(settings.vars.GROUP_PREVIOUS_DEPLOYMENTS ?? '[]');
     } catch {
       throw new Error('Invalid Group deployment JSON');
     }
@@ -73,14 +74,23 @@ export function validateConfig(config, pkg) {
       (settings.vars.CLOUD_ENABLED !== 'true' || !deployment)
     )
       throw new Error('Publication requires cloud and reviewed deployment');
+    if (!Array.isArray(previous) || previous.length > 20)
+      throw new Error('Invalid historical Group deployments');
+    const deployments = [...(deployment ? [deployment] : []), ...previous];
     if (
-      deployment &&
-      (deployment.chainId !== 10143 ||
-        deployment.version !== 1 ||
-        deployment.asset?.toLowerCase() !== '0xa9012a055bd4e0edff8ce09f960291c09d5322dc' ||
-        !/^0x[0-9a-f]{40}$/i.test(deployment.address) ||
-        !/^0x[0-9a-f]{40}$/i.test(deployment.intakeAdmin) ||
-        !/^0x[0-9a-f]{64}$/i.test(deployment.runtimeHash))
+      deployments.some(
+        (entry) =>
+          !entry ||
+          entry.chainId !== 10143 ||
+          entry.version !== 1 ||
+          entry.asset?.toLowerCase() !== '0xa9012a055bd4e0edff8ce09f960291c09d5322dc' ||
+          !/^0x[0-9a-f]{40}$/i.test(entry.address) ||
+          /^0x0{40}$/i.test(entry.address) ||
+          !/^0x[0-9a-f]{40}$/i.test(entry.intakeAdmin) ||
+          /^0x0{40}$/i.test(entry.intakeAdmin) ||
+          !/^0x[0-9a-f]{64}$/i.test(entry.runtimeHash),
+      ) ||
+      new Set(deployments.map((entry) => entry.address.toLowerCase())).size !== deployments.length
     )
       throw new Error('Unverified Group deployment structure');
   }

@@ -17,6 +17,17 @@ const schema = z
   .object({
     CLOUD_ENABLED: booleanFlag.default(false),
     GROUP_PUBLISH_ENABLED: booleanFlag.default(false),
+    GROUP_PREVIOUS_DEPLOYMENTS: z
+      .string()
+      .default('[]')
+      .transform((s, ctx) => {
+        try {
+          return deploymentSchema.array().max(20).parse(JSON.parse(s));
+        } catch {
+          ctx.addIssue({ code: 'custom', message: 'Invalid historical Group deployments' });
+          return z.NEVER;
+        }
+      }),
     APP_ORIGIN: z.string().default(''),
     GROUP_DEPLOYMENT: z
       .string()
@@ -41,6 +52,18 @@ const schema = z
     CONTRACT_REGISTRY: emptyList,
   })
   .superRefine((value, ctx) => {
+    const deployments = [value.GROUP_DEPLOYMENT, ...value.GROUP_PREVIOUS_DEPLOYMENTS].filter(
+      (entry) => entry !== null,
+    );
+    if (
+      new Set(deployments.map((entry) => entry.address.toLowerCase())).size !==
+        deployments.length ||
+      deployments.some((entry) => entry.asset.toLowerCase() !== GROUP_ASSET.toLowerCase())
+    )
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Deployment addresses must be unique and use the official test asset',
+      });
     if (value.CLOUD_ENABLED) {
       try {
         const u = new URL(value.APP_ORIGIN);

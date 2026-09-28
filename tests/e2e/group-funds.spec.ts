@@ -130,9 +130,9 @@ test('Group complete funds flows and lost-response recovery on isolated LOCAL ch
   const signature = await wallet.signMessage({ account: creator, message: ch.message });
   const login = await page.request.post(origin + '/api/v1/auth/verify', {
     headers,
-    data: { ...ch, signature },
+    data: { id: ch.id, message: ch.message, signature },
   });
-  expect(login.ok()).toBe(true);
+  expect(login.ok(), await login.text()).toBe(true);
   const session = (await login.json()).data as SessionInfo;
   const auth = { ...headers, 'X-CSRF-Token': session.csrf };
   const intents: PublishIntent[] = [];
