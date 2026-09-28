@@ -408,21 +408,37 @@ describe('cloud metadata and immutable publication', () => {
       );
     },
   );
-  it('rechecks the saved hash without asking the user to supply it again', async () => {
-    const b = new Browser();
-    await b.login();
-    const row = await b.create();
-    await b.req('/groups/' + row.id + '/prepare', 'POST', { revision: 1 });
-    outcome = { state: 'unknown', hash };
-    expect((await b.req('/groups/' + row.id + '/confirm', 'POST', { hash })).status).toBe(200);
-    const confirm = vi.spyOn(chain, 'confirm');
-    expect((await b.req('/groups/' + row.id + '/confirm', 'POST', {})).status).toBe(200);
-    expect(confirm).toHaveBeenCalledWith(expect.any(Object), hash);
-    expect((await (await b.req('/groups/' + row.id)).json()).data.publication.hash).toBe(hash);
-  });
-  it.each(['unknown', 'replaced'] as const)(
-    'a late unknown result cannot overwrite a concurrent %s transaction',
+  it.each(['unknown', 'reverted', 'replaced'] as const)(
+    'preserves saved %s evidence when rechecking the same hash is unavailable',
     async (state) => {
+      const b = new Browser();
+      await b.login();
+      const row = await b.create();
+      await b.req('/groups/' + row.id + '/prepare', 'POST', { revision: 1 });
+      outcome = { state, hash, ...(state === 'unknown' ? {} : { block: '105', blockHash: hash }) };
+      expect((await b.req('/groups/' + row.id + '/confirm', 'POST', { hash })).status).toBe(200);
+      const evidence = await db
+        .prepare('SELECT * FROM group_publications WHERE box_id=?')
+        .bind(row.id)
+        .first();
+      outcome = { state: 'unknown', hash };
+      const confirm = vi.spyOn(chain, 'confirm');
+      expect((await b.req('/groups/' + row.id + '/confirm', 'POST', {})).status).toBe(200);
+      expect(confirm).toHaveBeenCalledWith(expect.any(Object), hash);
+      expect((await (await b.req('/groups/' + row.id)).json()).data.publication.hash).toBe(hash);
+      expect(
+        await db.prepare('SELECT * FROM group_publications WHERE box_id=?').bind(row.id).first(),
+      ).toEqual(evidence);
+    },
+  );
+  it.each([
+    { state: 'unknown', sameHash: false },
+    { state: 'replaced', sameHash: false },
+    { state: 'replaced', sameHash: true },
+    { state: 'reverted', sameHash: true },
+  ] as const)(
+    'a late unknown result cannot overwrite a concurrent $state transaction (same hash: $sameHash)',
+    async ({ state, sameHash }) => {
       const b = new Browser();
       await b.login();
       const row = await b.create();
@@ -434,25 +450,29 @@ describe('cloud metadata and immutable publication', () => {
       const delayed = new Promise<ReceiptResult>((resolve) => {
         release = resolve;
       });
-      const replacement = toHex(43, { size: 32 });
-      vi.spyOn(chain, 'confirm').mockImplementation(async (_intent, supplied) => {
-        if (supplied === hash) {
+      const replacement = sameHash ? hash : toHex(43, { size: 32 });
+      vi.spyOn(chain, 'confirm')
+        .mockImplementationOnce(async () => {
           started();
           return delayed;
-        }
-        return {
+        })
+        .mockResolvedValueOnce({
           state,
           hash: replacement,
           ...(state === 'unknown' ? {} : { block: '105', blockHash: hash }),
-        };
-      });
+        });
       const late = b.req('/groups/' + row.id + '/confirm', 'POST', { hash });
       await waiting;
-      let publication: unknown;
+      let publication: unknown, evidence: unknown;
       try {
         const first = await b.req('/groups/' + row.id + '/confirm', 'POST', { hash: replacement });
         expect(first.status).toBe(200);
         publication = (await first.json()).data.publication;
+        expect(publication).toMatchObject({ state, hash: replacement });
+        evidence = await db
+          .prepare('SELECT * FROM group_publications WHERE box_id=?')
+          .bind(row.id)
+          .first();
       } finally {
         release({ state: 'unknown', hash });
         expect((await late).status).toBe(200);
@@ -460,6 +480,9 @@ describe('cloud metadata and immutable publication', () => {
       expect((await (await b.req('/groups/' + row.id)).json()).data.publication).toEqual(
         publication,
       );
+      expect(
+        await db.prepare('SELECT * FROM group_publications WHERE box_id=?').bind(row.id).first(),
+      ).toEqual(evidence);
     },
   );
   it('publishes only finalized evidence, lets unauthenticated second browser read, rejects corruption and reorg', async () => {

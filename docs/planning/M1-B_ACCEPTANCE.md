@@ -94,7 +94,7 @@ Bill审阅并合并本批PR、保留dev。后续功能编码为 **M1-C：付款/
 ### 改动
 
 - P1：发布核验只接受legacy/EIP-2930/EIP-1559且不携带authorizationList的交易。EIP-7702、未知或缺失类型，即使from/nonce/to/value/calldata与事件匹配，也不能成为已核验发布。按nonce找回的交易同样执行此检查。
-- P2：已有交易hash时，另一个unknown结果不能覆盖原hash、状态或核验区块。首次unknown仍可保留恢复线索；经链核验的finalized/reverted/replaced结果可以更新替代交易。D1的UPDATE条件在实际写入时判断，覆盖并发请求交错返回的情况；finalized的不可替换保护保留。
+- P2：已有交易hash时，任何unknown结果都不能覆盖原hash、状态或核验区块，包括同hash重查失败。首次unknown仍可保留恢复线索；经链核验的finalized/reverted/replaced结果可以更新。D1的UPDATE条件在实际写入时判断，覆盖并发请求交错返回的情况；finalized的不可替换保护保留。
 - README与全阶段表更新为PR #5已合并，决策新增ADR-25/26，操作说明补充交易类型与恢复规则。
 
 ### 本地实际验证
@@ -104,13 +104,13 @@ Bill审阅并合并本批PR、保留dev。后续功能编码为 **M1-C：付款/
 | 检查 | 结果与证据 |
 | --- | --- |
 | frozen-lockfile安装 | 退出0；固定版本安装成功 |
-| 原实现复现 | 将两处业务源码临时替换为基线内容，运行新增用例后恢复修复源码；退出1，79项中14项失败、65项通过。失败均对应交易类型或hash覆盖问题；日志`artifacts/review-fix/baseline.log` |
-| format:check、lint、typecheck、build | 退出0；日志位于`artifacts/review-fix/` |
-| 全量Vitest | 退出0；8个文件、249/249通过。原229项基础上增加20项；日志`artifacts/review-fix/test.log` |
-| D1最终补充断言 | 增加直接读取数据库验证核验区块未被覆盖的断言后，重跑受影响文件，34/34通过、退出0；日志`artifacts/review-fix/cloud-final.log` |
-| deploy:dry-run | 退出0；仅本地预检，未部署；日志`artifacts/review-fix/deploy-dry-run.log` |
+| 首轮原实现复现 | 将两处业务源码临时替换为基线内容，运行首轮新增用例后恢复修复源码；退出1，79项中14项失败、65项通过。失败均对应交易类型或hash覆盖问题；日志`artifacts/review-fix/baseline.log` |
+| 同hash边界复现 | PR #6审查补充指出，同hash重查RPC失败也不能丢失既有核验证据。在a531f14业务源码上运行扩展后的D1用例，退出1，38项中4项失败、34项通过；日志`artifacts/review-fix/same-hash-before.log` |
+| format:check、lint、typecheck、build | 最终源码均退出0；日志位于`artifacts/review-fix/final-*.log` |
+| 全量Vitest | 最终源码退出0，8个文件、253/253通过（原229项基础上增加24项），含D1用例38项；日志`artifacts/review-fix/final-test.log` |
+| deploy:dry-run | 首轮a531f14源码本地预检退出0，未部署；日志`artifacts/review-fix/deploy-dry-run.log`。同hash补充修复的预检由对应提交CI执行 |
 
-新增覆盖：三种支持的交易类型、EIP-7702有/无/空授权列表、普通交易携带授权列表、未知/缺失类型、nonce恢复核验；unknown/reverted/replaced已有记录保护、合法替代交易、刷新读取、使用原hash重新核验、两类并发交错返回。测试的链上响应是fixture，不属于真实Monad签名验收。
+新增覆盖：三种支持的交易类型、EIP-7702有/无/空授权列表、普通交易携带授权列表、未知/缺失类型、nonce恢复核验；unknown/reverted/replaced已有记录保护、合法替代交易、刷新读取、使用原hash重新核验、同hash与不同hash的并发交错返回，并直接核对D1中的核验区块字段。测试的链上响应是fixture，不属于真实Monad签名验收。
 
 本机没有运行Foundry、Anvil端到端或Playwright；仓库安装脚本针对Linux，完整流程由本批修复PR的只读CI执行。CI及Preview结果以本批实际提交的PR检查为准，不用PR #5的旧结果替代。
 

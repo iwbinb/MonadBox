@@ -35,7 +35,7 @@ M1-B更新。设计选择不是安全审计结论；真实钱包测试已由用�
 | ADR-23 | 浏览器绑定SIWE挑战+不透明会话+CSRF | 普通EOA、10分钟挑战/24小时会话；服务端不保存签名原文 |
 | ADR-24 | 准备发布即冻结，单一salt/nonce意图 | 不因超时解冻；导出复制需要先核实旧交易，匿名只读finalized发布 |
 | ADR-25 | 发布仅接受legacy/EIP-2930/EIP-1559且不携带委托授权的交易 | 核验交易类型和authorizationList；EIP-7702、未知或缺失类型拒绝；此修复不启用智能/委托账户 |
-| ADR-26 | 未核验的新hash不能覆盖已存原hash或核验证据 | 首次unknown可保留恢复线索；只有链核验得到finalized/reverted/replaced才允许替换不同hash，SQL原子条件保护并发写入 |
+| ADR-26 | unknown不能覆盖已存hash或核验证据，包括同hash重查失败 | 仅无已存hash时unknown可保留恢复线索；只有链核验得到finalized/reverted/replaced才允许更新，SQL原子条件保护并发写入 |
 
 ## 3. 门禁
 

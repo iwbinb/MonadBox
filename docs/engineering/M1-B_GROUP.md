@@ -43,7 +43,7 @@ D1 保存标题、说明、结构化规则、原始 UTF-8 metadata、metadataHas
 
 重新查链支持已知hash，也可在最近最多41块中按原账号+nonce定位。更久的交易从钱包补入原/替代hash。刷新后云端保留原意图和已核验hash，本地日志只是恢复提示，不作为链上证据。
 
-首次查不到回执时可保存hash作为恢复线索；已有hash时，另一个仍为unknown的hash不能覆盖原hash、状态或核验区块。只有服务端核验到同发起人、同nonce、canonical/finalized的交易结果（finalized/reverted/replaced）才允许替换不同hash。保护条件在D1写入时原子判断，因此较晚返回的unknown请求也不能覆盖并发保存的新记录。已finalized发布保留原有不可替换保护。
+首次查不到回执时可保存hash作为恢复线索；已有hash时，任何unknown结果都不能覆盖原hash、状态或核验区块，包括重新查询同一hash时RPC暂时失败的情况。只有服务端核验到同发起人、同nonce、canonical/finalized的交易结果（finalized/reverted/replaced）才允许更新已保存的记录。保护条件在D1写入时原子判断，因此较晚返回的unknown请求也不能覆盖并发保存的新记录。已finalized发布保留原有不可替换保护；历史核验结果不表示本次RPC查询成功。
 
 冻结后的时间或规则不能原地修改。过期/拒绝/替换记录可导出后复制成新草稿；先核实旧交易再新建，避免重复创建。签名期限是客户端安全限制，不会神奇撤销已经发出的链上交易；因此即使期限已过，也不能把旧规则解冻或丢弃，晚到回执仍需处理。
 
