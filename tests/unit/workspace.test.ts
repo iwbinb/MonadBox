@@ -71,7 +71,7 @@ describe('workspace rights and failure states', () => {
       position: 1,
     } as never);
     vi.mocked(moduleActions).mockReturnValue([]);
-    const known = { kind: 'module', publication: {} } as never;
+    const known = { kind: 'module', publication: { data: { tool: 'group' } } } as never;
     const settled = await verifyWorkspaceBox({ ...row, known }, actor);
     expect(settled.pending).toBe(false);
     expect(settled.history).toBe(true);

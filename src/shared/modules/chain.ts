@@ -1,13 +1,20 @@
-import { decodeEventLog, erc20Abi, keccak256 } from 'viem';
+import { decodeEventLog, decodeFunctionData, erc20Abi, keccak256, stringToHex } from 'viem';
 import type { Address, Hex } from 'viem';
 import { inspectNetwork, makeClient, TOKEN } from '../lab/network';
 import type { ChainClient } from '../lab/network';
 import { recoverNonce } from '../nonce-recovery';
 import { same } from '../cloud/chain';
 import type { ReceiptResult } from '../cloud/chain';
-import { definitions, moduleAbi, moduleCall, validatePublication } from './terms';
+import { approvalAmount, definitions, moduleAbi, moduleCall, validatePublication } from './terms';
 import { moduleIntentSchema } from './model';
-import type { ModuleAction, ModuleDeployment, ModuleIntent, ModulePublication } from './model';
+import type {
+  Agreement,
+  AgreementSignatures,
+  ModuleAction,
+  ModuleDeployment,
+  ModuleIntent,
+  ModulePublication,
+} from './model';
 
 export async function verifyModule(client: ChainClient, d: ModuleDeployment) {
   if (d.chainId !== 10143 || !same(d.asset, TOKEN) || (await client.getChainId()) !== 10143)
@@ -29,6 +36,12 @@ export async function verifyModule(client: ChainClient, d: ModuleDeployment) {
     !same(token, TOKEN) ||
     typeof admin !== 'string' ||
     !same(admin, d.intakeAdmin)
+  )
+    throw Error('UNVERIFIED_CONTRACT');
+  if (
+    d.tool === 'deliver' &&
+    (await client.readContract({ address, abi, functionName: 'domainNameHash' })) !==
+      keccak256(stringToHex('DeliveryEscrowV1'))
   )
     throw Error('UNVERIFIED_CONTRACT');
   let normalized: string = code.toLowerCase();
@@ -57,6 +70,13 @@ export interface ModuleSnapshot {
   block: string;
   blockHash: Hex;
   timestamp: number;
+  submitDue?: number;
+  reviewDue?: number;
+  disputeDue?: number;
+  settledAt?: number;
+  evidenceHash?: Hex;
+  reasonHash?: Hex;
+  settlementNonce?: string;
 }
 export async function moduleSnapshot(
   client: ChainClient,
@@ -102,6 +122,12 @@ export async function moduleSnapshot(
     terms: { metadataHash: Hex };
     state?: number;
     activeCount?: number;
+    submitDue?: bigint;
+    reviewDue?: bigint;
+    disputeDue?: bigint;
+    settledAt?: bigint;
+    evidenceHash?: Hex;
+    reasonHash?: Hex;
   };
   if (
     !same(r.creator, p.creator) ||
@@ -127,9 +153,38 @@ export async function moduleSnapshot(
               : 'OPEN';
     if (state === 'NONE') throw Error('INTEGRITY_ERROR');
   }
+  const delivery =
+    p.data.tool === 'deliver'
+      ? {
+          submitDue: Number(r.submitDue),
+          reviewDue: Number(r.reviewDue),
+          disputeDue: Number(r.disputeDue),
+          settledAt: Number(r.settledAt),
+          evidenceHash: r.evidenceHash!,
+          reasonHash: r.reasonHash!,
+          settlementNonce: String(await read('settlementNonce', [id])),
+        }
+      : {};
+  if (p.data.tool === 'deliver') {
+    state =
+      [
+        'NONE',
+        'AWAITING_FUNDS',
+        'FUNDED',
+        'SUBMITTED',
+        'DISPUTED',
+        'RELEASED',
+        'REFUNDED',
+        'RESOLVED',
+        'CANCELLED',
+        'EXPIRED',
+      ][storedState] ?? 'NONE';
+    if (state === 'NONE') throw Error('INTEGRITY_ERROR');
+  }
   if ((await client.getBlock({ blockNumber })).hash !== block.hash)
     throw Error('FINALITY_UNAVAILABLE');
   return {
+    ...delivery,
     state,
     storedState,
     activeCount,
@@ -159,6 +214,30 @@ export function moduleActions(
     return actions;
   }
   const d = p.data;
+  if (d.tool === 'deliver') {
+    const buyer = same(actor, d.buyer),
+      seller = same(actor, d.seller),
+      now = s.timestamp;
+    if (s.state === 'AWAITING_FUNDS') {
+      if (!s.paused && buyer && now < d.fundBy && BigInt(s.balance) >= BigInt(d.amount))
+        actions.push(BigInt(s.allowance) < BigInt(d.amount) ? 'approve' : 'fund');
+      if (buyer || seller || now >= d.fundBy) actions.push('cancelOffer');
+    }
+    if (s.state === 'FUNDED') {
+      if (seller && now < s.submitDue!) actions.push('submitDelivery');
+      if (now >= s.submitDue!) actions.push('refundAfterMissingDelivery');
+    }
+    if (s.state === 'SUBMITTED') {
+      if (buyer) actions.push('accept');
+      if (buyer && now < s.reviewDue!) actions.push('dispute');
+      if (now >= s.reviewDue!) actions.push('settleAfterReview');
+    }
+    if (s.state === 'DISPUTED')
+      actions.push(now >= s.disputeDue! ? 'refundAfterDisputeTimeout' : 'resolveByAgreement');
+    if (seller && ['FUNDED', 'SUBMITTED', 'DISPUTED'].includes(s.state))
+      actions.push('refundBySeller');
+    return actions;
+  }
   if (
     !s.paused &&
     s.state === 'OPEN' &&
@@ -175,12 +254,18 @@ export function moduleActions(
   if (s.state === 'READY' && s.timestamp >= d.settleNotBefore) actions.push('settle');
   return actions;
 }
+export interface ModuleActionOptions {
+  evidenceHash?: Hex;
+  agreement?: Agreement;
+  signatures?: AgreementSignatures;
+}
 export async function prepareModuleAction(
   client: ChainClient,
   p: ModulePublication,
   actor: Address,
   action: ModuleAction,
   amount?: string,
+  options: ModuleActionOptions = {},
 ): Promise<ModuleIntent> {
   validatePublication(p);
   await inspectNetwork(client);
@@ -196,12 +281,24 @@ export async function prepareModuleAction(
     !moduleActions(p, actor, await moduleSnapshot(client, p, actor), amount).includes(action)
   )
     throw Error('ACTION_UNAVAILABLE');
+  const paymentAmount =
+    p.data.tool === 'split'
+      ? amount
+      : action === 'approve' || action === 'fund' || action === 'contribute'
+        ? approvalAmount({ publication: p })
+        : undefined;
   const i = moduleIntentSchema.parse({
     id: crypto.randomUUID(),
     publication: p,
     actor,
     action,
-    ...(amount ? { amount } : {}),
+    ...(paymentAmount ? { amount: paymentAmount } : {}),
+    ...(['submitDelivery', 'dispute'].includes(action) && options.evidenceHash
+      ? { evidenceHash: options.evidenceHash }
+      : {}),
+    ...(action === 'resolveByAgreement' && options.agreement
+      ? { agreement: options.agreement }
+      : {}),
     ...(action === 'pay'
       ? { paymentNonce: keccak256(crypto.getRandomValues(new Uint8Array(32))) }
       : {}),
@@ -209,7 +306,9 @@ export async function prepareModuleAction(
     startBlock: block.number.toString(),
     expiresAt: Number(block.timestamp) + 600,
   });
-  await client.estimateGas({ account: actor, ...moduleCall(i), value: 0n });
+  const call = moduleCall(i, options.signatures);
+  if (action === 'resolveByAgreement') i.calldataHash = keccak256(call.data);
+  await client.estimateGas({ account: actor, ...call, value: 0n });
   return i;
 }
 function eventMatches(
@@ -233,7 +332,7 @@ function eventMatches(
         event.eventName === 'Approval' &&
         addressMatches('owner', i.actor) &&
         addressMatches('spender', p.deployment.address) &&
-        a.value === BigInt(p.data.tool === 'group' ? p.data.unitPrice : i.amount!)
+        a.value === BigInt(approvalAmount(i)!)
       );
     if (a.boxId !== p.chainBoxId) return false;
     switch (i.action) {
@@ -283,7 +382,13 @@ function eventMatches(
           a.amount > 0n
         );
       default:
-        return false;
+        return (
+          p.data.tool === 'deliver' &&
+          event.eventName === 'ActionExecuted' &&
+          addressMatches('actor', i.actor) &&
+          a.action === keccak256(stringToHex(i.action)) &&
+          a.stageIndex === 0n
+        );
     }
   } catch {
     return false;
@@ -294,8 +399,7 @@ export async function confirmModuleAction(
   input: ModuleIntent,
   supplied?: Hex,
 ): Promise<ReceiptResult> {
-  const i = moduleIntentSchema.parse(input),
-    call = moduleCall(i);
+  const i = moduleIntentSchema.parse(input);
   await verifyModule(client, i.publication.deployment);
   let hash = supplied;
   if (!hash) {
@@ -326,6 +430,23 @@ export async function confirmModuleAction(
     return { state: 'unknown', hash };
   const evidence = { hash, block: receipt.blockNumber.toString(), blockHash: receipt.blockHash };
   if (receipt.status !== 'success') return { ...evidence, state: 'reverted' };
+  let call;
+  try {
+    let signatures: AgreementSignatures | undefined;
+    if (i.action === 'resolveByAgreement') {
+      if (!i.calldataHash || keccak256(tx.input) !== i.calldataHash)
+        return { ...evidence, state: 'replaced' };
+      const decoded = decodeFunctionData({
+        abi: moduleAbi(i.publication.data.tool),
+        data: tx.input,
+      });
+      if (decoded.functionName !== 'resolveByAgreement') return { ...evidence, state: 'replaced' };
+      signatures = { first: decoded.args![1] as Hex, second: decoded.args![2] as Hex };
+    }
+    call = moduleCall(i, signatures);
+  } catch {
+    return { ...evidence, state: 'replaced' };
+  }
   if (!tx.to || !same(tx.to, call.to) || !same(tx.input, call.data) || tx.value !== 0n)
     return { ...evidence, state: 'replaced' };
   if (!receipt.logs.some((log) => eventMatches(i, log))) throw Error('TRANSACTION_MISMATCH');
@@ -334,8 +455,13 @@ export async function confirmModuleAction(
 }
 export function makeModuleChain(client: ChainClient = makeClient()) {
   return {
-    prepare: (p: ModulePublication, actor: Address, action: ModuleAction, amount?: string) =>
-      prepareModuleAction(client, p, actor, action, amount),
+    prepare: (
+      p: ModulePublication,
+      actor: Address,
+      action: ModuleAction,
+      amount?: string,
+      options?: ModuleActionOptions,
+    ) => prepareModuleAction(client, p, actor, action, amount, options),
     confirm: (i: ModuleIntent, hash?: Hex) => confirmModuleAction(client, i, hash),
     snapshot: (p: ModulePublication, actor: Address) => moduleSnapshot(client, p, actor),
   };

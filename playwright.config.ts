@@ -14,12 +14,20 @@ export default defineConfig({
   projects: [
     {
       name: 'desktop',
-      testIgnore: ['**/group-funds.spec.ts', '**/modules-funds.spec.ts'],
+      testIgnore: [
+        '**/group-funds.spec.ts',
+        '**/modules-funds.spec.ts',
+        '**/delivery-funds.spec.ts',
+      ],
       use: { ...devices['Desktop Chrome'] },
     },
     {
       name: 'mobile',
-      testIgnore: ['**/group-funds.spec.ts', '**/modules-funds.spec.ts'],
+      testIgnore: [
+        '**/group-funds.spec.ts',
+        '**/modules-funds.spec.ts',
+        '**/delivery-funds.spec.ts',
+      ],
       use: { ...devices['iPhone 13'], defaultBrowserType: 'chromium' },
     },
     {
@@ -46,6 +54,18 @@ export default defineConfig({
       dependencies: ['modules-desktop'],
       use: { ...devices['iPhone 13'], defaultBrowserType: 'chromium' },
     },
+    {
+      name: 'delivery-desktop',
+      testMatch: '**/delivery-funds.spec.ts',
+      dependencies: ['modules-mobile'],
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: 'delivery-mobile',
+      testMatch: '**/delivery-funds.spec.ts',
+      dependencies: ['delivery-desktop'],
+      use: { ...devices['iPhone 13'], defaultBrowserType: 'chromium' },
+    },
   ],
   webServer: [
     {
@@ -57,13 +77,13 @@ export default defineConfig({
     },
     {
       command: 'MONADBOX_LOCAL_FUNDS_TEST=1 node scripts/cloud-test-server.mjs',
-      url: 'http://127.0.0.1:8790/api/v1/health',
+      url: 'http://127.0.0.1:18890/api/v1/health',
       reuseExistingServer: false,
       timeout: 60000,
     },
     {
       command: 'node scripts/cloud-test-server.mjs',
-      url: 'http://127.0.0.1:8789/api/v1/health',
+      url: 'http://127.0.0.1:18889/api/v1/health',
       reuseExistingServer: false,
       timeout: 60000,
     },

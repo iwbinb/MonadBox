@@ -1,5 +1,6 @@
 export interface Env {
   CLOUD_ENABLED?: string;
+  ATTACHMENTS_ENABLED?: string;
   MODULES_ENABLED?: string;
   MODULE_PUBLISH_ENABLED?: string;
   MODULE_DEPLOYMENTS?: string;

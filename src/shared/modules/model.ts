@@ -55,11 +55,43 @@ export const groupV2Schema = z
         message: 'Invalid group limits or times / 人数、金额或时间不合法',
       });
   });
-export const moduleDataSchema = z.discriminatedUnion('tool', [splitSchema, groupV2Schema]);
+export const deliverySchema = z
+  .strictObject({
+    tool: z.literal('deliver'),
+    ...common,
+    buyer: addressSchema,
+    seller: addressSchema,
+    amount: amountSchema,
+    fundBy: timeSchema,
+    workDuration: z
+      .number()
+      .int()
+      .min(3600)
+      .max(30 * 86400),
+    reviewDuration: z
+      .number()
+      .int()
+      .min(3600)
+      .max(7 * 86400),
+    disputeDuration: z
+      .number()
+      .int()
+      .min(86400)
+      .max(30 * 86400),
+  })
+  .refine(
+    (d) => d.buyer.toLowerCase() !== d.seller.toLowerCase(),
+    'Buyer and seller must differ / 客户与服务者必须不同',
+  );
+export const moduleDataSchema = z.discriminatedUnion('tool', [
+  splitSchema,
+  groupV2Schema,
+  deliverySchema,
+]);
 export type ModuleData = z.infer<typeof moduleDataSchema>;
 export const moduleDeploymentSchema = z
   .strictObject({
-    tool: z.enum(['split', 'group']),
+    tool: z.enum(['split', 'group', 'deliver']),
     chainId: z.literal(10143),
     version: z.number().int(),
     address: addressSchema,
@@ -97,8 +129,47 @@ export const moduleActionSchema = z.enum([
   'creditRefund',
   'settle',
   'withdrawFor',
+  'fund',
+  'cancelOffer',
+  'submitDelivery',
+  'accept',
+  'dispute',
+  'refundBySeller',
+  'settleAfterReview',
+  'refundAfterMissingDelivery',
+  'resolveByAgreement',
+  'refundAfterDisputeTimeout',
 ]);
 export type ModuleAction = z.infer<typeof moduleActionSchema>;
+export const uintSchema = z
+  .string()
+  .regex(/^(0|[1-9]\d{0,77})$/)
+  .refine((v) => /^(0|[1-9]\d{0,77})$/.test(v) && BigInt(v) <= MAX_UINT256);
+export const agreementSchema = z
+  .strictObject({
+    schemaVersion: z.literal(1),
+    boxId: hashSchema,
+    orderId: hashSchema,
+    termsHash: hashSchema,
+    asset: addressSchema,
+    remaining: amountSchema,
+    buyer: addressSchema,
+    seller: addressSchema,
+    buyerAmount: uintSchema,
+    sellerAmount: uintSchema,
+    settlementNonce: uintSchema,
+    deadline: timeSchema,
+    stageIndex: z.number().int().min(0).max(9),
+  })
+  .refine(
+    (a) => BigInt(a.buyerAmount) + BigInt(a.sellerAmount) === BigInt(a.remaining),
+    'Agreement must allocate the entire remaining amount / 协议须分配全部剩余款',
+  );
+export type Agreement = z.infer<typeof agreementSchema>;
+export interface AgreementSignatures {
+  first: `0x${string}`;
+  second: `0x${string}`;
+}
 export const moduleIntentSchema = z.strictObject({
   id: z.string().uuid(),
   publication: modulePublicationSchema,
@@ -106,6 +177,9 @@ export const moduleIntentSchema = z.strictObject({
   action: moduleActionSchema,
   amount: amountSchema.optional(),
   paymentNonce: hashSchema.optional(),
+  evidenceHash: hashSchema.optional(),
+  agreement: agreementSchema.optional(),
+  calldataHash: hashSchema.optional(),
   nonce: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
   startBlock: z.string().regex(/^\d+$/),
   expiresAt: timeSchema,

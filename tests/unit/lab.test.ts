@@ -87,6 +87,7 @@ describe('M0-C wallet boundary', () => {
       groupPublishing: false,
       cloudModules: false,
       modulePublishing: false,
+      privateFiles: false,
       localGroupDrafts: true,
     });
   });

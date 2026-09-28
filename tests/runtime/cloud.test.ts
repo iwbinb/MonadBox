@@ -1,3 +1,4 @@
+import { fileDigest } from '../../src/shared/modules/files';
 import { beforeAll, afterAll, beforeEach, describe, it, expect, vi } from 'vitest';
 import { Miniflare, convertV4MiniflareOptions } from 'miniflare';
 import { readFile } from 'node:fs/promises';
@@ -82,6 +83,203 @@ const modules: ModuleChain = {
   },
 };
 const app = createCloudRouter(chain, modules);
+describe('private delivery files with isolated D1 and R2', () => {
+  const text = () => new TextEncoder().encode('Private delivery notes.').buffer;
+  async function setup() {
+    env.MODULES_ENABLED = 'true';
+    env.MODULE_PUBLISH_ENABLED = 'true';
+    env.ATTACHMENTS_ENABLED = 'true';
+    env.MODULE_DEPLOYMENTS = JSON.stringify([
+      { current: true, deployment: { ...deployment, tool: 'deliver' } },
+    ]);
+    const state = await modules.snapshot({} as never, alice.address);
+    vi.spyOn(modules, 'snapshot').mockResolvedValue({
+      ...state,
+      state: 'FUNDED',
+      locked: '1000000',
+      settledAt: 0,
+    });
+    const a = new Browser(),
+      b = new Browser();
+    await a.login(alice);
+    await b.login(bob);
+    const d = {
+      tool: 'deliver',
+      title: 'Private work',
+      description: '',
+      buyer: alice.address,
+      seller: bob.address,
+      amount: '1000000',
+      fundBy: Math.floor(Date.now() / 1000) + 86400,
+      workDuration: 3600,
+      reviewDuration: 3600,
+      disputeDuration: 86400,
+    };
+    const response = await a.req(
+      '/modules',
+      'POST',
+      { data: d },
+      { 'Idempotency-Key': crypto.randomUUID() },
+    );
+    expect(response.status).toBe(200);
+    const box = (await response.json()).data as ModuleBox;
+    expect((await a.req(`/modules/${box.id}/prepare`, 'POST', { revision: 1 })).status).toBe(200);
+    outcome = { state: 'finalized', hash, block: '105', blockHash: hash };
+    expect((await a.req(`/modules/${box.id}/confirm`, 'POST', { hash })).status).toBe(200);
+    const base = `/modules/${box.id}/files`,
+      body = text(),
+      meta = {
+        name: 'delivery.txt',
+        mime: 'text/plain',
+        bytes: body.byteLength,
+        sha256: await fileDigest(body),
+        stageIndex: 0,
+      };
+    return { a, b, box, base, body, meta };
+  }
+  async function reserve(
+    x: Awaited<ReturnType<typeof setup>>,
+    meta = x.meta,
+    key = crypto.randomUUID(),
+  ) {
+    return x.a.req(x.base, 'POST', meta, { 'Idempotency-Key': key });
+  }
+  it('lets only the fixed parties reserve, upload and download verified private bytes', async () => {
+    const x = await setup(),
+      r = await reserve(x);
+    expect(r.status, await r.clone().text()).toBe(200);
+    const file = (await r.json()).data;
+    const third = new Browser();
+    await third.login(privateKeyToAccount(toHex(3, { size: 32 })));
+    expect((await third.req(x.base)).status).toBe(404);
+    expect((await third.req(`${x.base}/${file.id}`)).status).toBe(404);
+    expect((await new Browser().req(`${x.base}/${file.id}`)).status).toBe(401);
+    expect(
+      (await x.b.req(`${x.base}/${file.id}`, 'PUT', x.body, { 'Content-Type': 'text/plain' }))
+        .status,
+    ).toBe(404);
+    expect(
+      (await x.a.req(`${x.base}/${file.id}`, 'PUT', x.body, { 'Content-Type': 'text/plain' }))
+        .status,
+    ).toBe(200);
+    const download = await x.b.req(`${x.base}/${file.id}`);
+    expect(download.status).toBe(200);
+    expect(await download.text()).toBe('Private delivery notes.');
+    expect(download.headers.get('content-disposition')).toContain('attachment;');
+    expect(download.headers.get('content-type')).toBe('application/octet-stream');
+    expect(download.headers.get('cache-control')).toBe('no-store');
+    expect(download.headers.get('x-content-type-options')).toBe('nosniff');
+    expect((await (await x.b.req(x.base)).json()).data).toHaveLength(1);
+  });
+  it('enforces CSRF, origin, MIME, length, digest and bounded upload streams', async () => {
+    const x = await setup(),
+      file = (await (await reserve(x)).json()).data,
+      url = `${x.base}/${file.id}`;
+    expect(
+      (await x.a.req(url, 'PUT', x.body, { 'Content-Type': 'text/plain', 'X-CSRF-Token': 'wrong' }))
+        .status,
+    ).toBe(403);
+    expect(
+      (
+        await x.a.req(url, 'PUT', x.body, {
+          'Content-Type': 'text/plain',
+          Origin: 'https://evil.test',
+        })
+      ).status,
+    ).toBe(403);
+    expect((await x.a.req(url, 'PUT', x.body, { 'Content-Type': 'image/png' })).status).toBe(400);
+    expect(
+      (await x.a.req(url, 'PUT', new ArrayBuffer(1), { 'Content-Type': 'text/plain' })).status,
+    ).toBe(413);
+    expect(
+      (
+        await x.a.req(url, 'PUT', new Uint8Array(x.body.byteLength).buffer, {
+          'Content-Type': 'text/plain',
+        })
+      ).status,
+    ).toBe(400);
+    expect(
+      (
+        await x.a.req(url, 'PUT', new ArrayBuffer(10 * 1024 * 1024 + 1), {
+          'Content-Type': 'text/plain',
+          'Content-Length': '1',
+        })
+      ).status,
+    ).toBe(413);
+    expect((await x.b.req(url)).status).toBe(404);
+  });
+  it('rejects path traversal, dangerous content, mismatched extensions and expired reservations', async () => {
+    const x = await setup();
+    for (const changes of [
+      { name: '../secret.txt' },
+      { name: 'delivery.svg' },
+      { mime: 'text/html' },
+      { bytes: 0 },
+      { stageIndex: 1 },
+    ])
+      expect((await reserve(x, { ...x.meta, ...changes })).status).toBe(
+        changes.stageIndex ? 409 : 400,
+      );
+    const body = new TextEncoder().encode('<script>alert(1)</script>').buffer,
+      file = (
+        await (
+          await reserve(x, { ...x.meta, bytes: body.byteLength, sha256: await fileDigest(body) })
+        ).json()
+      ).data;
+    expect(
+      (await x.a.req(`${x.base}/${file.id}`, 'PUT', body, { 'Content-Type': 'text/plain' })).status,
+    ).toBe(400);
+    await db.prepare('UPDATE delivery_files SET expires_at=1 WHERE id=?').bind(file.id).run();
+    expect(
+      (await x.a.req(`${x.base}/${file.id}`, 'PUT', body, { 'Content-Type': 'text/plain' })).status,
+    ).toBe(409);
+  });
+  it('keeps retries idempotent and bounds concurrent reservations to five', async () => {
+    const x = await setup(),
+      key = crypto.randomUUID(),
+      first = (await (await reserve(x, x.meta, key)).json()).data;
+    expect((await (await reserve(x, x.meta, key)).json()).data.id).toBe(first.id);
+    expect((await reserve(x, { ...x.meta, name: 'changed.txt' }, key)).status).toBe(409);
+    const attempts = await Promise.all(Array.from({ length: 8 }, () => reserve(x)));
+    expect(attempts.filter((r) => r.status === 200)).toHaveLength(4);
+    expect(attempts.filter((r) => r.status === 429)).toHaveLength(4);
+    for (let n = 0; n < 2; n++)
+      expect(
+        (await x.a.req(`${x.base}/${first.id}`, 'PUT', x.body, { 'Content-Type': 'text/plain' }))
+          .status,
+      ).toBe(200);
+    const item = await db
+      .prepare('SELECT * FROM delivery_files WHERE id=?')
+      .bind(first.id)
+      .first<{ box_id: string; stage_index: number }>();
+    expect(item).not.toBeNull();
+    await env.FILES!.put(`monadbox-test/deliveries/${x.box.id}/0/${first.id}`, 'corrupted', {
+      customMetadata: { sha256: x.meta.sha256, boxId: x.box.id, namespace: 'monadbox-test' },
+    });
+    expect((await x.b.req(`${x.base}/${first.id}`)).status).toBe(503);
+  });
+  it('fails closed for wrong bucket, unavailable chain, retired retention or disabled capability', async () => {
+    const x = await setup();
+    env.ATTACHMENTS_ENABLED = 'false';
+    expect((await x.a.req(x.base)).status).toBe(503);
+    env.ATTACHMENTS_ENABLED = 'true';
+    await env.FILES!.put('.monadbox-environment', 'other', {
+      customMetadata: { namespace: 'monadbox-production' },
+    });
+    expect((await x.a.req(x.base)).status).toBe(503);
+    await env.FILES!.put('.monadbox-environment', 'test', {
+      customMetadata: { namespace: 'monadbox-test' },
+    });
+    outcome = { state: 'unknown' };
+    expect((await x.a.req(x.base)).status).toBe(503);
+    outcome = { state: 'finalized', hash };
+    vi.mocked(modules.snapshot).mockResolvedValue({
+      ...(await modules.snapshot({} as never, alice.address)),
+      settledAt: 1,
+    });
+    expect((await x.a.req(x.base)).status).toBe(404);
+  });
+});
 const data = () =>
   validateGroupFields({
     ...newGroupFields(),
@@ -103,7 +301,13 @@ class Browser {
     };
     const r = await app.request(
       origin + path,
-      { method, headers, ...(body === undefined ? {} : { body: JSON.stringify(body) }) },
+      {
+        method,
+        headers,
+        ...(body === undefined
+          ? {}
+          : { body: body instanceof ArrayBuffer ? body : JSON.stringify(body) }),
+      },
       env,
     );
     for (const cookie of r.headers.getSetCookie()) {
@@ -145,10 +349,16 @@ beforeAll(async () => {
       script: 'export default {fetch(){return new Response("test")}}',
       compatibilityDate: '2026-09-18',
       d1Databases: { DB: 'cloud-test' },
+      r2Buckets: { FILES: 'private-files-test' },
     }),
   );
   db = (await mf.getD1Database('DB')) as unknown as D1Database;
-  for (const file of ['0001_foundation.sql', '0002_cloud_groups.sql', '0003_modules.sql'])
+  for (const file of [
+    '0001_foundation.sql',
+    '0002_cloud_groups.sql',
+    '0003_modules.sql',
+    '0004_delivery_files.sql',
+  ])
     for (const sql of (await readFile('migrations/' + file, 'utf8'))
       .replace(/^--.*$/gm, '')
       .split(';')
@@ -171,6 +381,7 @@ beforeAll(async () => {
     ASSET_ALLOWLIST: '[]',
     CONTRACT_REGISTRY: '[]',
     DB: db,
+    FILES: (await mf.getR2Bucket('FILES')) as unknown as R2Bucket,
   };
 });
 afterAll(async () => {
@@ -180,6 +391,7 @@ beforeEach(async () => {
   vi.restoreAllMocks();
   await db.batch(
     [
+      'delivery_files',
       'module_boxes',
       'group_publications',
       'boxes',
@@ -191,6 +403,10 @@ beforeEach(async () => {
   );
   outcome = { state: 'unknown' };
   eoa = true;
+  env.ATTACHMENTS_ENABLED = 'false';
+  await env.FILES!.put('.monadbox-environment', 'test', {
+    customMetadata: { namespace: 'monadbox-test' },
+  });
   env.MODULES_ENABLED = 'false';
   env.MODULE_PUBLISH_ENABLED = 'false';
   env.MODULE_DEPLOYMENTS = '[]';

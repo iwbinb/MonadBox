@@ -1,3 +1,4 @@
+import { DeliveryEditor, DeliveryRules } from './DeliveryEditor';
 import { useState } from 'react';
 import { formatUnits, isAddress } from 'viem';
 import { useApp } from '../context';
@@ -8,6 +9,9 @@ import type { ModuleData } from '../../shared/modules/model';
 import { allocateSplit } from '../../shared/modules/terms';
 import { exportModule } from './drafts';
 export function ModuleRules({ data }: { data: ModuleData }) {
+  return data.tool === 'deliver' ? <DeliveryRules data={data} /> : <SplitGroupRules data={data} />;
+}
+function SplitGroupRules({ data }: { data: Exclude<ModuleData, { tool: 'deliver' }> }) {
   const { t } = useApp();
   const [example, setExample] = useState('1');
   let shares: bigint[] | null = null;
@@ -88,14 +92,34 @@ export function ModuleRules({ data }: { data: ModuleData }) {
     </section>
   );
 }
-export function ModuleEditor({
+interface EditorProps {
+  tool: ModuleData['tool'];
+  initial?: ModuleData | undefined;
+  busy: boolean;
+  onSave: (data: ModuleData) => void;
+}
+export function ModuleEditor(props: EditorProps) {
+  return props.tool === 'deliver' ? (
+    <DeliveryEditor
+      busy={props.busy}
+      onSave={props.onSave}
+      initial={props.initial?.tool === 'deliver' ? props.initial : undefined}
+    />
+  ) : (
+    <SplitGroupEditor
+      {...props}
+      initial={props.initial?.tool === 'deliver' ? undefined : props.initial}
+    />
+  );
+}
+function SplitGroupEditor({
   tool,
   initial,
   busy,
   onSave,
 }: {
   tool: ModuleData['tool'];
-  initial?: ModuleData | undefined;
+  initial?: Exclude<ModuleData, { tool: 'deliver' }> | undefined;
   busy: boolean;
   onSave: (data: ModuleData) => void;
 }) {

@@ -76,8 +76,8 @@ export function HomePage() {
       <div className="notice">
         <p>
           {t(
-            'Group and Split drafts are available in this browser. Publishing and business payments depend on the capabilities enabled in this environment.',
-            '本浏览器支持成团与分账草稿；发布和业务付款以当前环境已开放能力为准。',
+            'Group, Split and Deliver drafts are available in this browser. Publishing and business payments depend on the capabilities enabled in this environment.',
+            '本浏览器支持成团、分账与交付托管草稿；发布和业务付款以当前环境已开放能力为准。',
           )}
         </p>
         <Link to="/status">
@@ -118,7 +118,7 @@ export function ToolPage() {
         </section>
         <aside className="rule-panel">
           <span className="status-label">
-            {['group', 'split'].includes(tool.id)
+            {['group', 'split', 'deliver'].includes(tool.id)
               ? t('Local drafts available', '可创建本地草稿')
               : t('Not open yet', '尚未开放')}{' '}
             · {tool.stage}
@@ -132,6 +132,10 @@ export function ToolPage() {
           ) : tool.id === 'split' ? (
             <Link className="button primary" to="/create/split">
               {t('Prepare a split draft', '创建分账草稿')}
+            </Link>
+          ) : tool.id === 'deliver' ? (
+            <Link className="button primary" to="/create/deliver">
+              {t('Prepare delivery escrow', '创建交付托管')}
             </Link>
           ) : (
             <button className="button primary" disabled>

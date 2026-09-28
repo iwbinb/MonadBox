@@ -4,7 +4,7 @@ import solc from 'solc';
 import { createHash } from 'node:crypto';
 
 // Deterministic local compilation. Group V1 retains its original, separate compiler input.
-export const modules = ['SplitPaymentsV1', 'GroupEscrowV2'];
+export const modules = ['SplitPaymentsV1', 'GroupEscrowV2', 'DeliveryEscrowV1'];
 export function compileModules() {
   if (!solc.version().startsWith('0.8.28+')) throw Error('Expected pinned solc 0.8.28');
   const sources = Object.fromEntries(

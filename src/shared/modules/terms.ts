@@ -2,13 +2,21 @@ import { encodeAbiParameters, encodeFunctionData, erc20Abi, keccak256, stringToH
 import type { Abi, AbiParameter, Address, Hex } from 'viem';
 import { artifact as split } from './generated/SplitPaymentsV1';
 import { artifact as group } from './generated/GroupEscrowV2';
+import { artifact as deliver } from './generated/DeliveryEscrowV1';
 import { moduleDataSchema, modulePublicationSchema } from './model';
-import type { ModuleData, ModuleIntent, ModulePublication } from './model';
+import type {
+  ModuleData,
+  ModuleIntent,
+  ModulePublication,
+  AgreementSignatures,
+  Agreement,
+} from './model';
 import { TOKEN } from '../lab/network';
 import { same } from '../cloud/chain';
 export const definitions = {
   split: { artifact: split, create: 'createSplit', get: 'getSplit', version: 1 },
   group: { artifact: group, create: 'createGroup', get: 'getGroup', version: 2 },
+  deliver: { artifact: deliver, create: 'createOffer', get: 'getOffer', version: 1 },
 } as const;
 export function moduleAbi(tool: ModuleData['tool']): Abi {
   return definitions[tool].artifact.abi;
@@ -23,6 +31,17 @@ export function metadataFor(input: ModuleData): string {
   });
 }
 export function termsFor(data: ModuleData) {
+  if (data.tool === 'deliver')
+    return {
+      buyer: data.buyer,
+      seller: data.seller,
+      amount: BigInt(data.amount),
+      fundBy: BigInt(data.fundBy),
+      workDuration: BigInt(data.workDuration),
+      reviewDuration: BigInt(data.reviewDuration),
+      disputeDuration: BigInt(data.disputeDuration),
+      metadataHash: keccak256(stringToHex(metadataFor(data))),
+    };
   const shares = {
     recipients: data.recipients.map((r) => r.address),
     bps: data.recipients.map((r) => r.bps),
@@ -88,17 +107,38 @@ export function validatePublication(input: ModulePublication): ModulePublication
     p.metadataHash !== keccak256(stringToHex(p.metadata)) ||
     p.chainBoxId !== moduleId(p.deployment.address, p.creator, p.salt) ||
     p.termsHash !== termsHashFor(p) ||
-    p.data.recipients.some((r) => same(r.address, p.deployment.address))
+    (p.data.tool === 'deliver'
+      ? [p.data.buyer, p.data.seller].some((a) => same(a, p.deployment.address))
+      : p.data.recipients.some((r) => same(r.address, p.deployment.address)))
   )
     throw Error('INTEGRITY_ERROR');
   return p;
 }
-export function moduleCall(i: ModuleIntent): { to: Address; data: Hex } {
+export function approvalAmount(i: Pick<ModuleIntent, 'publication' | 'amount'>) {
+  const d = i.publication.data;
+  return d.tool === 'group' ? d.unitPrice : d.tool === 'deliver' ? d.amount : i.amount;
+}
+export function agreementTerms(a: Agreement) {
+  return {
+    ...a,
+    schemaVersion: 1n,
+    remaining: BigInt(a.remaining),
+    buyerAmount: BigInt(a.buyerAmount),
+    sellerAmount: BigInt(a.sellerAmount),
+    settlementNonce: BigInt(a.settlementNonce),
+    deadline: BigInt(a.deadline),
+    stageIndex: BigInt(a.stageIndex),
+  };
+}
+export function moduleCall(
+  i: ModuleIntent,
+  signatures?: AgreementSignatures,
+): { to: Address; data: Hex } {
   const p = validatePublication(i.publication),
     abi = moduleAbi(p.data.tool),
     id = p.chainBoxId;
   if (i.action === 'approve') {
-    const amount = p.data.tool === 'group' ? p.data.unitPrice : i.amount;
+    const amount = approvalAmount(i);
     if (!amount) throw Error('INVALID_AMOUNT');
     return {
       to: TOKEN,
@@ -116,7 +156,32 @@ export function moduleCall(i: ModuleIntent): { to: Address; data: Hex } {
     name = definitions[p.data.tool].create;
     args = [termsFor(p.data), p.salt];
   } else if (i.action === 'withdrawFor' || i.action === 'creditRefund') args = [id, i.actor];
-  else if (i.action === 'pay') {
+  else if (p.data.tool === 'deliver') {
+    if (['submitDelivery', 'dispute'].includes(i.action)) {
+      if (!i.evidenceHash || /^0x0{64}$/.test(i.evidenceHash)) throw Error('EVIDENCE_REQUIRED');
+      args = [id, i.evidenceHash];
+    } else if (i.action === 'resolveByAgreement') {
+      if (
+        !i.agreement ||
+        !signatures ||
+        !/^0x[0-9a-f]{130}$/i.test(signatures.first) ||
+        !/^0x[0-9a-f]{130}$/i.test(signatures.second)
+      )
+        throw Error('SIGNATURES_REQUIRED');
+      args = [agreementTerms(i.agreement), signatures.first, signatures.second];
+    } else if (
+      ![
+        'fund',
+        'cancelOffer',
+        'accept',
+        'refundBySeller',
+        'settleAfterReview',
+        'refundAfterMissingDelivery',
+        'refundAfterDisputeTimeout',
+      ].includes(i.action)
+    )
+      throw Error('ACTION_UNAVAILABLE');
+  } else if (i.action === 'pay') {
     if (p.data.tool !== 'split' || !i.amount || !i.paymentNonce) throw Error('INVALID_PAYMENT');
     args = [id, BigInt(i.amount), i.paymentNonce];
   } else if (p.data.tool !== 'group') throw Error('ACTION_UNAVAILABLE');

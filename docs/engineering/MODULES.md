@@ -24,7 +24,7 @@ V1和新模块发送前共同检查该钱包的未决交易。未知结果先到
 
 - 默认不开放云端新工具或业务付款。`MODULES_ENABLED`依赖CLOUD及已隔离的DB；`MODULE_PUBLISH_ENABLED`另控制发布；`NETWORK_WRITES_ENABLED`控制新的业务入金。现有退款、结算和提款不受入金开关影响。
 - `MODULE_DEPLOYMENTS`是数组，每项含`deployment`与`current`。deployment包含tool、chainId、version、address、asset、intakeAdmin、runtimeHash。每工具只允许一个current；退休版本保留原身份以继续核验和退出。
-- Split版本1、Group V2版本2。浏览器和Worker核对生成的runtime、不可变参数、官方测试AUSD、chain10143和完整规则哈希。不能只比对地址。
+- Split版本1、Group V2版本2、Deliver版本1（详见[交付托管](DELIVER.md)）。浏览器和Worker核对生成的runtime、不可变参数、官方测试AUSD、chain10143和完整规则哈希。不能只比对地址。
 - 迁移`0003_modules.sql`新增`module_schema`版本1及`module_boxes`，原cloud_schema2和Group V1数据不变。应用前仍需已有environment_guard。只在本地测试应用，远端迁移和公开登记另行验收。
 - 新API位于`/api/v1/modules`，支持列表、创建、读取、修订、删除草稿、`:id/prepare`和`:id/confirm`；公开读取`/api/v1/public/modules/:publicId`。私有写入均验证origin、会话、CSRF、所有者、revision；公开响应重新核验链上发布。
 

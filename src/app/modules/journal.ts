@@ -1,9 +1,9 @@
 import { z } from 'zod';
-import { toHex } from 'viem';
+import { keccak256, toHex } from 'viem';
 import type { Hex } from 'viem';
 import { hashSchema } from '../../shared/cloud/model';
 import { moduleIntentSchema } from '../../shared/modules/model';
-import type { ModuleIntent } from '../../shared/modules/model';
+import type { AgreementSignatures, ModuleIntent } from '../../shared/modules/model';
 import { moduleCall } from '../../shared/modules/terms';
 import { confirmModuleAction, verifyModule } from '../../shared/modules/chain';
 import { makeClient } from '../../shared/lab/network';
@@ -67,6 +67,7 @@ export async function sendModuleAction(
   provider: InjectedProvider,
   environment: string,
   input: ModuleIntent,
+  signatures?: AgreementSignatures,
 ): Promise<Hex> {
   const i = moduleIntentSchema.parse(input);
   if (!navigator.locks) throw Error('LOCKS_REQUIRED');
@@ -89,8 +90,13 @@ export async function sendModuleAction(
     ]);
     if (code && code !== '0x') throw Error('EOA_REQUIRED');
     if (nonce !== i.nonce || block.timestamp >= BigInt(i.expiresAt)) throw Error('ACTION_CHANGED');
-    const call = moduleCall(i),
-      gas = await client.estimateGas({ account: i.actor, ...call, value: 0n });
+    const call = moduleCall(i, signatures);
+    if (
+      i.action === 'resolveByAgreement' &&
+      (!i.calldataHash || keccak256(call.data) !== i.calldataHash)
+    )
+      throw Error('ACTION_CHANGED');
+    const gas = await client.estimateGas({ account: i.actor, ...call, value: 0n });
     const [balance, price] = await Promise.all([
       client.getBalance({ address: i.actor }),
       client.getGasPrice(),

@@ -8,6 +8,7 @@
 | --- | --- |
 | [Group](engineering/GROUP.md) | 本地草稿、云端登录、发布、恢复、实际 API 和 D1 配置 |
 | [版本化支付工具](engineering/MODULES.md) | Split、Group V2、冻结发布、分账、旧版恢复和配置 |
+| [交付托管](engineering/DELIVER.md) | Deliver双方资金操作、双签协议、私密附件及恢复 |
 | [测试网实验室](engineering/TESTNET_LAB.md) | 独立探针、钱包操作和交易恢复 |
 | [部署](engineering/DEPLOYMENT.md) | 单 Worker、生产/Preview、能力开关和验证 |
 | [架构](engineering/ARCHITECTURE.md) | 当前模块、数据流和实现边界 |

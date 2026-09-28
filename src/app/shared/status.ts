@@ -1,4 +1,12 @@
 const labels: Record<string, [string, string]> = {
+  AWAITING_FUNDS: ['Waiting for full payment', '等待全额付款'],
+  FUNDED: ['Funded; awaiting delivery', '已付款，待交付'],
+  SUBMITTED: ['Submitted; under review', '已交付，待验收'],
+  DISPUTED: ['Formal dispute', '正式争议中'],
+  RELEASED: ['Released to seller credit', '已归属服务者'],
+  REFUNDED: ['Refund assigned to buyer', '已退款给客户'],
+  RESOLVED: ['Agreement settled', '协议已结算'],
+  EXPIRED: ['Expired unfunded', '未付款已到期'],
   DRAFT: ['Draft', '草稿'],
   PREPARED: ['Rules frozen; publication pending', '规则已冻结，待发布'],
   UNCHECKED: ['Awaiting chain check', '待核验链上状态'],

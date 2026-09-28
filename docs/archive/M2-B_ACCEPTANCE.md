@@ -1,6 +1,6 @@
 # M2-B 共用体验工程验收
 
-2026-09-28，本地工程项通过，真实用户/设备及可选钱包能力未验收。
+2026-09-28，本地及完整CI工程项通过，真实用户/设备及可选钱包能力未验收。
 
 ## 实现
 
@@ -20,7 +20,8 @@ Node22.16.0、pnpm10.11.1、本机Google Chrome、固定loopback Anvil/Worker。
 - 浏览器60/60通过，约1.7分钟；桌面和iPhone13视口覆盖全部既有资金路径及工作台查款→提款→历史。新增8项浏览器检查覆盖重复地址/比例、配额失败、跨环境链接拒绝、中文360px和200%文字。
 - 浏览器还验证了旧确认界面在accountsChanged后立即撤销；原公开链接恢复收款人的71最小单位credit，提款后不再进入“可领取”。
 - Codex内置浏览器检查中文桌面和390px工作台，控制台无error/warn，无横向溢出。截图在`artifacts/screenshots/workspace-*.png`与`workspace-zh-*.png`，CI归档。
-- 合约未修改，M2-A完整CI的75项原生合约及本地链/HTTP证据仍对应相同合约源码；本阶段提交后完整CI再次覆盖。
+- 合约未修改，M2-A完整CI的75项原生合约及本地链/HTTP证据仍对应相同合约源码；本阶段完整CI再次通过全部75项原生合约及本地链/HTTP检查。
+- 提交 `ad92abdce452fa2bf381ee4982940a8314adc84a`：PR CI [36409552922](https://github.com/iwbinb/MonadBox/actions/runs/36409552922)、push CI [36409547782](https://github.com/iwbinb/MonadBox/actions/runs/36409547782)均完成且成功。
 
 ## 待验收
 

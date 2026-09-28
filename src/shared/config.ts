@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { deploymentSchema } from './cloud/model';
 import { GROUP_ASSET } from './group/draft';
 import { moduleRegistrationSchema } from './modules/model';
-export const STAGE = 'M2-B' as const;
+export const STAGE = 'M3' as const;
 export const TESTNET_CHAIN_ID = 10143 as const;
 const falseFlag = z.literal('false');
 const booleanFlag = z.enum(['false', 'true']).transform((value) => value === 'true');
@@ -17,6 +17,7 @@ const emptyList = z.string().refine((value) => {
 const schema = z
   .object({
     CLOUD_ENABLED: booleanFlag.default(false),
+    ATTACHMENTS_ENABLED: booleanFlag.default(false),
     MODULES_ENABLED: booleanFlag.default(false),
     MODULE_PUBLISH_ENABLED: booleanFlag.default(false),
     MODULE_DEPLOYMENTS: z
@@ -78,6 +79,8 @@ const schema = z
         code: 'custom',
         message: 'Module addresses must be unique with one current deployment per tool',
       });
+    if (value.ATTACHMENTS_ENABLED && !value.MODULES_ENABLED)
+      ctx.addIssue({ code: 'custom', message: 'Attachments require cloud modules' });
     if (value.MODULES_ENABLED && !value.CLOUD_ENABLED)
       ctx.addIssue({ code: 'custom', message: 'Modules require cloud' });
     if (
@@ -177,6 +180,7 @@ export const publicConfigSchema = z.object({
     drafts: z.boolean(),
     cloudGroups: z.boolean().default(false),
     groupPublishing: z.boolean().default(false),
+    privateFiles: z.boolean().default(false),
     cloudModules: z.boolean().default(false),
     modulePublishing: z.boolean().default(false),
     localGroupDrafts: z.literal(true),
@@ -198,6 +202,7 @@ export function toPublicConfig(config: RuntimeConfig, revision: string): PublicC
       drafts: config.CLOUD_ENABLED,
       cloudGroups: config.CLOUD_ENABLED,
       groupPublishing: config.GROUP_PUBLISH_ENABLED,
+      privateFiles: config.ATTACHMENTS_ENABLED,
       cloudModules: config.MODULES_ENABLED,
       modulePublishing: config.MODULE_PUBLISH_ENABLED,
       localGroupDrafts: true,

@@ -118,6 +118,10 @@ createRoot(root).render(
                 path="create/group-split"
                 element={groupSurface(<ModuleBuilderPage kind="group" />)}
               />
+              <Route
+                path="create/deliver"
+                element={groupSurface(<ModuleBuilderPage kind="deliver" />)}
+              />
               <Route path="create/:id" element={<UnavailablePage />} />
               <Route path="app/module-drafts" element={groupSurface(<ModuleDraftsPage />)} />
               <Route

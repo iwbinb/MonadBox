@@ -1,3 +1,4 @@
+import { mountFileRoutes } from './files';
 import type { Hono } from 'hono';
 import { z } from 'zod';
 import { getAddress, keccak256, stringToHex } from 'viem';
@@ -19,7 +20,7 @@ import type { AppEnv } from '../cloud/router';
 const uuid = z.string().uuid();
 const now = () => Math.floor(Date.now() / 1000);
 const hash = (text: string) => keccak256(stringToHex(text));
-interface Row {
+export interface Row {
   id: string;
   public_id: string;
   owner: string;
@@ -34,7 +35,7 @@ interface Row {
   verified_block: string | null;
   verified_block_hash: Hex | null;
 }
-function fromRow(r: Row): ModuleBox {
+export function fromRow(r: Row): ModuleBox {
   const data = moduleDataSchema.parse(JSON.parse(r.data_json));
   if (r.tool !== data.tool || r.metadata !== metadataFor(data))
     throw new CloudError('INTEGRITY_ERROR', 503);
@@ -79,7 +80,7 @@ async function owned(db: D1DatabaseSession, id: string, actor: string) {
   if (!r) throw new CloudError('NOT_FOUND', 404);
   return fromRow(r);
 }
-function registered(config: ReturnType<typeof readConfig>, d: ModuleDeployment) {
+export function registered(config: ReturnType<typeof readConfig>, d: ModuleDeployment) {
   if (!config.MODULE_DEPLOYMENTS.some((r) => JSON.stringify(r.deployment) === JSON.stringify(d)))
     throw new CloudError('UNVERIFIED_CONTRACT', 503);
 }
@@ -95,6 +96,7 @@ export function mountModuleRoutes(app: Hono<AppEnv>, chain: ModuleChain) {
       if (!c.req.path.includes('/public/')) await authenticate(c);
       await next();
     });
+  mountFileRoutes(app, chain);
   app.get('/modules', async (c) => {
     const rows = await c
       .get('db')

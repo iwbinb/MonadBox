@@ -5,7 +5,7 @@ import type { Address, Hex } from 'viem';
 import { calldata } from '../../src/shared/cloud/chain';
 import type { CloudBox, SessionInfo, PublicGroup } from '../../src/shared/cloud/model';
 // Uses only the fixed local server started by scripts/cloud-test-server.mjs.
-const origin = 'http://127.0.0.1:8789',
+const origin = 'http://127.0.0.1:18889',
   endpoint = 'http://127.0.0.1:18745';
 const fixture = JSON.parse(readFileSync('artifacts/cloud-test.json', 'utf8')) as {
   accounts: Address[];

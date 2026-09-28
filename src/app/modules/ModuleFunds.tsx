@@ -1,8 +1,9 @@
+import { AgreementPanel } from './AgreementPanel';
 import { RecoveryHistory } from '../shared/RecoveryHistory';
 import { statusLabel } from '../shared/status';
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { formatUnits } from 'viem';
+import { formatUnits, keccak256, stringToHex } from 'viem';
 import type { Hex } from 'viem';
 import { useApp } from '../context';
 import { useFundsWallet, WalletChoice } from '../shared/FundsWallet';
@@ -11,11 +12,21 @@ import { makeClient } from '../../shared/lab/network';
 import { parseAmount } from '../../shared/amount';
 import type { ModuleAction, ModuleIntent, ModulePublication } from '../../shared/modules/model';
 import { moduleActions, moduleSnapshot, prepareModuleAction } from '../../shared/modules/chain';
-import type { ModuleSnapshot } from '../../shared/modules/chain';
+import type { ModuleActionOptions, ModuleSnapshot } from '../../shared/modules/chain';
 import { journalKey, readRecords, recheckModule, sendModuleAction, terminal } from './journal';
 import type { TransactionRecord } from './journal';
 export const actionLabels: Record<ModuleAction, [string, string]> = {
   create: ['Publish fixed rules', '发布固定规则'],
+  fund: ['Pay full escrow', '全额付款至托管'],
+  cancelOffer: ['Cancel unfunded offer', '取消未付款订单'],
+  submitDelivery: ['Submit delivery proof', '提交交付证明'],
+  accept: ['Accept and release payment', '验收并放款'],
+  dispute: ['Open formal dispute', '发起正式争议'],
+  refundBySeller: ['Refund all remaining funds', '退还全部剩余款'],
+  settleAfterReview: ['Settle after review deadline', '验收期结束结算'],
+  refundAfterMissingDelivery: ['Refund missing delivery', '未交付到期退款'],
+  resolveByAgreement: ['Submit bilateral agreement', '提交双方结算协议'],
+  refundAfterDisputeTimeout: ['Refund after dispute timeout', '争议到期退款'],
   approve: ['Approve exact amount', '授权准确额度'],
   pay: ['Make final payment', '完成最终付款'],
   contribute: ['Pay and join', '付款参与'],
@@ -99,9 +110,14 @@ export function ModuleFunds({
     [busy, setBusy] = useState(false),
     [error, setError] = useState(''),
     [notice, setNotice] = useState('');
+  const [evidence, setEvidence] = useState(''),
+    [options, setOptions] = useState<ModuleActionOptions>({});
+  const renderEpoch = epoch.current;
   useEffect(() => {
     const version = ++epoch.current;
     setSnapshot(null);
+    setEvidence('');
+    setOptions({});
     setPrepared(null);
     setAck(false);
     setRows([]);
@@ -144,6 +160,9 @@ export function ModuleFunds({
     const s = await moduleSnapshot(makeClient(), publication, actor);
     if (epoch.current !== version) return;
     setSnapshot(s);
+    setOptions({});
+    setPrepared(null);
+    setAck(false);
     setRows(readRecords(localStorage, journalKey(environment, actor)));
   }
   let value: string | undefined;
@@ -208,6 +227,79 @@ export function ModuleFunds({
             </button>
           </>
         ) : null}
+        {snapshot && publication.data.tool === 'deliver' ? (
+          <>
+            <p>
+              {t('Remaining escrow', '剩余托管款')}：{formatUnits(BigInt(snapshot.locked), 6)} AUSD
+            </p>
+            {(['submitDue', 'reviewDue', 'disputeDue'] as const)
+              .filter((key) => snapshot[key])
+              .map((key) => (
+                <p key={key}>
+                  {key === 'submitDue'
+                    ? t('Delivery deadline', '交付截止')
+                    : key === 'reviewDue'
+                      ? t('Review deadline', '验收截止')
+                      : t('Dispute deadline', '争议截止')}
+                  ：{new Date(snapshot[key]! * 1000).toLocaleString()} ·{' '}
+                  {Math.max(0, Math.ceil((snapshot[key]! - snapshot.timestamp) / 60))}{' '}
+                  {t('minutes at snapshot', '分钟（快照时）')}
+                </p>
+              ))}
+            {snapshot.evidenceHash && !/^0x0+$/.test(snapshot.evidenceHash) ? (
+              <p>
+                {t('Delivery digest', '交付摘要')}：<code>{snapshot.evidenceHash}</code>
+              </p>
+            ) : null}
+            {snapshot.reasonHash && !/^0x0+$/.test(snapshot.reasonHash) ? (
+              <p>
+                {t('Dispute digest', '争议摘要')}：<code>{snapshot.reasonHash}</code>
+              </p>
+            ) : null}
+            {actions.some((a) => ['submitDelivery', 'dispute'].includes(a)) ? (
+              <label>
+                {t('Delivery or dispute evidence (temporary text)', '交付或争议证据（临时文本）')}
+                <textarea
+                  aria-label={t(
+                    'Delivery or dispute evidence (temporary text)',
+                    '交付或争议证据（临时文本）',
+                  )}
+                  maxLength={16000}
+                  value={evidence}
+                  onChange={(e) => {
+                    setEvidence(e.target.value);
+                    setPrepared(null);
+                    setAck(false);
+                  }}
+                />
+                <small>
+                  {t(
+                    'Only its digest is put on-chain. Share and retain the original evidence privately; this text is not saved. A digest does not prove quality.',
+                    '仅摘要上链。请私下共享并保存原始证据，此文本不会保存。摘要不证明交付质量。',
+                  )}
+                </small>
+              </label>
+            ) : null}
+            {snapshot.state === 'DISPUTED' &&
+            snapshot.timestamp < snapshot.disputeDue! &&
+            wallet.actor &&
+            wallet.wallet ? (
+              <AgreementPanel
+                key={`${wallet.actor}:${snapshot.block}`}
+                publication={publication}
+                snapshot={snapshot}
+                actor={wallet.actor}
+                provider={wallet.wallet.provider}
+                onChange={(o) => {
+                  if (epoch.current !== renderEpoch) return;
+                  setOptions(o);
+                  setPrepared(null);
+                  setAck(false);
+                }}
+              />
+            ) : null}
+          </>
+        ) : null}
         {!creation && publication.data.tool === 'split' ? (
           <label>
             {t('Final payment (AUSD)', '最终付款金额（AUSD）')}
@@ -252,7 +344,9 @@ export function ModuleFunds({
             disabled={
               busy ||
               unresolved ||
-              (!paymentsEnabled && ['approve', 'pay', 'contribute'].includes(action))
+              (!paymentsEnabled && ['approve', 'pay', 'contribute', 'fund'].includes(action)) ||
+              (['submitDelivery', 'dispute'].includes(action) && !evidence.trim()) ||
+              (action === 'resolveByAgreement' && !options.signatures)
             }
             onClick={() =>
               void run(async () => {
@@ -268,6 +362,12 @@ export function ModuleFunds({
                         wallet.actor!,
                         action,
                         value,
+                        {
+                          ...options,
+                          ...(evidence.trim()
+                            ? { evidenceHash: keccak256(stringToHex(evidence)) }
+                            : {}),
+                        },
                       );
                 if (epoch.current === version) setPrepared(intent);
               })
@@ -316,8 +416,23 @@ export function ModuleFunds({
               onClick={() =>
                 void run(async () => {
                   const current = epoch.current;
-                  const intent = prepared,
-                    hash = await sendModuleAction(wallet.wallet!.provider, environment, intent);
+                  const intent = prepared;
+                  let hash: Hex;
+                  try {
+                    hash = await sendModuleAction(
+                      wallet.wallet!.provider,
+                      environment,
+                      intent,
+                      options.signatures,
+                    );
+                  } finally {
+                    if (current === epoch.current) {
+                      setPrepared(null);
+                      setAck(false);
+                      setOptions({});
+                      setRows(readRecords(localStorage, journalKey(environment, intent.actor)));
+                    }
+                  }
                   if (current !== epoch.current) return;
                   setPrepared(null);
                   setAck(false);

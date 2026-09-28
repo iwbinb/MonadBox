@@ -80,7 +80,9 @@ export function knownRow(box: KnownBox, actor: Address | null): WorkspaceBox {
         ? 'Group V1'
         : box.publication.data.tool === 'group'
           ? 'Group V2'
-          : 'Split',
+          : box.publication.data.tool === 'deliver'
+            ? 'Deliver'
+            : 'Split',
     source: 'chain',
     created: !!actor && actor.toLowerCase() === p.creator.toLowerCase(),
     joined: false,
@@ -139,7 +141,12 @@ export async function verifyWorkspaceBox(row: WorkspaceBox, actor: Address): Pro
       state: s.state,
     };
     actions = moduleActions(row.known.publication, actor, s);
-    position = s.position;
+    const d = row.known.publication.data;
+    position =
+      d.tool === 'deliver' &&
+      [d.buyer, d.seller].some((a) => a.toLowerCase() === actor.toLowerCase())
+        ? 1
+        : s.position;
   }
   const { error: _error, ...clean } = row;
   void _error;
@@ -148,7 +155,21 @@ export async function verifyWorkspaceBox(row: WorkspaceBox, actor: Address): Pro
     ...result,
     joined: row.joined || position > 0,
     pending:
-      !!row.unresolved || actions.some((a) => ['finalize', 'creditRefund', 'settle'].includes(a)),
+      !!row.unresolved ||
+      actions.some((a) =>
+        [
+          'finalize',
+          'creditRefund',
+          'settle',
+          'fund',
+          'submitDelivery',
+          'accept',
+          'dispute',
+          'refundAfterMissingDelivery',
+          'refundAfterDisputeTimeout',
+          'settleAfterReview',
+        ].includes(a),
+      ),
     history:
       row.history ||
       ['REFUNDED', 'SETTLED', 'COMPLETED', 'RESOLVED'].includes(result.state) ||

@@ -1,3 +1,5 @@
+import { isFileUpload } from '../modules/files';
+import { FILE_LIMIT } from '../../shared/modules/files';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
@@ -183,12 +185,11 @@ export function createCloudRouter(
   modules: ModuleChain = makeModuleChain(),
 ) {
   const app = new Hono<AppEnv>();
-  app.use(
-    '*',
+  app.use('*', (c, next) =>
     bodyLimit({
-      maxSize: 20_000,
+      maxSize: isFileUpload(c.req.method, c.req.path) ? FILE_LIMIT : 20_000,
       onError: (c) => cloudError(c, new CloudError('BODY_TOO_LARGE', 413)),
-    }),
+    })(c, next),
   );
   app.use('*', async (c, next) => {
     if (!c.get('requestId')) c.set('requestId', crypto.randomUUID());
@@ -204,7 +205,8 @@ export function createCloudRouter(
         !['GET', 'HEAD'].includes(c.req.method) &&
         (c.req.header('Origin') !== config.APP_ORIGIN ||
           c.req.header('X-MonadBox-Client') !== 'web' ||
-          !/^application\/json(?:;|$)/i.test(c.req.header('Content-Type') ?? ''))
+          (!isFileUpload(c.req.method, c.req.path) &&
+            !/^application\/json(?:;|$)/i.test(c.req.header('Content-Type') ?? '')))
       )
         throw new CloudError('ORIGIN_REJECTED', 403);
       c.set('db', await requireCloud(c.env));

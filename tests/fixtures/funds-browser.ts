@@ -3,7 +3,7 @@ import type { Page } from '@playwright/test';
 import { createPublicClient, createWalletClient, http } from 'viem';
 import type { Address, Hex } from 'viem';
 import { TEST_CHAIN } from '../../src/shared/lab/network';
-export const origin = 'http://127.0.0.1:8790',
+export const origin = 'http://127.0.0.1:18890',
   rpc = 'http://127.0.0.1:18746';
 export const client = createPublicClient({
   chain: TEST_CHAIN,
@@ -50,9 +50,9 @@ export async function inject(page: Page, actor: Address) {
     }
   });
   await page.exposeFunction('__fundsRpc', async (method: string, params: unknown[]) => {
-    if (!['eth_sendTransaction', 'personal_sign'].includes(method))
+    if (!['eth_sendTransaction', 'personal_sign', 'eth_signTypedData_v4'].includes(method))
       throw Error('Only explicit local sends and login');
-    if (method === 'personal_sign') return raw(method, params);
+    if (method === 'personal_sign' || method === 'eth_signTypedData_v4') return raw(method, params);
     const hash = (await raw(method, params)) as Hex;
     await client.waitForTransactionReceipt({ hash });
     await mine();

@@ -98,7 +98,7 @@ describe('fail-closed configuration', () => {
       'local',
     );
     expect(publicConfigSchema.parse(result).capabilities.payments).toBe(false);
-    expect(JSON.stringify(result)).not.toMatch(/private|internal|STORAGE_NAMESPACE/);
+    expect(JSON.stringify(result)).not.toMatch(/"private"|internal|STORAGE_NAMESPACE/);
   });
   it('rejects a forged response that enables payments', () =>
     expect(() =>

@@ -1,3 +1,4 @@
+import { PrivateFiles } from './PrivateFiles';
 import { formatUnits } from 'viem';
 import { statusLabel } from '../shared/status';
 import { useEffect, useState } from 'react';
@@ -17,12 +18,12 @@ import { draftKey, readDrafts, saveDraft, deleteDraft, importModule, exportModul
 import type { ModuleDraft } from './drafts';
 import '../cloud/cloud.css';
 import './modules.css';
-export function ModuleBuilderPage({ kind }: { kind?: 'split' | 'group' }) {
+export function ModuleBuilderPage({ kind }: { kind?: ModuleData['tool'] }) {
   const { state, t } = useApp(),
     { id, draftId } = useParams();
   if (state.status !== 'ready')
     return <p className="container">{t('Loading configuration…', '加载配置…')}</p>;
-  if (!draftId && !kind && !['split', 'group-split'].includes(id ?? ''))
+  if (!draftId && !kind && !['split', 'group-split', 'deliver'].includes(id ?? ''))
     return (
       <section className="container cloud-page">
         <h1>{t('This tool is being prepared', '工具开发中')}</h1>
@@ -33,7 +34,7 @@ export function ModuleBuilderPage({ kind }: { kind?: 'split' | 'group' }) {
     <Builder
       key={`${state.config.environment}:${draftId ?? kind ?? id}`}
       environment={state.config.environment}
-      tool={kind ?? (id === 'group-split' ? 'group' : 'split')}
+      tool={kind ?? (id === 'group-split' ? 'group' : id === 'deliver' ? 'deliver' : 'split')}
       draftId={draftId}
     />
   );
@@ -139,6 +140,7 @@ export function ModuleDraftsPage() {
       <p>
         <Link to="/create/split">{t('New Split', '新建分账')}</Link> ·{' '}
         <Link to="/create/group-split">{t('New group with split', '新建成团分账')}</Link> ·{' '}
+        <Link to="/create/deliver">{t('New delivery escrow', '新建交付托管')}</Link> ·{' '}
         <Link to="/app/modules">{t('Copy a draft to cloud', '复制草稿到云端')}</Link>
       </p>
       {error ? <p role="alert">{error}</p> : null}
@@ -561,6 +563,9 @@ export function PublicModulePage() {
               '保存原链接，可在其他浏览器恢复查询。',
             )}
           </p>
+          {box.publication.data.tool === 'deliver' ? (
+            <PrivateFiles publication={box.publication} />
+          ) : null}
           <ModuleFunds publication={box.publication} paymentsEnabled={box.paymentsEnabled} />
         </>
       ) : null}

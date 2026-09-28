@@ -30,7 +30,7 @@
 - `CLOUD_ENABLED=false`、`GROUP_PUBLISH_ENABLED=false`、`GROUP_DEPLOYMENT=null`：云端和Group发布未放行；按[Group说明](GROUP.md#7-d1-配置)启用时仅需D1，不依赖R2/Queues。
 - `STORAGE_ENABLED=false`、`BACKGROUND_ENABLED=false`：历史通用存储/后台原语未启用，不能为D1-only云端强制打开。
 
-`/api/v1/health`返回构建revision、stage、testnetLab及cloudGroups就绪状态；当前stage为M1-B，payments表示业务付款disabled。网站production≠Monadmainnet。用户浏览器签名的实验交易与网站部署是两件事。
+`/api/v1/health`返回构建revision、stage、testnetLab及cloudGroups就绪状态；stage以当前构建配置为准，默认payments为disabled。网站production≠Monadmainnet。用户浏览器签名的实验交易与网站部署是两件事。
 
 ## 3. 构建不做什么
 
@@ -40,9 +40,9 @@ build生成前端、Worker以及供浏览器核对的Group和探针ABI/bytecode�
 
 ## 4. 本地与未来资源
 
-wrangler.local.jsonc仅用于本地模拟，D1假ID不能用作真实绑定。db:migrate:local只操作本地资源。实验室不依赖数据库/附件/后台；云端只需D1，私密附件在M3按需求启用R2。
+wrangler.local.jsonc仅用于本地模拟，D1假ID不能用作真实绑定。db:migrate:local只操作本地资源。实验室不依赖数据库/附件/后台；云端只需D1，私密附件通过独立ATTACHMENTS_ENABLED开关按需求启用私有R2，见[Deliver](DELIVER.md)。
 
-真实D1须production/Preview独立ID和精确origin。新库按顺序应用0001、0002迁移，并设置各自environment_guard；已有0001的库只应用0002。schema2/marker检查通过再启用CLOUD；GROUP_PUBLISH还需实际测试网部署登记。创建资源与远端迁移需用户配置或另行授权，默认不执行。
+真实D1须production/Preview独立ID和精确origin。Group云端需要0001、0002迁移；新工具另需0003，私密附件另需0004。按启用范围顺序迁移，已有库只应用缺失版本，并设置各自environment_guard。schema2/marker检查通过再启用CLOUD；GROUP_PUBLISH还需实际测试网部署登记。创建资源与远端迁移需用户配置或另行授权，默认不执行。
 
 两个namespace不代表同一数据库被安全隔离；资源ID必须独立并核验environment_guard。secret不能加VITE_前缀暴露到浏览器。链上部署/用户私钥永不写Cloudflare变量。
 

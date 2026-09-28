@@ -3,6 +3,9 @@
 | 源码 | 职责 | 当前边界 |
 | --- | --- | --- |
 | `src/GroupEscrowV1.sol` | 固定单受益人的成团、退出、取消、退款 credit、结算与提款 | 已实现和本地验证；真实测试网部署待验收，资金 UI 属于 M1-C |
+| `src/SplitPaymentsV1.sol` | 固定比例的最终付款及各自提款 | 本地及CI验证，公开部署另验 |
+| `src/GroupEscrowV2.sol` | 成功成团时原子分配给固定多人 | 保留V1读写与退出 |
+| `src/DeliveryEscrowV1.sol` | 全额预付、交付/验收、双签分配及到期退款 | 本地完整流程验证，真实双方钱包另验 |
 | `src/M0CProbe.sol` | 实验室限额入金与原地址退款 | 独立技术探针，不代替业务托管 |
 | `test/MockToken.sol` | 本地资产成功/失败测试 | 仅本地 fixture |
 
