@@ -185,6 +185,31 @@ export function createCloudRouter(
   modules: ModuleChain = makeModuleChain(),
 ) {
   const app = new Hono<AppEnv>();
+  // Measure JSON bytes even when an untrusted Content-Length claims a smaller body.
+  app.use('*', async (c, next) => {
+    if (!c.req.raw.body || isFileUpload(c.req.method, c.req.path)) return next();
+    const reader = c.req.raw.body.getReader(),
+      chunks: Uint8Array[] = [];
+    let bytes = 0;
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      bytes += value.byteLength;
+      if (bytes > 20_000) {
+        await reader.cancel();
+        return cloudError(c, new CloudError('BODY_TOO_LARGE', 413));
+      }
+      chunks.push(value);
+    }
+    const body = new Uint8Array(bytes);
+    let offset = 0;
+    for (const chunk of chunks) {
+      body.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    c.req.raw = new Request(c.req.raw, { body });
+    return next();
+  });
   app.use('*', (c, next) =>
     bodyLimit({
       maxSize: isFileUpload(c.req.method, c.req.path) ? FILE_LIMIT : 20_000,

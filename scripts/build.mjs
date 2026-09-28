@@ -33,5 +33,6 @@ await esbuild({
   define: { __BUILD_SHA__: JSON.stringify(revision) },
 });
 await mkdir('dist', { recursive: true });
-await writeFile('dist/build.json', JSON.stringify({ revision, stage: 'M6' }, null, 2));
-console.log(`Built M6 ${revision}; no deployment or chain writes performed.`);
+await writeFile('dist/build.json', JSON.stringify({ revision, stage: 'M7' }, null, 2));
+await import('./release-evidence.mjs');
+console.log(`Built M7 ${revision}; no deployment or chain writes performed.`);

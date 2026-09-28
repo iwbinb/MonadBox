@@ -21,7 +21,7 @@ RewardsDistributorV1支持1–100个严格递增的唯一地址和正金额。�
 
 100人本地创建交易在独立运行6756969 Gas、全套回归6746169 Gas（链上共享资产状态不同）、领取216691、到期回收128384；自动预算10000000/250000/200000。具体调用和哈希随回归更新于`artifacts/rewards-gas-*.json`，CI归档。本地测试Gas不代表Monad实际费用或网络上限。
 
-日志`/private/tmp/monadbox-m6-*.log`，截图`artifacts/screenshots/rewards-*.png`。M5提交的PR/push CI均success，已补入M5归档。
+日志`/private/tmp/monadbox-m6-*.log`，截图`artifacts/screenshots/rewards-*.png`。提交`1209218`的PR CI [36425593582](https://github.com/iwbinb/MonadBox/actions/runs/36425593582)与push CI [36425588243](https://github.com/iwbinb/MonadBox/actions/runs/36425588243)均success。M5的CI证据已补入M5归档。
 
 ## 后续边界
 

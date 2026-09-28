@@ -79,7 +79,7 @@ D1 保存标题、说明、结构化规则、原始 UTF-8 metadata、metadataHas
 
 冻结后的时间或规则不能原地修改。过期/拒绝/替换记录可导出后复制成新草稿；先核实旧交易再新建，避免重复创建。签名期限是客户端安全限制，不会神奇撤销已经发出的链上交易；因此即使期限已过，也不能把旧规则解冻或丢弃，晚到回执仍需处理。
 
-当前单环境仅登记一个Group版本；替换注册地址前必须先实现旧版兼容查询，不能让旧发布记录失去读取路径。多版本读取是 M2-A 的前置任务；完整自动索引尚未实现。
+已实现按chain/address/version读取原部署，保留退休版本的恢复和退出；GroupV1与V2独立登记。当前部署清单和能力开关以运行配置为准，完整自动索引尚未实现。
 
 ## 7. D1 配置
 
@@ -95,7 +95,7 @@ D1 保存标题、说明、结构化规则、原始 UTF-8 metadata、metadataHas
 | `STORAGE_ENABLED` | 保持 `false`；这是历史通用R2/队列组合原语开关，不是新的D1-only云端开关 |
 | `BACKGROUND_ENABLED` | 保持 `false` |
 | `GROUP_PUBLISH_ENABLED` | 先保持 `false`；不因云端可保存就自动允许链上创建 |
-| `NETWORK_WRITES_ENABLED`、`MAINNET_ENABLED` | 继续 `false`，M1-B不开放业务付款或主网 |
+| `NETWORK_WRITES_ENABLED`、`MAINNET_ENABLED` | 公开配置继续 `false`；本地资金功能已实现，真实验收前不开放公众付款或主网 |
 
 启用Group发布还需要经过核验的实际测试网部署：chainId、version、address、asset、intakeAdmin、runtimeHash。不能填写本地Anvil地址/哈希冒充公开部署。登记后才经PR显式启用 `GROUP_PUBLISH_ENABLED`。后台仍不持有钱包私钥；用户浏览器签名只调用已登记目标。
 

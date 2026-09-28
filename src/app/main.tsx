@@ -14,6 +14,7 @@ import {
 } from './pages';
 import './styles.css';
 const WorkspacePage = lazy(() => import('./WorkspacePage'));
+const PolicyPage = lazy(() => import('./PolicyPage'));
 const GroupActivityPage = lazy(() =>
   import('./group/GroupFunds').then((m) => ({ default: m.GroupActivityPage })),
 );
@@ -95,6 +96,8 @@ createRoot(root).render(
               <Route path="app" element={groupSurface(<WorkspacePage />)} />
               <Route path="help/refunds" element={<RefundsPage />} />
               <Route path="status" element={<StatusPage />} />
+              <Route path="privacy" element={groupSurface(<PolicyPage kind="privacy" />)} />
+              <Route path="terms" element={groupSurface(<PolicyPage kind="terms" />)} />
               <Route
                 path="lab"
                 element={

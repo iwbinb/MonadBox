@@ -463,6 +463,24 @@ beforeEach(async () => {
   env.MODULE_DEPLOYMENTS = '[]';
 });
 describe('SIWE and sessions with real isolated D1', () => {
+  it('rejects oversized JSON by actual bytes even with a forged Content-Length', async () => {
+    const b = new Browser();
+    const response = await b.req(
+      '/auth/nonce',
+      'POST',
+      { address: alice.address, padding: 'x'.repeat(20000) },
+      { 'Content-Length': '1' },
+    );
+    expect(response.status).toBe(413);
+    expect((await response.json()).error.code).toBe('BODY_TOO_LARGE');
+    expect(await db.prepare('SELECT COUNT(*) AS count FROM cloud_challenges').first('count')).toBe(
+      0,
+    );
+    expect(
+      (await b.req('/auth/nonce', 'POST', { address: alice.address }, { 'Content-Length': '1' }))
+        .status,
+    ).toBe(200);
+  });
   it('creates a bound session, never stores a raw signature, and revokes logout', async () => {
     const b = new Browser();
     await b.login();

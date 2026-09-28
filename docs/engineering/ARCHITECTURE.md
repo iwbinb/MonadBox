@@ -1,60 +1,57 @@
 # 技术架构
 
-M1-B 当前实现，六工具终态规格另见产品、资金及API目标文档。
+六工具共用浏览器、同源Worker、账号和工作台。当前工程实现与发布验收分别记录在[总计划](../planning/DEVELOPMENT_PLAN.md)。
 
-## 1. 结构与运行边界
+## 数据与资金路径
 
-```text
-浏览器React/Vite UI
-  ├─ Worker/Hono同源API
-  │    ├─ config/health：始终可读，校验缺配置
-  │    └─ 可选CLOUD：SIWE、云端草稿、发布记录 → 隔离D1
-  ├─ 用户显式钱包签名 → Monad Testnet Group创建（需真实部署登记）
-  └─ /lab → 原M0-C限额技术探针
+```mermaid
+flowchart LR
+  UI[React 双语界面] --> Local[本地草稿和恢复记录]
+  UI --> API[同源 Hono Worker]
+  API --> D1[隔离 D1 会话与规则]
+  API --> R2[可选私密交付文件]
+  UI --> Wallet[用户明确钱包签名]
+  Wallet --> Chain[Monad Testnet 独立资金合约]
+  API --> Verify[只读交易与状态核验]
+  Verify --> Chain
+  Chain --> Credit[固定受益人 credit]
+  Credit --> Withdraw[受益人钱包提款]
 ```
 
-一个monadbox Worker，main正式发布、dev Worker Previews；静态页面与API同项目。当前云端与发布flags为false；远端D1未绑定，R2/Queues/Cron未启用。网站部署成功不能当成这些功能已在线验收。
+一个monadbox Worker；main正式发布，dev使用Worker Previews。云端、发布、业务付款、附件均默认关闭，主网禁止。构建/CI不会创建远程资源、应用远程迁移或广播公开交易。
 
-## 2. 模块
+## 模块与版本
 
-| 模块 | 实现 |
+| 层 | 主要位置与职责 |
 | --- | --- |
-| src/app/group、src/shared/group | M1-A本地草稿、整数规则、元数据和条款哈希 |
-| src/app/cloud | SIWE确认界面、账号草稿、发布管理、匿名分享页、浏览器发送日志 |
-| src/shared/cloud/model.ts | 有版本的部署/发布意图schema，JSON大整数为字符串 |
-| src/shared/cloud/chain.ts | 编译代码/固定资产/管理员验证、确切createGroup回执、finalized快照 |
-| src/worker/cloud/router.ts | 浏览器绑定挑战、会话与CSRF、owner/revision授权、D1保存与发布核验 |
-| src/worker/index.ts | 安全响应头、只读配置与健康、按路径挂载云端API |
-| contracts | GroupEscrowV1及M0CProbe；本批不改变资金逻辑、不执行公开部署 |
-| migrations/0002_cloud_groups.sql | D1会话、云端记录、不可变metadata、发布意图与schema2 |
-| tests/fixtures/cloud-worker.ts | 仅本地测试entry，连接固定loopback Anvil；不进入正式构建入口 |
+| 页面 | `src/app/group`、`cloud`、`modules`；六工具创建、规则预览、发布、资金、双签、签到、附件 |
+| 共用体验 | `src/app/WorkspacePage.tsx`、`shared`；本人创建/参与/待办/credit/历史，明确同源恢复链接 |
+| 规则与核验 | `src/shared/group`、`cloud`、`modules`；整数金额、严格schema、哈希、固定部署/runtime、EOA、nonce、事件及最终性 |
+| API | `src/worker/cloud`、`modules`；SIWE、会话、CSRF、owner/revision、幂等冻结与只读确认 |
+| 数据 | `0001`基础、`0002`cloud schema2、`0003`module schema1、`0004`附件schema1；环境marker校验 |
+| 合约 | GroupV1与V2、Split、Deliver、Attend、Milestones、Rewards独立不可升级合约；共用PullCredit及必要的AgreementCredit |
+| 测试 | 单元伪RPC边界、真实隔离D1/R2、Foundry、固定loopback Anvil、HTTP与桌面/手机Chromium |
 
-Node/pnpm和依赖lockfile沿用M1-A，本批未新增第三方依赖。Group编译产物由Solidity源码生成，运行时引用和实际哈希验证不靠手写ABI。Cloud页面按路由lazy加载。
+GroupV1保留原编译入口及旧版读写/退出。其他模块由固定Solidity0.8.28/Paris/optimizer200生成ABI和runtime，按chain+address+version读取原发布；新增版本不会把旧订单挂到新地址。运行时代码掩码核验后另读不可变资产、管理员及签名域。
 
-## 3. 数据与权限
+## 发布和恢复
 
-D1不是用户资金账户。账户由随机会话token摘要映射原钱包，SIWE挑战精确绑定origin、nonce、时间和浏览器cookie。D1批处理与唯一键防双重消费；同会话请求从first-primary开始，避免以旧副本授权已撤销会话。会话和签名不出现在日志或公开响应。
+通常先冻结规则再明确签名发布空实例，付款另外授权/入金。**Rewards例外**：冻结准确授权意图，授权确认后另准备原子全额入金创建；两步各明确签名，保留原授权证明并重新读取真实nonce。
 
-草稿owner由已认证会话决定，不信任请求里的任意钱包地址。修改/删除带revision，发布准备后不可改。原始metadata字节、metadataHash、结构化规则、termsHash和原发布意图相互核验。公开页不暴露未发布草稿，也不接受客户端paid/published标签。
+交易核对账号、nonce、链、类型、目标、完整参数/调用hash、准确事件、canonical和finalized覆盖，并读回原实例。历史nonce用有界二分定位，不依赖仅扫描最近若干块。unknown不能抹除已保存的证据、解冻或自动重发。浏览器发送前写入日志，并用Web Locks阻止同账号未决交易并发。
 
-## 4. 发布与恢复
+SIWE原始签名不保存；双签和签到签名仅在页面内存中交换，显式提交后进入公开链。恢复记录只保留公开消息、调用hash与交易证据；需要时临时读取链上witness复核。
 
-准备请求读取已登记合约及链时间/nonce，复制冻结规则和唯一salt，不签名。浏览器重新校验EOA/链/目标代码/规则/nonce，显式调用createGroup；不授权token，不入金。发送前本地记录状态并锁定同账号；未知情况不重发。
+## 权限、文件与故障
 
-确认接口只读RPC，核对交易、准确事件、canonical块和finalized覆盖高度，并读回Group。需要时以最多41块的账户+nonce搜索恢复hash，旧交易由用户补hash。数据库仅记录证据和展示状态。
+D1不是资金权威。owner来自已认证会话，修改需revision，发布后固定metadata字节与termsHash。JSON按实际字节限20KB。附件按实际流限10MiB，只支持TXT/PNG/JPEG；固定双方每次读写均重新核验链上实例和R2环境marker。每阶段5件，阶段推进禁止旧预留上传，历史文件仍对双方可读。
 
-公开GET每次核实原发布和finalized的Group状态；不是完整事件索引器。RPC不可用/代码变更/链证据不匹配时拒绝展示“已核实”。当前每环境一个登记版本，后续增加合约版本前必须保留旧版读取与退出路径。
+订单结算90天后API停止文件访问。自动物理清理未启用；真实附件上线前需确认资源隔离、保留/删除政策和私密支持渠道。未实现病毒扫描，不宣称端到端加密。
 
-## 5. 持久化与部署
+RPC故障、状态变化、错链或部署不匹配时不展示核验成功。暂停新增入金保留原合约退出；管理员不能裁决争议、改变受益人或任意提款。
 
-新CLOUD开关只要求DB；不依赖原STORAGE开关的R2/Queue组合原语。CLOUD启用需exact origin、schema2、匹配environment_guard。生产/Preview数据库及origin均独立，配置验证拒绝相同ID；名称隔离不替代真实资源验证。
+## 运行和证据
 
-GROUP_PUBLISH独立于CLOUD，必须登记实际测试网部署并核验编译runtime/asset/intakeAdmin。NETWORK_WRITES和MAINNET继续false；M1-C前没有资金按钮。现有/lab显式签名开关不变。资源创建、远端迁移和公开合约部署不随main提交自动执行。
+公开首屏按路由拆分，钱包与资金工具按需加载。构建生成初始JS gzip预算、合约尺寸、源码/ABI/锁文件哈希及直接依赖许可清单。CI只读构建与测试，保留源代码快照、屏幕录像、截图、Gas及性能证据；录像显示LOCAL，注入钱包和MockToken不冒称真实设备验收。
 
-## 6. 测试与尚未实现
-
-Vitest分别验证伪RPC边界和真实本地D1；HTTP集成在实际workerd+Miniflare D1+Anvil下执行SIWE/保存/冻结/创建/匿名读取。Playwright另行验证页面与独立浏览器会话；钱包提供者为注入fixture，不冒称真实MetaMask/Safari。
-
-当前未实现：Group参与付款/退出退款等界面（M1-C）、真实资源/钱包综合验收（M1-D）、自动索引器、R2附件、队列通知、WalletConnect、智能账户/SIWE EIP-1271和法币渠道。用户已后置真实测试，保留待验收状态，不阻塞继续编码。安全测试不等于独立审计。
-
-[M1-B操作与精确API](GROUP.md) · [M1-B验收](../archive/M1-B_ACCEPTANCE.md) · [资金规则](../product/FUNDS_AND_STATES.md) · [全阶段计划](../planning/DEVELOPMENT_PLAN.md)
+尚未启用或不在本次范围：自动全链索引、通知队列、钱包代付/邮箱钱包、智能账号/EIP-1271写入、法币、跨链和主网。实际设备、真实部署、安全审阅与试用仍按外部验收执行。

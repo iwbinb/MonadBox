@@ -533,7 +533,9 @@ function CloudModule() {
               />
               <div className="cloud-card">
                 <label>
-                  {t('Publication transaction hash (optional)', '发布交易哈希（选填）')}
+                  {box.publication.action === 'approve'
+                    ? t('Approval transaction hash (optional)', '授权交易哈希（选填）')
+                    : t('Publication transaction hash (optional)', '发布交易哈希（选填）')}
                   <input value={hash} onChange={(e) => setHash(e.target.value)} />
                 </label>
                 <button

@@ -6,6 +6,7 @@
 
 | 文档 | 用途 |
 | --- | --- |
+| [交付与演示包](engineering/DELIVERY_PACKAGE.md) | 复现、六工具验收矩阵、录像、故障退出与外部待办 |
 | [Group](engineering/GROUP.md) | 本地草稿、云端登录、发布、恢复、实际 API 和 D1 配置 |
 | [版本化支付工具](engineering/MODULES.md) | Split、Group V2、冻结发布、分账、旧版恢复和配置 |
 | [交付托管](engineering/DELIVER.md) | Deliver双方资金操作、双签协议、私密附件及恢复 |
@@ -32,6 +33,6 @@
 
 ## 历史证据
 
-[验收归档](archive/README.md) 保存 M0-A 至 M1-B 的阶段记录和只读 RPC 证据。新的阶段记录在阶段完成时新增，不为日常进度重复创建文档。
+[验收归档](archive/README.md) 保存各阶段实际记录和只读 RPC 证据。新的阶段记录在阶段完成时新增，不为日常进度重复创建文档。
 
 术语：Box 是工具实例；Order 是参与者的经济关系；Intent 是待执行意图；credit 是合约内可领取款，withdrawal 才实际转出。网站部署、本地测试和真实网络验收分别记录。

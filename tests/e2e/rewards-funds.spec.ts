@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { decodeFunctionData, toHex } from 'viem';
 import type { Address, Hex } from 'viem';
 import { origin, client, wallet, inject, mine, warp, connect } from '../fixtures/funds-browser';
@@ -8,6 +8,16 @@ import { TOKEN } from '../../src/shared/lab/network';
 import { localDateInput } from '../../src/shared/group/draft';
 import { moduleAbi } from '../../src/shared/modules/terms';
 import type { ModuleBox } from '../../src/shared/modules/model';
+test.use({ video: 'on' });
+test.afterEach(async ({ page }, info) => {
+  if (info.status !== 'passed') return;
+  const video = page.video();
+  await page.close();
+  if (video) {
+    mkdirSync('artifacts/demo', { recursive: true });
+    await video.saveAs(`artifacts/demo/rewards-${info.project.name}-LOCAL.webm`);
+  }
+});
 
 test('100 rewards: exact funding, two-step recovery, fixed claims and expiry preserve credit', async ({
   page,
@@ -32,10 +42,24 @@ test('100 rewards: exact funding, two-step recovery, fixed claims and expiry pre
     }),
   });
   await mine();
-  const context = await browser.newContext({ viewport: page.viewportSize() ?? undefined });
+  const context = await browser.newContext({
+    viewport: page.viewportSize() ?? undefined,
+    recordVideo: { dir: 'test-results/rewards-recipient-' + info.project.name },
+  });
   const claimPage = await context.newPage();
+  let finished = false;
   claimPage.setDefaultTimeout(20000);
   try {
+    for (const target of [page, claimPage])
+      await target.addInitScript(() => {
+        addEventListener('DOMContentLoaded', () => {
+          const label = document.createElement('div');
+          label.textContent = 'LOCAL DEMO · Anvil / MockToken · simulated wallet';
+          label.style.cssText =
+            'position:fixed;bottom:0;left:0;right:0;z-index:99999;padding:6px;background:#111;color:white;font:12px sans-serif;text-align:center;pointer-events:none';
+          document.body.append(label);
+        });
+      });
     await inject(page, creator);
     await inject(claimPage, recipient);
     await page.goto(origin + '/create/rewards');
@@ -228,7 +252,14 @@ test('100 rewards: exact funding, two-step recovery, fixed claims and expiry pre
         2,
       ),
     );
+    finished = true;
   } finally {
     await context.close();
+    if (finished) {
+      mkdirSync('artifacts/demo', { recursive: true });
+      await claimPage
+        .video()
+        ?.saveAs(`artifacts/demo/rewards-${info.project.name}-recipient-LOCAL.webm`);
+    }
   }
 });

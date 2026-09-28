@@ -62,3 +62,13 @@ ArcBox关系：沿用本次对话已确定的六工具产品思路。**本阶段
 ## 5. 未来验证记录模板
 
 测试日期及UTC时间；工具/版本；网络chainId；官方来源快照；实际端点；调用或测试命令；退出码/原始回执；部署/交易/日志；通过/失败/未执行；限制；复核者。敏感key、签名、个人信息和私密附件不得进入公开证据。
+
+## 6. 2026-09-28交付复核
+
+当前实现使用锁定的React、Hono、Viem、Zod等依赖，以及OpenZeppelin5.7.0的ERC-20、ECDSA、数学与重入防护基础组件。确切直接依赖版本/许可与源码哈希由`artifacts/release-evidence.json`生成，完整间接依赖见锁文件。没有从ArcBox复制实现代码的记录；共享产品思路不等于对原创性或赛事复用资格的认证。项目自身许可证仍未由用户选择，不擅自加入MIT授权。
+
+搜索工具未能读取当前页面，随后通过浏览器成功打开[官方Metropolis页面](https://www.monad.xyz/developers/hackathons/metropolis)。公开页写明9月1日至10月13日，FAQ要求可运行产品、公开项目简介、演示和代码链接；允许旧项目提交赛期新增工作，鼓励但不强制开源。页面将地区限制与完整条款指向申请平台。
+
+从该页核实的[申请平台](https://hackathon.monad.xyz/)当前显示Metropolis登录页，只有GitHub/Google/Discord继续按钮，并说明该操作可能开始注册。未点击、未代用户注册或接受条款。公开页未提供准确截止钟点/时区；登录后的完整规则、地区资格、多项目/跨赛事重复申领和赞助条件仍未验证，G-08继续待验。搜索引擎所存该域旧evm/accathon内容已过时，不作为本赛事证据。
+
+安全依赖来源：[Vitest修复通告](https://github.com/advisories/GHSA-82fw-gwwq-j7x9)、[tmp路径修复](https://github.com/advisories/GHSA-ph9p-34f9-6g65)、[tmp类型绕过修复](https://github.com/advisories/GHSA-7c78-jf6q-g5cm)。读取日期2026-09-28；按修复版本锁定并再次运行审计/构建/测试，最终结果见M7验收归档。

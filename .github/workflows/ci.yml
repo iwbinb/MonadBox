@@ -28,6 +28,9 @@ jobs:
           pnpm install --frozen-lockfile
       - run: pnpm format:check
       - run: pnpm lint
+      - run: pnpm check:secrets
+      - name: Check locked dependencies against current advisories
+        run: pnpm audit --json > artifacts/dependency-audit.json
       - run: pnpm typecheck
       - run: pnpm build
       - run: pnpm test
@@ -55,6 +58,10 @@ jobs:
             artifacts/group-local-chain.json
             artifacts/cloud-http.json
             artifacts/rewards-gas-*.json
+            artifacts/release-evidence.json
+            artifacts/dependency-audit.json
+            artifacts/performance-*.json
+            artifacts/demo
             artifacts/source.tar
           if-no-files-found: ignore
           retention-days: 7

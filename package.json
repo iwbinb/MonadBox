@@ -30,7 +30,7 @@
     "typescript": "5.9.3",
     "typescript-eslint": "8.70.1",
     "vite": "7.3.6",
-    "vitest": "3.2.7",
+    "vitest": "4.1.11",
     "wrangler": "4.135.0",
     "@openzeppelin/contracts": "5.7.0",
     "solc": "0.8.28"
@@ -52,6 +52,12 @@
     "compile:probe": "node scripts/compile-probe.mjs",
     "test:contracts": "node scripts/test-contracts.mjs",
     "test:chain-local": "node scripts/local-chain-test.mjs",
-    "test:cloud-local": "node scripts/cloud-http-test.mjs"
+    "test:cloud-local": "node scripts/cloud-http-test.mjs",
+    "check:secrets": "node scripts/check-source-secrets.mjs"
+  },
+  "pnpm": {
+    "overrides": {
+      "solc>tmp": "0.2.7"
+    }
   }
 }

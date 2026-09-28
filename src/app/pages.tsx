@@ -263,7 +263,11 @@ export function StatusPage() {
         </div>
         <div>
           <dt>{t('Business payments', '业务付款')}</dt>
-          <dd>{t('Disabled', '未开放')}</dd>
+          <dd>
+            {state.status === 'ready' && state.config.capabilities.payments
+              ? t('Test assets; explicit signatures', '测试资产；逐笔明确签名')
+              : t('Disabled', '未开放')}
+          </dd>
         </div>
         <div>
           <dt>{t('Testnet wallet lab', '测试网钱包实验室')}</dt>
@@ -285,13 +289,13 @@ export function StatusPage() {
         </div>
         <div>
           <dt>{t('Deployed business contracts', '已部署业务合约')}</dt>
-          <dd>{t('None', '无')}</dd>
+          <dd>{t('Public deployment acceptance pending', '公开部署验收待完成')}</dd>
         </div>
         <div>
           <dt>{t('Remote storage', '远程存储')}</dt>
           <dd>
             {state.status === 'ready'
-              ? state.config.storageEnabled
+              ? state.config.storageEnabled || state.config.capabilities.cloudGroups
                 ? t('Configured; see API health', '已配置，请核对接口健康状态')
                 : t('Disabled until bindings are verified', '绑定验收前保持关闭')
               : t('Unconfirmed', '尚未确认')}
