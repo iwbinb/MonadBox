@@ -113,6 +113,7 @@ test('Group complete funds flows and lost-response recovery on isolated LOCAL ch
   browser,
 }, info) => {
   test.setTimeout(180000);
+  page.setDefaultTimeout(20000);
   const f = JSON.parse(readFileSync('artifacts/funds-test.json', 'utf8')) as {
     accounts: Address[];
   };

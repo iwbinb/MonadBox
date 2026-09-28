@@ -105,7 +105,9 @@ function fake() {
     ),
     getBlock: vi.fn(async () => block),
     getBlockNumber: vi.fn(async () => 100n),
-    getTransactionCount: vi.fn(async () => 7),
+    getTransactionCount: vi.fn(async (args?: { blockNumber?: bigint }) =>
+      args?.blockNumber !== undefined && args.blockNumber >= 99n ? 8 : 7,
+    ),
     getTransaction: vi.fn(async () => tx),
     getTransactionReceipt: vi.fn(async () => receipt),
   };
@@ -215,12 +217,13 @@ describe('M1-B public publication verifier', () => {
     expect((await f.chain.confirm(i)).hash).toBe(H);
     expect(f.c.getTransaction).toHaveBeenCalledOnce();
   });
-  it('recovery scans at most 41 blocks and remains unknown if older', async () => {
+  it('recovery remains unknown if the nonce block lacks the expected transaction', async () => {
     const f = fake();
     f.block.transactions = [];
     f.c.getBlockNumber.mockResolvedValue(1000n);
     expect((await f.chain.confirm(i)).state).toBe('unknown');
-    expect(f.c.getBlock).toHaveBeenCalledTimes(41);
+    expect(f.c.getBlock).toHaveBeenCalledTimes(1);
+    expect(f.c.getTransactionCount.mock.calls.length).toBeLessThan(20);
   });
   for (const [timestamp, count, stored, want] of [
     [900, 0, 1, 'UPCOMING'],

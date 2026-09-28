@@ -66,7 +66,7 @@ export function useGroupWallet() {
   }
   return { wallets, wallet, selected, setSelected, actor, connect };
 }
-function WalletChoice({
+export function WalletChoice({
   value,
   busy,
   connect,
@@ -323,6 +323,8 @@ export function GroupFunds({ group }: { group: PublicGroup }) {
             }
             onClick={() =>
               void run(async () => {
+                setPrepared(null);
+                setAck(false);
                 const actor = wallet.actor!;
                 const current = epoch.current;
                 const i = await prepareAction(makeClient(), group.intent, actor, action);
@@ -361,7 +363,12 @@ export function GroupFunds({ group }: { group: PublicGroup }) {
             {t('Fixed beneficiary', '固定收款人')} <code>{group.data.beneficiary}</code>
           </p>
           <label>
-            <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} />
+            <input
+              type="checkbox"
+              disabled={busy}
+              checked={ack}
+              onChange={(e) => setAck(e.target.checked)}
+            />
             {t(
               'I have reviewed this action and its fixed recipients.',
               '我已核对本次动作及固定收款地址。',
@@ -428,45 +435,49 @@ export function GroupActivityPage() {
   return (
     <section className="container cloud-page">
       <h1>{t('Group funds workbench', '成团资金工作台')}</h1>
-      <Link to="/app/groups">{t('Groups I created', '我创建的成团')}</Link>
-      <WalletChoice
-        value={wallet}
-        busy={busy}
-        connect={() =>
-          void run(async () => {
-            const a = await wallet.connect();
-            setRows(readActions(localStorage, actionKey(environment, a)));
-          })
-        }
-      />
       <p>
-        {t(
-          'History is local to this browser and wallet. Open the original public link on any browser to read current participation, refundable funds and credit directly from the contract.',
-          '历史记录按浏览器和钱包保存。在任意浏览器打开原公开链接，均可直接读合约中的参与、退款和可领取权益。',
-        )}
+        <Link to="/app/groups">{t('Groups I created', '我创建的成团')}</Link>
       </p>
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          try {
-            const url = new URL(link, location.origin);
-            if (url.origin !== location.origin || !/^\/b\/[a-f0-9-]{36}$/.test(url.pathname))
-              throw Error();
-            location.assign(url.pathname);
-          } catch {
-            setError(t('Use a Group public link from this site.', '请使用本站的成团公开链接。'));
+      <div className="cloud-card">
+        <WalletChoice
+          value={wallet}
+          busy={busy}
+          connect={() =>
+            void run(async () => {
+              const a = await wallet.connect();
+              setRows(readActions(localStorage, actionKey(environment, a)));
+            })
           }
-        }}
-      >
-        <label>
-          {t('Original Group link', '原成团链接')}
-          <input value={link} onChange={(e) => setLink(e.target.value)} />
-        </label>
-        <button className="button secondary">
-          {t('Open group and recover', '打开成团并恢复')}
-        </button>
-      </form>
-      {error ? <p role="alert">{error}</p> : null}
+        />
+        <p>
+          {t(
+            'History is local to this browser and wallet. Open the original public link on any browser to read current participation, refundable funds and credit directly from the contract.',
+            '历史记录按浏览器和钱包保存。在任意浏览器打开原公开链接，均可直接读合约中的参与、退款和可领取权益。',
+          )}
+        </p>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            try {
+              const url = new URL(link, location.origin);
+              if (url.origin !== location.origin || !/^\/b\/[a-f0-9-]{36}$/.test(url.pathname))
+                throw Error();
+              location.assign(url.pathname);
+            } catch {
+              setError(t('Use a Group public link from this site.', '请使用本站的成团公开链接。'));
+            }
+          }}
+        >
+          <label>
+            {t('Original Group link', '原成团链接')}
+            <input value={link} onChange={(e) => setLink(e.target.value)} />
+          </label>
+          <button className="button secondary">
+            {t('Open group and recover', '打开成团并恢复')}
+          </button>
+        </form>
+        {error ? <p role="alert">{error}</p> : null}
+      </div>
       <ActionHistory
         rows={rows}
         busy={busy}

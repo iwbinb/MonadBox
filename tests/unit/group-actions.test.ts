@@ -166,7 +166,9 @@ function fake(action: GroupAction = 'contribute') {
     getBlockNumber: vi.fn(async () => 100n),
     getTransaction: vi.fn(async () => tx),
     getTransactionReceipt: vi.fn(async () => receipt),
-    getTransactionCount: vi.fn(async () => 7),
+    getTransactionCount: vi.fn(async (args?: { blockNumber?: bigint }) =>
+      args?.blockNumber !== undefined && args.blockNumber >= 99n ? 8 : 7,
+    ),
     estimateGas: vi.fn(async () => 100000n),
   };
   return { i, c, client: c as unknown as ChainClient, tx, receipt, block, fields };
@@ -231,14 +233,15 @@ describe('Group funds evidence', () => {
     f.receipt.logs[0]!.address = TOKEN;
     await expect(confirmAction(f.client, f.i, H)).rejects.toThrow();
   });
-  it('recovers by original nonce and caps scanning at 41 blocks', async () => {
+  it('recovers by original nonce with bounded historical reads', async () => {
     const f = fake();
     expect((await confirmAction(f.client, f.i)).hash).toBe(H);
     f.block.transactions = [];
     f.c.getBlockNumber.mockResolvedValue(1000n);
     f.c.getBlock.mockClear();
     expect((await confirmAction(f.client, f.i)).state).toBe('unknown');
-    expect(f.c.getBlock).toHaveBeenCalledTimes(41);
+    expect(f.c.getBlock).toHaveBeenCalledTimes(1);
+    expect(f.c.getTransactionCount.mock.calls.length).toBeLessThan(30);
   });
   it('a changed rules snapshot cannot authorize an action', () => {
     const f = fake();

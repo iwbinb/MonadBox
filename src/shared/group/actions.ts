@@ -7,6 +7,7 @@ import { calldata, groupAbi, makeCloudChain, same, verifyDeployment } from '../c
 import type { ReceiptResult } from '../cloud/chain';
 import { inspectNetwork, TOKEN } from '../lab/network';
 import type { ChainClient } from '../lab/network';
+import { recoverNonce } from '../nonce-recovery';
 
 export const groupActions = [
   'approve',
@@ -231,15 +232,7 @@ export async function confirmAction(
   await verifyDeployment(client, i.group.deployment);
   let hash = supplied;
   if (!hash) {
-    const head = await client.getBlockNumber();
-    for (let n = head; n >= BigInt(i.startBlock) && head - n < 41n; n--) {
-      const b = await client.getBlock({ blockNumber: n, includeTransactions: true });
-      const tx = b.transactions.find((t) => same(t.from, i.actor) && t.nonce === i.nonce);
-      if (tx) {
-        hash = tx.hash;
-        break;
-      }
-    }
+    hash = await recoverNonce(client, i.actor, i.nonce, BigInt(i.startBlock));
   }
   if (!hash) return { state: 'unknown' };
   let tx, receipt;
