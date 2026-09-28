@@ -1,13 +1,7 @@
 import { test, expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
-import {
-  createPublicClient,
-  createWalletClient,
-  http,
-  erc20Abi,
-  encodeFunctionData,
-} from 'viem';
+import { createPublicClient, createWalletClient, http, erc20Abi, encodeFunctionData } from 'viem';
 import type { Address, Hex } from 'viem';
 import { calldata, groupAbi } from '../../src/shared/cloud/chain';
 import { TEST_CHAIN, TOKEN } from '../../src/shared/lab/network';
