@@ -13,6 +13,7 @@ import {
   moduleId,
   termsHashFor,
   validatePublication,
+  approvalAmount,
 } from '../../shared/modules/terms';
 import type { ModuleChain } from '../../shared/modules/chain';
 import { authenticate, CloudError, limited } from '../cloud/router';
@@ -43,7 +44,22 @@ export function fromRow(r: Row): ModuleBox {
   if (publication) {
     const p = validatePublication(publication.publication);
     if (
-      publication.action !== 'create' ||
+      (publication.action !== 'create' &&
+        !(
+          data.tool === 'rewards' &&
+          publication.action === 'approve' &&
+          r.state !== 'published'
+        )) ||
+      (publication.action === 'approve' &&
+        (publication.amount !== approvalAmount(publication) || !!publication.fundingApproval)) ||
+      (data.tool === 'rewards' &&
+        publication.action === 'create' &&
+        !publication.fundingApproval) ||
+      (data.tool !== 'rewards' && !!publication.fundingApproval) ||
+      (publication.fundingApproval &&
+        (publication.fundingApproval.nonce >= publication.nonce ||
+          publication.fundingApproval.id === publication.id ||
+          BigInt(publication.fundingApproval.block) > BigInt(publication.startBlock))) ||
       !same(publication.actor, r.owner) ||
       !same(p.creator, r.owner) ||
       p.id !== r.id ||
@@ -189,12 +205,57 @@ export function mountModuleRoutes(app: Hono<AppEnv>, chain: ModuleChain) {
       db = c.get('db'),
       b = await owned(db, c.req.param('id'), actor),
       config = readConfig(c.env);
-    if (b.publication) return c.json({ data: b, requestId: c.get('requestId') });
+    if (b.publication) {
+      if (b.data.tool !== 'rewards' || b.publication.action !== 'approve')
+        return c.json({ data: b, requestId: c.get('requestId') });
+      if (b.revision !== revision) throw new CloudError('DRAFT_CHANGED_OR_FROZEN', 409);
+      if (!config.MODULE_PUBLISH_ENABLED || !config.NETWORK_WRITES_ENABLED)
+        throw new CloudError('PUBLISH_UNAVAILABLE', 503);
+      if (b.receipt?.state !== 'finalized' || !b.receipt.hash)
+        return c.json({ data: b, requestId: c.get('requestId') });
+      registered(config, b.publication.publication.deployment);
+      await limited(db, `module-prepare:${actor}`, 20, 60);
+      const proof = await chain.confirm(b.publication, b.receipt.hash);
+      if (
+        proof.state !== 'finalized' ||
+        proof.hash !== b.receipt.hash ||
+        !proof.block ||
+        !proof.blockHash
+      )
+        throw new CloudError('CHAIN_RECHECK_REQUIRED', 503);
+      const prepared = await chain.prepare(b.publication.publication, actor, 'create');
+      if (prepared.nonce <= b.publication.nonce)
+        throw new CloudError('CHAIN_RECHECK_REQUIRED', 503);
+      const intent = moduleIntentSchema.parse({
+        ...prepared,
+        fundingApproval: {
+          id: b.publication.id,
+          nonce: b.publication.nonce,
+          startBlock: b.publication.startBlock,
+          expiresAt: b.publication.expiresAt,
+          hash: proof.hash,
+          block: proof.block,
+          blockHash: proof.blockHash,
+        },
+      });
+      // Advance only from this exact finalized approval; retain its complete public proof in the frozen intent.
+      await db
+        .prepare(
+          "UPDATE module_boxes SET intent_json=?,receipt_state='prepared',tx_hash=NULL,verified_block=NULL,verified_block_hash=NULL WHERE id=? AND owner=? AND state='prepared' AND receipt_state='finalized' AND intent_json=?",
+        )
+        .bind(JSON.stringify(intent), b.id, actor.toLowerCase(), JSON.stringify(b.publication))
+        .run();
+      return c.json({ data: await owned(db, b.id, actor), requestId: c.get('requestId') });
+    }
     if (b.revision !== revision) throw new CloudError('DRAFT_CHANGED_OR_FROZEN', 409);
     const deployment = config.MODULE_DEPLOYMENTS.find(
       (r) => r.current && r.deployment.tool === b.data.tool,
     )?.deployment;
-    if (!config.MODULE_PUBLISH_ENABLED || !deployment)
+    if (
+      !config.MODULE_PUBLISH_ENABLED ||
+      !deployment ||
+      (b.data.tool === 'rewards' && !config.NETWORK_WRITES_ENABLED)
+    )
       throw new CloudError('PUBLISH_UNAVAILABLE', 503);
     await limited(db, `module-prepare:${actor}`, 20, 60);
     const salt = keccak256(crypto.getRandomValues(new Uint8Array(32)));
@@ -208,7 +269,7 @@ export function mountModuleRoutes(app: Hono<AppEnv>, chain: ModuleChain) {
       metadata: b.metadata,
       metadataHash: hash(b.metadata),
     };
-    const intent = await chain.prepare(p, actor, 'create');
+    const intent = await chain.prepare(p, actor, b.data.tool === 'rewards' ? 'approve' : 'create');
     await db
       .prepare(
         "UPDATE module_boxes SET intent_json=?,receipt_state='prepared',state='prepared' WHERE id=? AND owner=? AND revision=? AND state='draft'",
@@ -235,7 +296,7 @@ export function mountModuleRoutes(app: Hono<AppEnv>, chain: ModuleChain) {
       throw new CloudError('CHAIN_RECHECK_REQUIRED', 503);
     await db
       .prepare(
-        "UPDATE module_boxes SET receipt_state=?,tx_hash=COALESCE(?,tx_hash),verified_block=?,verified_block_hash=?,state=CASE WHEN ?='finalized' THEN 'published' ELSE state END WHERE id=? AND receipt_state!='finalized' AND (tx_hash IS NULL OR ?!='unknown')",
+        "UPDATE module_boxes SET receipt_state=?,tx_hash=COALESCE(?,tx_hash),verified_block=?,verified_block_hash=?,state=CASE WHEN ?='finalized' AND ?='create' THEN 'published' ELSE state END WHERE id=? AND receipt_state!='finalized' AND (tx_hash IS NULL OR ?!='unknown')",
       )
       .bind(
         result.state,
@@ -243,6 +304,7 @@ export function mountModuleRoutes(app: Hono<AppEnv>, chain: ModuleChain) {
         result.block ?? null,
         result.blockHash ?? null,
         result.state,
+        b.publication.action,
         b.id,
         result.state,
       )

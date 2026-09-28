@@ -82,11 +82,13 @@ export function knownRow(box: KnownBox, actor: Address | null): WorkspaceBox {
           ? 'Group V2'
           : box.publication.data.tool === 'deliver'
             ? 'Deliver'
-            : box.publication.data.tool === 'milestones'
-              ? 'Milestones'
-              : box.publication.data.tool === 'attend'
-                ? 'Attend'
-                : 'Split',
+            : box.publication.data.tool === 'rewards'
+              ? 'Rewards'
+              : box.publication.data.tool === 'milestones'
+                ? 'Milestones'
+                : box.publication.data.tool === 'attend'
+                  ? 'Attend'
+                  : 'Split',
     source: 'chain',
     created: !!actor && actor.toLowerCase() === p.creator.toLowerCase(),
     joined: false,
@@ -176,6 +178,8 @@ export async function verifyWorkspaceBox(row: WorkspaceBox, actor: Address): Pro
           'challengeNoShow',
           'finalizeNoShow',
           'refundDispute',
+          'claimFor',
+          'reclaimExpired',
         ].includes(a),
       ),
     history:

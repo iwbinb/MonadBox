@@ -26,7 +26,7 @@ export function ModuleBuilderPage({ kind }: { kind?: ModuleData['tool'] }) {
   if (
     !draftId &&
     !kind &&
-    !['split', 'group-split', 'deliver', 'attend', 'milestones'].includes(id ?? '')
+    !['split', 'group-split', 'deliver', 'attend', 'milestones', 'rewards'].includes(id ?? '')
   )
     return (
       <section className="container cloud-page">
@@ -46,9 +46,11 @@ export function ModuleBuilderPage({ kind }: { kind?: ModuleData['tool'] }) {
             ? 'deliver'
             : id === 'milestones'
               ? 'milestones'
-              : id === 'attend'
-                ? 'attend'
-                : 'split')
+              : id === 'rewards'
+                ? 'rewards'
+                : id === 'attend'
+                  ? 'attend'
+                  : 'split')
       }
       draftId={draftId}
     />
@@ -158,6 +160,7 @@ export function ModuleDraftsPage() {
         <Link to="/create/deliver">{t('New delivery escrow', '新建交付托管')}</Link> ·{' '}
         <Link to="/create/attend">{t('New attendance bond', '新建报名押金')}</Link> ·{' '}
         <Link to="/create/milestones">{t('New milestone escrow', '新建分阶段托管')}</Link> ·{' '}
+        <Link to="/create/rewards">{t('New rewards', '新建奖励')}</Link> ·{' '}
         <Link to="/app/modules">{t('Copy a draft to cloud', '复制草稿到云端')}</Link>
       </p>
       {error ? <p role="alert">{error}</p> : null}
@@ -469,12 +472,63 @@ function CloudModule() {
               </p>
             </>
           ) : null}
-          {box.publication && box.state !== 'published' ? (
+          {box.data.tool === 'rewards' && box.publication?.action === 'approve' ? (
+            <p className="notice">
+              {t(
+                'Step 1: approve only the frozen total. This does not publish or fund the rewards. After confirmation, prepare a separate transaction that publishes and funds the complete list.',
+                '第1步：只授权已冻结的总额，不会发布或入金奖励。确认后再准备一笔单独交易，发布并全额入金完整名单。',
+              )}
+            </p>
+          ) : null}
+          {box.data.tool === 'rewards' &&
+          box.publication?.action === 'approve' &&
+          box.receipt?.state === 'finalized' ? (
+            <button
+              className="button primary"
+              disabled={
+                busy ||
+                state.status !== 'ready' ||
+                !state.config.capabilities.payments ||
+                !state.config.capabilities.modulePublishing
+              }
+              onClick={() =>
+                void run(async () =>
+                  setBox(
+                    await api<ModuleBox>(
+                      `/modules/${box.id}/prepare`,
+                      'POST',
+                      { revision: box.revision },
+                      session.csrf,
+                    ),
+                  ),
+                )
+              }
+            >
+              {t('Prepare funded publication', '准备全额入金发布')}
+            </button>
+          ) : null}
+          {box.publication?.fundingApproval ? (
+            <p>
+              {t(
+                'Original approval confirmed; this publication transfers the full frozen amount.',
+                '原授权已确认；本次发布会转入全部冻结金额。',
+              )}{' '}
+              <code>{box.publication.fundingApproval.hash}</code>
+            </p>
+          ) : null}
+          {box.publication &&
+          box.state !== 'published' &&
+          !(box.publication.action === 'approve' && box.receipt?.state === 'finalized') ? (
             <>
               <ModuleFunds
+                key={box.publication.id}
                 publication={box.publication.publication}
                 creation={box.publication}
-                paymentsEnabled={false}
+                paymentsEnabled={
+                  box.data.tool === 'rewards' &&
+                  state.status === 'ready' &&
+                  state.config.capabilities.payments
+                }
                 onCreationChecked={confirm}
               />
               <div className="cloud-card">

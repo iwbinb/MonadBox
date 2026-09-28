@@ -19,6 +19,8 @@ import type { ModuleActionOptions, ModuleSnapshot } from '../../shared/modules/c
 import { journalKey, readRecords, recheckModule, sendModuleAction, terminal } from './journal';
 import type { TransactionRecord } from './journal';
 export const actionLabels: Record<ModuleAction, [string, string]> = {
+  claimFor: ['Claim my reward credit', '领取我的奖励权益'],
+  reclaimExpired: ['Reclaim unclaimed rewards', '回收未领取奖励'],
   register: ['Register with deposit', '支付押金报名'],
   checkIn: ['Submit check-in proof', '提交签到证明'],
   cancelEvent: ['Cancel event', '取消活动'],
@@ -46,6 +48,14 @@ export const actionLabels: Record<ModuleAction, [string, string]> = {
   settle: ['Settle frozen split', '按固定方案结算'],
   withdrawFor: ['Withdraw to my wallet', '提款到我的钱包'],
 };
+export function moduleActionLabels(
+  action: ModuleAction,
+  tool: ModulePublication['data']['tool'],
+): [string, string] {
+  return action === 'create' && tool === 'rewards'
+    ? ['Publish and fund full reward list', '发布并全额入金奖励名单']
+    : actionLabels[action];
+}
 export function moduleError(error: unknown): string {
   const code = error instanceof Error ? error.message : '';
   const messages: Record<string, string> = {
@@ -87,7 +97,7 @@ export function TransactionHistory({
       recheck={onRecheck}
       describe={(r) => ({
         id: r.intent.id,
-        label: t(...actionLabels[r.intent.action]),
+        label: t(...moduleActionLabels(r.intent.action, r.intent.publication.data.tool)),
         title: r.intent.publication.data.title,
         href: '/box/' + r.intent.publication.publicId,
         state: r.state,
@@ -188,15 +198,18 @@ export function ModuleFunds({
   }
   const actions: ModuleAction[] =
     creation && wallet.actor?.toLowerCase() === creation.actor.toLowerCase()
-      ? ['create']
+      ? [creation.action]
       : snapshot && wallet.actor
         ? moduleActions(publication, wallet.actor, snapshot, value)
         : [];
   const unresolved = rows.some((r) => !terminal(r));
+  const requiresPayment = (action: ModuleAction) =>
+    ['approve', 'pay', 'contribute', 'fund', 'register'].includes(action) ||
+    (action === 'create' && publication.data.tool === 'rewards');
   async function check(row: TransactionRecord, hash?: Hex) {
     const version = epoch.current,
       result = await recheckModule(environment, row, hash);
-    if (row.intent.action === 'create' && onCreationChecked)
+    if (creation?.id === row.intent.id && onCreationChecked)
       await onCreationChecked(result.result.hash);
     if (epoch.current !== version) return;
     setRows(result.records);
@@ -382,6 +395,34 @@ export function ModuleFunds({
             ) : null}
           </>
         ) : null}
+        {snapshot && publication.data.tool === 'rewards' ? (
+          <>
+            <p>
+              {t('My listed reward', '名单中我的奖励')}：
+              {formatUnits(BigInt(snapshot.allocation ?? '0'), 6)} AUSD ·{' '}
+              {snapshot.position === 2
+                ? t('Already claimed', '已领取权益')
+                : snapshot.position === 1
+                  ? t('Not claimed', '尚未领取')
+                  : t('Not on this list', '不在此名单')}
+            </p>
+            <p>
+              {t('Unclaimed total', '尚未领取总额')}：{formatUnits(BigInt(snapshot.locked), 6)} AUSD
+              · {t('Claims completed', '已领取人数')}：{snapshot.claimedCount}/
+              {publication.data.recipients.length}
+            </p>
+            <p>
+              {t('Claim deadline', '领取截止')}：
+              {new Date(publication.data.claimDeadline * 1000).toLocaleString()}
+            </p>
+            <p>
+              {t(
+                'Expired reclaim excludes all credit already assigned to recipients. Withdraw credit separately.',
+                '到期回收不包含已归入受益人可领取余额的钱。领取权益后仍须单独提款。',
+              )}
+            </p>
+          </>
+        ) : null}
         {snapshot && publication.data.tool === 'attend' ? (
           <>
             <p>
@@ -509,8 +550,7 @@ export function ModuleFunds({
             disabled={
               busy ||
               unresolved ||
-              (!paymentsEnabled &&
-                ['approve', 'pay', 'contribute', 'fund', 'register'].includes(action)) ||
+              (!paymentsEnabled && requiresPayment(action)) ||
               (['submitDelivery', 'dispute', 'challengeNoShow'].includes(action) &&
                 !evidence.trim()) ||
               (action === 'resolveByAgreement' &&
@@ -523,7 +563,7 @@ export function ModuleFunds({
                 setAck(false);
                 const version = epoch.current;
                 const intent =
-                  action === 'create'
+                  creation && action === creation.action
                     ? creation!
                     : await prepareModuleAction(
                         makeClient(),
@@ -550,12 +590,12 @@ export function ModuleFunds({
             }
           >
             {t('Prepare: ', '准备：')}
-            {t(...actionLabels[action])}
+            {t(...moduleActionLabels(action, publication.data.tool))}
           </button>
         ))}
         {prepared ? (
           <div className="notice">
-            <h3>{t(...actionLabels[prepared.action])}</h3>
+            <h3>{t(...moduleActionLabels(prepared.action, publication.data.tool))}</h3>
             <p>
               Monad Testnet · AUSD · <code>{prepared.publication.deployment.address}</code>
             </p>
@@ -599,11 +639,19 @@ export function ModuleFunds({
             </label>
             <button
               className="button primary"
-              disabled={busy || !ack || !wallet.wallet || !wallet.actor}
+              disabled={
+                busy ||
+                !ack ||
+                !wallet.wallet ||
+                !wallet.actor ||
+                (!paymentsEnabled && requiresPayment(prepared.action))
+              }
               onClick={() =>
                 void run(async () => {
                   const current = epoch.current;
                   const intent = prepared;
+                  if (!paymentsEnabled && requiresPayment(intent.action))
+                    throw Error('ACTION_UNAVAILABLE');
                   let hash: Hex;
                   try {
                     hash = await sendModuleAction(

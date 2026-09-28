@@ -1,3 +1,4 @@
+import { RewardsEditor, RewardsRules } from './RewardsEditor';
 import { MilestoneEditor, MilestoneRules } from './MilestoneEditor';
 import { AttendanceEditor, AttendanceRules } from './AttendanceEditor';
 import { DeliveryEditor, DeliveryRules } from './DeliveryEditor';
@@ -11,6 +12,7 @@ import type { ModuleData } from '../../shared/modules/model';
 import { allocateSplit } from '../../shared/modules/terms';
 import { exportModule } from './drafts';
 export function ModuleRules({ data }: { data: ModuleData }) {
+  if (data.tool === 'rewards') return <RewardsRules data={data} />;
   if (data.tool === 'attend') return <AttendanceRules data={data} />;
   if (data.tool === 'milestones') return <MilestoneRules data={data} />;
   return data.tool === 'deliver' ? <DeliveryRules data={data} /> : <SplitGroupRules data={data} />;
@@ -103,6 +105,14 @@ interface EditorProps {
   onSave: (data: ModuleData) => void;
 }
 export function ModuleEditor(props: EditorProps) {
+  if (props.tool === 'rewards')
+    return (
+      <RewardsEditor
+        busy={props.busy}
+        onSave={props.onSave}
+        initial={props.initial?.tool === 'rewards' ? props.initial : undefined}
+      />
+    );
   if (props.tool === 'milestones')
     return (
       <MilestoneEditor

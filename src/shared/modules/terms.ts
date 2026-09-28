@@ -5,6 +5,7 @@ import { artifact as group } from './generated/GroupEscrowV2';
 import { artifact as attend } from './generated/AttendanceBondV1';
 import { artifact as deliver } from './generated/DeliveryEscrowV1';
 import { artifact as milestones } from './generated/MilestoneEscrowV1';
+import { artifact as rewards } from './generated/RewardsDistributorV1';
 import { moduleDataSchema, modulePublicationSchema } from './model';
 import type {
   ModuleData,
@@ -22,6 +23,7 @@ export const definitions = {
   attend: { artifact: attend, create: 'createEvent', get: 'getEvent', version: 1 },
   deliver: { artifact: deliver, create: 'createOffer', get: 'getOffer', version: 1 },
   milestones: { artifact: milestones, create: 'createOffer', get: 'getOffer', version: 1 },
+  rewards: { artifact: rewards, create: 'createAndFundBatch', get: 'getBatch', version: 1 },
 } as const;
 export const signedModuleNames = {
   deliver: 'DeliveryEscrowV1',
@@ -44,6 +46,14 @@ export function metadataFor(input: ModuleData): string {
   });
 }
 export function termsFor(data: ModuleData) {
+  if (data.tool === 'rewards')
+    return {
+      recipients: data.recipients.map((r) => r.address),
+      amounts: data.recipients.map((r) => BigInt(r.amount)),
+      claimStart: BigInt(data.claimStart),
+      claimDeadline: BigInt(data.claimDeadline),
+      metadataHash: keccak256(stringToHex(metadataFor(data))),
+    };
   if (data.tool === 'milestones')
     return {
       buyer: data.buyer,
@@ -160,6 +170,8 @@ export function validatePublication(input: ModulePublication): ModulePublication
 }
 export function approvalAmount(i: Pick<ModuleIntent, 'publication' | 'amount'>) {
   const d = i.publication.data;
+  if (d.tool === 'rewards')
+    return d.recipients.reduce((sum, r) => sum + BigInt(r.amount), 0n).toString();
   if (d.tool === 'milestones')
     return d.stages.reduce((sum, s) => sum + BigInt(s.amount), 0n).toString();
   return d.tool === 'attend'
@@ -249,6 +261,9 @@ export function moduleCall(
       args = [id, i.evidenceHash];
     } else if (!['register', 'leave', 'cancelEvent'].includes(i.action))
       throw Error('ACTION_UNAVAILABLE');
+  } else if (p.data.tool === 'rewards') {
+    if (i.action === 'claimFor') args = [id, i.actor];
+    else if (i.action !== 'reclaimExpired') throw Error('ACTION_UNAVAILABLE');
   } else if (i.action === 'creditRefund' && p.data.tool === 'group') args = [id, i.actor];
   else if (p.data.tool === 'deliver' || p.data.tool === 'milestones') {
     if (p.data.tool === 'milestones' && !['fund', 'cancelOffer'].includes(i.action)) {

@@ -20,7 +20,7 @@
 - 类型、lint、格式、配置、构建、Worker dry-run通过；本地探针4笔/5断言、Group25笔/3场景、HTTP10断言通过。
 - Codex浏览器390px中文编辑和预览无溢出、无控制台错误；真实本地流程截图在`artifacts/screenshots/milestones-*.png`。
 
-日志在本机`/private/tmp/monadbox-m5-*.log`，远端CI以本次提交对应run为准。M4提交的PR/push CI已成功并记录在M4归档。
+日志在本机`/private/tmp/monadbox-m5-*.log`，提交`83f6ef4`远端PR CI [36421424177](https://github.com/iwbinb/MonadBox/actions/runs/36421424177)与push CI [36421419182](https://github.com/iwbinb/MonadBox/actions/runs/36421419182)均为success。M4提交的PR/push CI已成功并记录在M4归档。
 
 ## 外部与后续
 

@@ -123,6 +123,10 @@ createRoot(root).render(
                 element={groupSurface(<ModuleBuilderPage kind="deliver" />)}
               />
               <Route
+                path="create/rewards"
+                element={groupSurface(<ModuleBuilderPage kind="rewards" />)}
+              />
+              <Route
                 path="create/milestones"
                 element={groupSurface(<ModuleBuilderPage kind="milestones" />)}
               />

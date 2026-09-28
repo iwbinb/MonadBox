@@ -12,6 +12,7 @@ import type { Env } from '../../src/worker/env';
 import type { ModuleChain } from '../../src/shared/modules/chain';
 import type { ModuleBox } from '../../src/shared/modules/model';
 import { moduleIntentSchema } from '../../src/shared/modules/model';
+import { approvalAmount } from '../../src/shared/modules/terms';
 // Isolated test identities, never funded on or connected to a public chain.
 const alice = privateKeyToAccount(toHex(1, { size: 32 })),
   bob = privateKeyToAccount(toHex(2, { size: 32 }));
@@ -56,8 +57,9 @@ const modules: ModuleChain = {
       publication,
       actor,
       action,
-      nonce: 7,
-      startBlock: '100',
+      nonce: publication.data.tool === 'rewards' && action === 'create' ? 9 : 7,
+      startBlock: publication.data.tool === 'rewards' && action === 'create' ? '200' : '100',
+      ...(action === 'approve' ? { amount: approvalAmount({ publication }) } : {}),
       expiresAt: Math.floor(Date.now() / 1000) + 600,
     });
   },
@@ -456,6 +458,7 @@ beforeEach(async () => {
     customMetadata: { namespace: 'monadbox-test' },
   });
   env.MODULES_ENABLED = 'false';
+  env.NETWORK_WRITES_ENABLED = 'false';
   env.MODULE_PUBLISH_ENABLED = 'false';
   env.MODULE_DEPLOYMENTS = '[]';
 });
@@ -996,6 +999,128 @@ describe('versioned module drafts and publication with real isolated D1', () => 
       expect((await b.req('/modules')).status).toBe(503);
     } finally {
       await db.prepare('UPDATE module_schema SET version=1').run();
+    }
+  });
+});
+
+describe('Rewards two-step atomic-funded publication', () => {
+  async function setup() {
+    env.MODULES_ENABLED = 'true';
+    env.MODULE_PUBLISH_ENABLED = 'true';
+    env.NETWORK_WRITES_ENABLED = 'true';
+    env.MODULE_DEPLOYMENTS = JSON.stringify([
+      { current: true, deployment: { ...deployment, tool: 'rewards' } },
+    ]);
+    const b = new Browser();
+    await b.login();
+    const data = {
+      tool: 'rewards',
+      title: 'Fixed rewards',
+      description: 'Public',
+      recipients: [{ address: bob.address, amount: '101' }],
+      claimStart: 1000,
+      claimDeadline: 4000000000,
+    };
+    const response = await b.req(
+      '/modules',
+      'POST',
+      { data },
+      { 'Idempotency-Key': crypto.randomUUID() },
+    );
+    expect(response.status).toBe(200);
+    const row = (await response.json()).data as ModuleBox;
+    const path = '/modules/' + row.id;
+    const prepare = () => b.req(path + '/prepare', 'POST', { revision: 1 });
+    const read = async () => (await (await b.req(path)).json()).data as ModuleBox;
+    const confirm = () => b.req(path + '/confirm', 'POST', { hash });
+    const first = await prepare();
+    expect(first.status, await first.clone().text()).toBe(200);
+    const approval = (await first.json()).data as ModuleBox;
+    return { b, data, row, path, prepare, read, confirm, approval };
+  }
+  it('keeps approval private, freezes rules and uses a fresh creation nonce while retaining the proof', async () => {
+    const x = await setup();
+    expect(x.approval.publication?.action).toBe('approve');
+    expect(x.approval.publication?.amount).toBe('101');
+    outcome = { state: 'unknown', hash };
+    await x.confirm();
+    expect((await (await x.prepare()).json()).data.publication).toEqual(x.approval.publication);
+    expect((await x.b.req(x.path, 'PATCH', { revision: 1, data: x.data })).status).toBe(409);
+    outcome = { state: 'finalized', hash, block: '105', blockHash: hash };
+    await x.confirm();
+    expect((await x.read()).state).toBe('prepared');
+    expect((await x.b.req('/public/modules/' + x.row.publicId)).status).toBe(404);
+    const response = await x.prepare();
+    expect(response.status, await response.clone().text()).toBe(200);
+    const next = (await response.json()).data as ModuleBox;
+    expect(next.publication!.action).toBe('create');
+    expect(next.publication!.nonce).toBe(9);
+    expect(next.publication!.publication).toEqual(x.approval.publication!.publication);
+    expect(next.publication!.fundingApproval).toMatchObject({
+      id: x.approval.publication!.id,
+      nonce: 7,
+      hash,
+      block: '105',
+      blockHash: hash,
+    });
+    expect(next.receipt).toEqual({ state: 'prepared' });
+    outcome = { state: 'unknown' };
+    await x.confirm();
+    expect((await (await x.prepare()).json()).data.publication).toEqual(next.publication);
+    outcome = { state: 'finalized', hash, block: '205', blockHash: hash };
+    await x.confirm();
+    expect((await x.read()).state).toBe('published');
+    expect((await x.b.req('/public/modules/' + x.row.publicId)).status).toBe(200);
+  });
+  it('requires fresh canonical approval and capability checks without discarding original evidence', async () => {
+    const x = await setup();
+    outcome = { state: 'finalized', hash, block: '105', blockHash: hash };
+    await x.confirm();
+    const approved = await x.read();
+    outcome = { state: 'unknown' };
+    expect((await x.prepare()).status).toBe(503);
+    expect(await x.read()).toEqual(approved);
+    outcome = { state: 'finalized', hash, block: '105', blockHash: hash };
+    env.NETWORK_WRITES_ENABLED = 'false';
+    expect((await x.prepare()).status).toBe(503);
+    expect(await x.read()).toEqual(approved);
+    env.NETWORK_WRITES_ENABLED = 'true';
+    expect((await x.b.req(x.path + '/prepare', 'POST', { revision: 2 })).status).toBe(409);
+    expect(
+      (await x.b.req(x.path + '/prepare', 'POST', { revision: 1 }, { 'X-CSRF-Token': 'bad' }))
+        .status,
+    ).toBe(403);
+    const outsider = new Browser();
+    await outsider.login(bob);
+    expect((await outsider.req(x.path + '/prepare', 'POST', { revision: 1 })).status).toBe(404);
+    const original = modules.prepare.bind(modules);
+    vi.spyOn(modules, 'prepare').mockImplementation(async (...args) => ({
+      ...(await original(...args)),
+      nonce: 7,
+    }));
+    expect((await x.prepare()).status).toBe(503);
+    expect(await x.read()).toEqual(approved);
+  });
+  it('concurrent second-step prepares retain one intent and reject corrupted proof linkage', async () => {
+    const x = await setup();
+    outcome = { state: 'finalized', hash, block: '105', blockHash: hash };
+    await x.confirm();
+    const responses = await Promise.all([x.prepare(), x.prepare()]);
+    expect(responses.map((r) => r.status)).toEqual([200, 200]);
+    const [one, two] = await Promise.all(
+      responses.map(async (r) => (await r.json()).data as ModuleBox),
+    );
+    expect(one!.publication).toEqual(two!.publication);
+    const intent = one!.publication!;
+    for (const patch of [{ nonce: intent.nonce }, { id: intent.id }, { block: '201' }]) {
+      await db
+        .prepare('UPDATE module_boxes SET intent_json=? WHERE id=?')
+        .bind(
+          JSON.stringify({ ...intent, fundingApproval: { ...intent.fundingApproval, ...patch } }),
+          x.row.id,
+        )
+        .run();
+      expect((await x.b.req(x.path)).status).toBe(503);
     }
   });
 });

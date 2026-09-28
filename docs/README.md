@@ -11,6 +11,7 @@
 | [交付托管](engineering/DELIVER.md) | Deliver双方资金操作、双签协议、私密附件及恢复 |
 | [报名签到](engineering/ATTEND.md) | Attend押金、签到证明、个人申诉与退出 |
 | [分阶段托管](engineering/MILESTONES.md) | 逐阶段交付、全部剩余款终止、双签与阶段附件 |
+| [奖励领取](engineering/REWARDS.md) | 固定公开名单、准确授权、全额入金发布、领取与到期回收 |
 | [测试网实验室](engineering/TESTNET_LAB.md) | 独立探针、钱包操作和交易恢复 |
 | [部署](engineering/DEPLOYMENT.md) | 单 Worker、生产/Preview、能力开关和验证 |
 | [架构](engineering/ARCHITECTURE.md) | 当前模块、数据流和实现边界 |

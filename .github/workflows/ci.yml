@@ -54,6 +54,7 @@ jobs:
             artifacts/local-chain.json
             artifacts/group-local-chain.json
             artifacts/cloud-http.json
+            artifacts/rewards-gas-*.json
             artifacts/source.tar
           if-no-files-found: ignore
           retention-days: 7

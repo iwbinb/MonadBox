@@ -111,6 +111,7 @@ try {
       ['deliver', 'DeliveryEscrowV1', 1],
       ['attend', 'AttendanceBondV1', 1],
       ['milestones', 'MilestoneEscrowV1', 1],
+      ['rewards', 'RewardsDistributorV1', 1],
     ]) {
       const compiled = JSON.parse(readFileSync(`artifacts/modules/${name}.json`, 'utf8'));
       const tx = await wallet.deployContract({

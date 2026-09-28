@@ -118,7 +118,7 @@ export function ToolPage() {
         </section>
         <aside className="rule-panel">
           <span className="status-label">
-            {['group', 'split', 'deliver', 'attend', 'milestones'].includes(tool.id)
+            {['group', 'split', 'deliver', 'attend', 'milestones', 'rewards'].includes(tool.id)
               ? t('Local drafts available', '可创建本地草稿')
               : t('Not open yet', '尚未开放')}{' '}
             · {tool.stage}
@@ -140,6 +140,10 @@ export function ToolPage() {
           ) : tool.id === 'milestones' ? (
             <Link className="button primary" to="/create/milestones">
               {t('Prepare milestone escrow', '创建分阶段托管')}
+            </Link>
+          ) : tool.id === 'rewards' ? (
+            <Link className="button primary" to="/create/rewards">
+              {t('Prepare funded rewards', '创建入金奖励')}
             </Link>
           ) : tool.id === 'attend' ? (
             <Link className="button primary" to="/create/attend">

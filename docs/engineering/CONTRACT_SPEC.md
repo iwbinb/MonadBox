@@ -71,9 +71,9 @@ checkIn 签名绑定固定 signer、chainId、contract、schemaVersion、boxId�
 
 ### Rewards
 
-`createAndFundBatch(asset, recipients[], amounts[], claimStart, claimDeadline, salt)`；`claimFor(batchId, recipient)`；`reclaimExpired(batchId)`。
+`createAndFundBatch(terms,salt)`；`claimFor(batchId, recipient)`；`reclaimExpired(batchId)`。资产固定在部署时；terms包含recipients、amounts、claimStart、claimDeadline与metadataHash。
 
-创建时链上检查名单唯一性和总和，并验证实际收到总额；实现可要求地址预排序，重复即 revert。不可用 offchain total 替代链上总和。claim 归属的 credit 永不计入 reclaimExpired；expiry 前不得撤回。
+创建时链上检查1–100个地址严格递增、不重复、金额为正并逐项求和，验证实际收到总额，原子完成建单与入金。不可用 offchain total 替代链上总和。claim 归属的 credit 永不计入 reclaimExpired；expiry 前不得撤回。原创建者独占到期回收权，暂停新建不阻已有领取或退出。操作说明与Gas边界见[Rewards](REWARDS.md)。
 
 ## 5. 事件约定
 

@@ -8,6 +8,7 @@
 | `src/DeliveryEscrowV1.sol` | 全额预付、交付/验收、双签分配及到期退款 | 本地完整流程验证，真实双方钱包另验 |
 | `src/AttendanceBondV1.sol` | 报名押金、签名签到、个人申诉、缺席分配与取消退款 | 普通EOA，真实活动及签到方另验 |
 | `src/MilestoneEscrowV1.sol` | 2–10阶段全额预存、逐阶段释放及全部剩余款终止 | 已释放款不回滚，真实双方流程另验 |
+| `src/RewardsDistributorV1.sol` | 1–100个固定奖励、原子全额入金、一次领取与到期剩余款回收 | 本地最大名单Gas验证，真实网络费用另验 |
 | `src/M0CProbe.sol` | 实验室限额入金与原地址退款 | 独立技术探针，不代替业务托管 |
 | `test/MockToken.sol` | 本地资产成功/失败测试 | 仅本地 fixture |
 

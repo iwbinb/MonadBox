@@ -10,6 +10,7 @@ export const modules = [
   'DeliveryEscrowV1',
   'AttendanceBondV1',
   'MilestoneEscrowV1',
+  'RewardsDistributorV1',
 ];
 export function compileModules() {
   if (!solc.version().startsWith('0.8.28+')) throw Error('Expected pinned solc 0.8.28');

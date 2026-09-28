@@ -95,6 +95,10 @@ export interface ModuleSnapshot {
   checkinNonce?: string;
   currentStage?: number;
   released?: string;
+  allocation?: string;
+  claimedCount?: number;
+  claimedAmount?: string;
+  reclaimed?: boolean;
 }
 export async function moduleSnapshot(
   client: ChainClient,
@@ -148,6 +152,10 @@ export async function moduleSnapshot(
     settledAt?: bigint;
     currentStage?: bigint;
     released?: bigint;
+    totalAmount?: bigint;
+    claimedAmount?: bigint;
+    claimedCount?: number;
+    reclaimed?: boolean;
     evidenceHash?: Hex;
     reasonHash?: Hex;
   };
@@ -217,6 +225,37 @@ export async function moduleSnapshot(
     )
       throw Error('INTEGRITY_ERROR');
   }
+  let rewards: Partial<ModuleSnapshot> = {};
+  if (p.data.tool === 'rewards') {
+    const [allocation, claimed] = await Promise.all([
+      read('allocation', [id, actor]),
+      read('claimed', [id, actor]),
+    ]);
+    const total = BigInt(approvalAmount({ publication: p })!);
+    if (
+      r.totalAmount !== total ||
+      typeof r.claimedAmount !== 'bigint' ||
+      r.claimedAmount > total ||
+      BigInt(String(locked)) !== (r.reclaimed ? 0n : total - r.claimedAmount)
+    )
+      throw Error('INTEGRITY_ERROR');
+    rewards = {
+      allocation: String(allocation),
+      position: claimed ? 2 : BigInt(String(allocation)) > 0n ? 1 : 0,
+      claimedCount: Number(r.claimedCount),
+      claimedAmount: String(r.claimedAmount),
+      reclaimed: !!r.reclaimed,
+    };
+    state = r.reclaimed
+      ? 'RECLAIMED'
+      : r.claimedAmount === total
+        ? 'FULLY_CLAIMED'
+        : Number(block.timestamp) >= p.data.claimDeadline
+          ? 'CLAIM_EXPIRED'
+          : Number(block.timestamp) < p.data.claimStart
+            ? 'UPCOMING'
+            : 'CLAIM_OPEN';
+  }
   let attendance: Partial<ModuleSnapshot> = {};
   if (p.data.tool === 'attend') {
     const order = attendanceOrderId(id, participant),
@@ -281,6 +320,7 @@ export async function moduleSnapshot(
     blockHash: block.hash,
     timestamp: Number(block.timestamp),
     ...attendance,
+    ...rewards,
   };
 }
 export function moduleActions(
@@ -297,6 +337,23 @@ export function moduleActions(
     return actions;
   }
   const d = p.data;
+  if (d.tool === 'rewards') {
+    if (
+      s.position === 1 &&
+      s.timestamp >= d.claimStart &&
+      s.timestamp < d.claimDeadline &&
+      !s.reclaimed
+    )
+      actions.push('claimFor');
+    if (
+      same(actor, p.creator) &&
+      s.timestamp >= d.claimDeadline &&
+      BigInt(s.locked) > 0n &&
+      !s.reclaimed
+    )
+      actions.push('reclaimExpired');
+    return actions;
+  }
   if (d.tool === 'attend') {
     const now = s.timestamp,
       owns = s.participant && same(actor, s.participant),
@@ -394,7 +451,31 @@ export async function prepareModuleAction(
   ]);
   if (code && code !== '0x') throw Error('EOA_REQUIRED');
   let currentStage = 0;
-  if (action !== 'create') {
+  const rewardApproval = p.data.tool === 'rewards' && action === 'approve';
+  if (rewardApproval) {
+    if (!same(actor, p.creator)) throw Error('WRONG_ACCOUNT');
+    const [paused, balance] = await Promise.all([
+      client.readContract({
+        address: p.deployment.address,
+        abi: moduleAbi('rewards'),
+        functionName: 'intakePaused',
+      }),
+      client.readContract({
+        address: TOKEN,
+        abi: erc20Abi,
+        functionName: 'balanceOf',
+        args: [actor],
+      }),
+    ]);
+    if (
+      paused ||
+      p.data.tool !== 'rewards' ||
+      Number(block.timestamp) >= p.data.claimDeadline ||
+      balance < BigInt(approvalAmount({ publication: p })!)
+    )
+      throw Error('ACTION_UNAVAILABLE');
+  }
+  if (action !== 'create' && !rewardApproval) {
     const snapshot = await moduleSnapshot(client, p, actor, options.participant);
     currentStage = snapshot.currentStage ?? 0;
     if (
@@ -414,7 +495,8 @@ export async function prepareModuleAction(
       : action === 'approve' ||
           action === 'fund' ||
           action === 'contribute' ||
-          action === 'register'
+          action === 'register' ||
+          (p.data.tool === 'rewards' && action === 'create')
         ? approvalAmount({ publication: p })
         : undefined;
   const i = moduleIntentSchema.parse({
@@ -514,6 +596,22 @@ function eventMatches(
         );
       case 'settle':
         return event.eventName === 'GroupSettled' && typeof a.amount === 'bigint' && a.amount > 0n;
+      case 'claimFor':
+        return (
+          p.data.tool === 'rewards' &&
+          event.eventName === 'RewardClaimed' &&
+          addressMatches('recipient', i.actor) &&
+          a.amount ===
+            BigInt(p.data.recipients.find((r) => same(r.address, i.actor))?.amount ?? '0')
+        );
+      case 'reclaimExpired':
+        return (
+          p.data.tool === 'rewards' &&
+          event.eventName === 'ExpiredReclaimed' &&
+          addressMatches('creator', p.creator) &&
+          typeof a.amount === 'bigint' &&
+          a.amount > 0n
+        );
       case 'withdrawFor':
         return (
           event.eventName === 'Withdrawal' &&

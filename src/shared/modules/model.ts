@@ -149,17 +149,38 @@ export const milestonesSchema = z
       d.stages.reduce((sum, s) => sum + BigInt(s.amount), 0n) <= MAX_UINT256,
     'Invalid parties or total / 双方地址或总额无效',
   );
+export const rewardsSchema = z
+  .strictObject({
+    tool: z.literal('rewards'),
+    ...common,
+    recipients: z
+      .array(z.strictObject({ address: addressSchema, amount: amountSchema }))
+      .min(1)
+      .max(100),
+    claimStart: timeSchema,
+    claimDeadline: timeSchema,
+  })
+  .refine(
+    (d) =>
+      d.claimStart < d.claimDeadline &&
+      d.recipients.every(
+        (r, n) => n === 0 || BigInt(r.address) > BigInt(d.recipients[n - 1]!.address),
+      ) &&
+      d.recipients.reduce((sum, r) => sum + BigInt(r.amount), 0n) <= MAX_UINT256,
+    'Reward addresses must be unique and sorted, with valid total and times / 地址须唯一并排序，总额与时间有效',
+  );
 export const moduleDataSchema = z.discriminatedUnion('tool', [
   splitSchema,
   groupV2Schema,
   deliverySchema,
   attendanceSchema,
   milestonesSchema,
+  rewardsSchema,
 ]);
 export type ModuleData = z.infer<typeof moduleDataSchema>;
 export const moduleDeploymentSchema = z
   .strictObject({
-    tool: z.enum(['split', 'group', 'deliver', 'attend', 'milestones']),
+    tool: z.enum(['split', 'group', 'deliver', 'attend', 'milestones', 'rewards']),
     chainId: z.literal(10143),
     version: z.number().int(),
     address: addressSchema,
@@ -187,6 +208,8 @@ export const modulePublicationSchema = z.strictObject({
 });
 export type ModulePublication = z.infer<typeof modulePublicationSchema>;
 export const moduleActionSchema = z.enum([
+  'claimFor',
+  'reclaimExpired',
   'create',
   'approve',
   'pay',
@@ -258,6 +281,15 @@ export const checkInSchema = z
   })
   .refine((p) => p.issuedAt < p.deadline, 'Invalid check-in expiry');
 export type CheckInProof = z.infer<typeof checkInSchema>;
+export const fundingApprovalSchema = z.strictObject({
+  id: z.string().uuid(),
+  nonce: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  startBlock: z.string().regex(/^\d+$/),
+  expiresAt: timeSchema,
+  hash: hashSchema,
+  block: z.string().regex(/^\d+$/),
+  blockHash: hashSchema,
+});
 export const moduleIntentSchema = z.strictObject({
   id: z.string().uuid(),
   publication: modulePublicationSchema,
@@ -271,6 +303,7 @@ export const moduleIntentSchema = z.strictObject({
   agreement: agreementSchema.optional(),
   calldataHash: hashSchema.optional(),
   stageIndex: z.number().int().min(0).max(9).optional(),
+  fundingApproval: fundingApprovalSchema.optional(),
   nonce: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
   startBlock: z.string().regex(/^\d+$/),
   expiresAt: timeSchema,
