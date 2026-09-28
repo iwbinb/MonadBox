@@ -1,20 +1,38 @@
-# MonadBox 文档索引
+# 文档导航
 
-M1-B 更新：PR #5已合并，云端登录、草稿、发布和分享已实现代码；本批补交易类型核验与原hash恢复保护，见[M1-B验收第9节](planning/M1-B_ACCEPTANCE.md#9-pr-5审查修复)。远端D1与真实交易验收后置。M1-C资金交互尚未开始，主网与业务收款保持关闭。
+先读[总计划](planning/DEVELOPMENT_PLAN.md)，再按本次任务读取对应规格。进度、下一步和阻塞项只在总计划维护；历史报告不作为当前执行指令。
 
-## 当前入口
+## 当前说明
 
-| 文档 | 内容 |
+| 文档 | 用途 |
 | --- | --- |
-| [全阶段开发计划](planning/DEVELOPMENT_PLAN.md) | M0至M7，M1分批任务与当前状态 |
-| [M1-B操作/部署/API](engineering/M1-B_GROUP.md) | SIWE、D1-only配置、不可变发布、匿名页面与恢复 |
-| [M1-B验收](planning/M1-B_ACCEPTANCE.md) | 本次实际测试、证据、未执行事项 |
-| [M1-A草稿说明](engineering/M1-A_GROUP.md) | 原有本地草稿和导入/导出 |
-| [M0-C实验室](engineering/M0-C_LAB.md) | 独立测试探针、钱包和恢复 |
-| [Cloudflare发布](engineering/DEPLOYMENT.md) | 一个Worker、Git分支与发布命令；云端新增设置以M1-B说明为准 |
+| [交付与演示包](engineering/DELIVERY_PACKAGE.md) | 复现、六工具验收矩阵、录像、故障退出与外部待办 |
+| [Group](engineering/GROUP.md) | 本地草稿、云端登录、发布、恢复、实际 API 和 D1 配置 |
+| [版本化支付工具](engineering/MODULES.md) | Split、Group V2、冻结发布、分账、旧版恢复和配置 |
+| [交付托管](engineering/DELIVER.md) | Deliver双方资金操作、双签协议、私密附件及恢复 |
+| [报名签到](engineering/ATTEND.md) | Attend押金、签到证明、个人申诉与退出 |
+| [分阶段托管](engineering/MILESTONES.md) | 逐阶段交付、全部剩余款终止、双签与阶段附件 |
+| [奖励领取](engineering/REWARDS.md) | 固定公开名单、准确授权、全额入金发布、领取与到期回收 |
+| [测试网实验室](engineering/TESTNET_LAB.md) | 独立探针、钱包操作和交易恢复 |
+| [部署](engineering/DEPLOYMENT.md) | 单 Worker、生产/Preview、能力开关和验证 |
+| [架构](engineering/ARCHITECTURE.md) | 当前模块、数据流和实现边界 |
+| [合约目录](../contracts/README.md) | 合约职责、编译和本地验证 |
 
-[产品规格](product/PRODUCT_SPEC.md) · [资金规则](product/FUNDS_AND_STATES.md) · [UI规格](design/UX_UI_SPEC.md) · [架构](engineering/ARCHITECTURE.md) · [数据/API目标](engineering/DATA_AND_API.md) · [合约规格](engineering/CONTRACT_SPEC.md) · [安全](engineering/SECURITY.md) · [决策与门禁](planning/DECISIONS_AND_GATES.md) · [来源与复用](planning/SOURCES_AND_PROVENANCE.md)
+## 设计与约束
 
-历史验收：[M0-A](planning/M0-A_ACCEPTANCE.md) · [M0-B](planning/M0-B_ACCEPTANCE.md) · [M0-C](planning/M0-C_ACCEPTANCE.md) · [M1-A](planning/M1-A_ACCEPTANCE.md)。历史报告记录当时状态，不倒写当时未执行的测试；最新状态见全阶段表和本批记录。
+| 文档 | 用途 |
+| --- | --- |
+| [产品规格](product/PRODUCT_SPEC.md) | 六工具的用户、流程与产品范围 |
+| [资金与状态](product/FUNDS_AND_STATES.md) | 本金守恒、角色、时间与退出权 |
+| [合约规格](engineering/CONTRACT_SPEC.md) | 目标合约接口与权限 |
+| [数据与 API 目标](engineering/DATA_AND_API.md) | 分阶段落地的总体模型；实际 Group API 以当前说明为准 |
+| [UI 规格](design/UX_UI_SPEC.md) | 页面、双语、移动布局与错误提示 |
+| [安全](engineering/SECURITY.md) | 威胁、签名、资金与恢复要求 |
+| [决策与放行条件](planning/DECISIONS_AND_GATES.md) | 已决定的规则与尚未完成的外部验收 |
+| [来源与复用](planning/SOURCES_AND_PROVENANCE.md) | 官方资料及历史研究、复用许可边界 |
 
-Box是工具实例；Order是参与者经济关系；Intent不是交易成功证明；Credit是合约内可领取款，Withdrawal才实际转出。Production是网站发布环境，不等于Mainnet。SIWE仅建立网站会话，不能代替资金签名。Anvil/Mock和截图不证明真实测试网交易。
+## 历史证据
+
+[验收归档](archive/README.md) 保存各阶段实际记录和只读 RPC 证据。新的阶段记录在阶段完成时新增，不为日常进度重复创建文档。
+
+术语：Box 是工具实例；Order 是参与者的经济关系；Intent 是待执行意图；credit 是合约内可领取款，withdrawal 才实际转出。网站部署、本地测试和真实网络验收分别记录。

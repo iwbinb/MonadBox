@@ -1,6 +1,6 @@
 # 合约接口与账务规格
 
-M0-A v1.0 · 仅设计，不包含可部署 Solidity 实现或审计结论。
+当前资金接口规格；对应实现见contracts/src，独立安全审计和真实部署验收另行执行。
 
 ## 1. 模块与版本
 
@@ -61,19 +61,19 @@ SplitMath 使用全精度 mulDiv 与相应余数计算，禁止乘法溢出。�
 
 `createOffer(terms, salt)`；`fund`；`submitDelivery(evidenceHash)`；`accept`；`dispute(reasonHash)`；`refundBySeller`；`settleAfterReview`；`refundAfterMissingDelivery`；`resolveByAgreement(allocations, nonce, deadline, signatures)`；`refundAfterDisputeTimeout`。
 
-Milestones 上述动作额外绑定 currentStage；事件必须有 stageIndex。任何终止动作仅处理尚未释放总额。工作时钟按资金规则启动，不能通过重复 submit 延期。
+Milestones 除fund/cancelOffer外的阶段动作额外接收`stageIndex`并与currentStage核对；协议内亦绑定该字段，事件携带实际执行阶段。任何终止动作仅处理尚未释放总额。工作时钟按资金规则启动，不能通过重复submit延期。实现与文件说明见[Milestones](MILESTONES.md)。
 
 ### Attend
 
-`createEvent`；`register`；`leave`；`checkIn(attendee, issuedAt, nonce, signature)`；`cancelEvent`；`challengeNoShow`；`finalizeNoShow(attendee)`；`resolveByAgreement`；`refundAfterDisputeTimeout`；`creditRefund(attendee)`。
+`createEvent(terms,salt)`；`register(boxId)`；`leave(boxId)`；`checkIn(proof,signature)`；`cancelEvent(boxId)`；`challengeNoShow(boxId,reasonHash)`；`finalizeNoShow(boxId,attendee)`；`refundDispute(boxId,attendee)`；`resolveByAgreement(agreement,participantSignature,organizerSignature)`；`refundAfterDisputeTimeout(boxId,attendee)`；`creditRefund(boxId,attendee)`。
 
-checkIn 签名绑定固定 signer、chainId、contract、boxId、attendee、有效期、nonce；不使用易伪造的静态二维码作为提款依据。领取签名需按原参加者地址付款。每人的争议不阻塞其他人处理。
+checkIn 签名绑定固定 signer、chainId、contract、schemaVersion、boxId、termsHash、attendee、issuedAt、deadline、nonce；不使用静态二维码作为提款依据。退款归原参加者，双签需要参加者与组织者签署，扣款只归固定罚款受益人。每人的争议不阻塞其他人处理。具体操作见[Attend](ATTEND.md)。
 
 ### Rewards
 
-`createAndFundBatch(asset, recipients[], amounts[], claimStart, claimDeadline, salt)`；`claimFor(batchId, recipient)`；`reclaimExpired(batchId)`。
+`createAndFundBatch(terms,salt)`；`claimFor(batchId, recipient)`；`reclaimExpired(batchId)`。资产固定在部署时；terms包含recipients、amounts、claimStart、claimDeadline与metadataHash。
 
-创建时链上检查名单唯一性和总和，并验证实际收到总额；实现可要求地址预排序，重复即 revert。不可用 offchain total 替代链上总和。claim 归属的 credit 永不计入 reclaimExpired；expiry 前不得撤回。
+创建时链上检查1–100个地址严格递增、不重复、金额为正并逐项求和，验证实际收到总额，原子完成建单与入金。不可用 offchain total 替代链上总和。claim 归属的 credit 永不计入 reclaimExpired；expiry 前不得撤回。原创建者独占到期回收权，暂停新建不阻已有领取或退出。操作说明与Gas边界见[Rewards](REWARDS.md)。
 
 ## 5. 事件约定
 

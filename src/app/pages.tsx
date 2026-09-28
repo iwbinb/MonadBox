@@ -76,8 +76,8 @@ export function HomePage() {
       <div className="notice">
         <p>
           {t(
-            'Group drafts are now available on this browser. On-chain publishing and business payments are not enabled. Wallet testing remains separate in the lab.',
-            '成团收款现可创建本地草稿；链上发布和业务付款仍未开放，钱包测试保留在独立实验室中。',
+            'Group, Split and Deliver drafts are available in this browser. Publishing and business payments depend on the capabilities enabled in this environment.',
+            '本浏览器支持成团、分账与交付托管草稿；发布和业务付款以当前环境已开放能力为准。',
           )}
         </p>
         <Link to="/status">
@@ -118,7 +118,7 @@ export function ToolPage() {
         </section>
         <aside className="rule-panel">
           <span className="status-label">
-            {tool.id === 'group'
+            {['group', 'split', 'deliver', 'attend', 'milestones', 'rewards'].includes(tool.id)
               ? t('Local drafts available', '可创建本地草稿')
               : t('Not open yet', '尚未开放')}{' '}
             · {tool.stage}
@@ -128,6 +128,26 @@ export function ToolPage() {
           {tool.id === 'group' ? (
             <Link className="button primary" to="/create/group">
               {t('Prepare a group draft', '创建成团草稿')}
+            </Link>
+          ) : tool.id === 'split' ? (
+            <Link className="button primary" to="/create/split">
+              {t('Prepare a split draft', '创建分账草稿')}
+            </Link>
+          ) : tool.id === 'deliver' ? (
+            <Link className="button primary" to="/create/deliver">
+              {t('Prepare delivery escrow', '创建交付托管')}
+            </Link>
+          ) : tool.id === 'milestones' ? (
+            <Link className="button primary" to="/create/milestones">
+              {t('Prepare milestone escrow', '创建分阶段托管')}
+            </Link>
+          ) : tool.id === 'rewards' ? (
+            <Link className="button primary" to="/create/rewards">
+              {t('Prepare funded rewards', '创建入金奖励')}
+            </Link>
+          ) : tool.id === 'attend' ? (
+            <Link className="button primary" to="/create/attend">
+              {t('Prepare attendance bond', '创建报名押金')}
             </Link>
           ) : (
             <button className="button primary" disabled>
@@ -140,52 +160,16 @@ export function ToolPage() {
               '此工具页不请求业务签名或转账；测试网钱包操作在独立实验室进行。',
             )}
           </p>
+          {tool.id === 'group' ? (
+            <p>
+              <Link to="/create/group-split">
+                {t('Create a group with fixed split recipients', '创建固定多人分账的成团')}
+              </Link>
+            </p>
+          ) : null}
           <Link to="/help/refunds">{t('Review all refund rules', '查看全部退款规则')}</Link>
         </aside>
       </div>
-    </div>
-  );
-}
-export function DashboardPage() {
-  const { t } = useApp();
-  const [tab, setTab] = useState('created');
-  return (
-    <div className="container workspace-page">
-      <div className="page-heading">
-        <div>
-          <h1>{t('My boxes', '我的 Box')}</h1>
-          <p>
-            {t(
-              'Your shared workspace for payments, returns and next steps.',
-              '统一查看收付款、退款与待处理事项。',
-            )}
-          </p>
-        </div>
-        <Link className="button secondary" to="/app/group-drafts">
-          {t('Group drafts', '成团草稿')}
-          <Arrow />
-        </Link>
-      </div>
-      <div className="tabs" aria-label={t('Box views', 'Box 视图')}>
-        {[
-          ['created', t('Created by me', '我创建的')],
-          ['joined', t('Joined by me', '我参与的')],
-          ['claim', t('To claim', '待领取')],
-        ].map(([key, label]) => (
-          <button key={key} aria-pressed={tab === key} onClick={() => setTab(key!)}>
-            {label}
-          </button>
-        ))}
-      </div>
-      <Unavailable
-        title={
-          tab === 'created'
-            ? t('Your next project starts here', '从这里开始你的下一个项目')
-            : tab === 'joined'
-              ? t('No participation data yet', '尚无参与记录')
-              : t('No claim data yet', '尚无领取记录')
-        }
-      />
     </div>
   );
 }
@@ -279,7 +263,11 @@ export function StatusPage() {
         </div>
         <div>
           <dt>{t('Business payments', '业务付款')}</dt>
-          <dd>{t('Disabled', '未开放')}</dd>
+          <dd>
+            {state.status === 'ready' && state.config.capabilities.payments
+              ? t('Test assets; explicit signatures', '测试资产；逐笔明确签名')
+              : t('Disabled', '未开放')}
+          </dd>
         </div>
         <div>
           <dt>{t('Testnet wallet lab', '测试网钱包实验室')}</dt>
@@ -301,13 +289,13 @@ export function StatusPage() {
         </div>
         <div>
           <dt>{t('Deployed business contracts', '已部署业务合约')}</dt>
-          <dd>{t('None', '无')}</dd>
+          <dd>{t('Public deployment acceptance pending', '公开部署验收待完成')}</dd>
         </div>
         <div>
           <dt>{t('Remote storage', '远程存储')}</dt>
           <dd>
             {state.status === 'ready'
-              ? state.config.storageEnabled
+              ? state.config.storageEnabled || state.config.capabilities.cloudGroups
                 ? t('Configured; see API health', '已配置，请核对接口健康状态')
                 : t('Disabled until bindings are verified', '绑定验收前保持关闭')
               : t('Unconfirmed', '尚未确认')}

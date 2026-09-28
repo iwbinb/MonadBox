@@ -7,7 +7,7 @@ try {
   for (let i = 0; i < 100; i++) {
     if (server.exitCode !== null) throw Error('Local cloud test server exited');
     try {
-      const r = await fetch('http://127.0.0.1:8789/api/v1/health');
+      const r = await fetch('http://127.0.0.1:18889/api/v1/health');
       if (r.ok) {
         ready = true;
         break;

@@ -1,3 +1,4 @@
+import { fileDigest } from '../../src/shared/modules/files';
 import { beforeAll, afterAll, beforeEach, describe, it, expect, vi } from 'vitest';
 import { Miniflare, convertV4MiniflareOptions } from 'miniflare';
 import { readFile } from 'node:fs/promises';
@@ -8,6 +9,10 @@ import type { CloudChain, ReceiptResult } from '../../src/shared/cloud/chain';
 import { GROUP_ASSET, newGroupFields, validateGroupFields } from '../../src/shared/group/draft';
 import type { CloudBox, SessionInfo } from '../../src/shared/cloud/model';
 import type { Env } from '../../src/worker/env';
+import type { ModuleChain } from '../../src/shared/modules/chain';
+import type { ModuleBox } from '../../src/shared/modules/model';
+import { moduleIntentSchema } from '../../src/shared/modules/model';
+import { approvalAmount } from '../../src/shared/modules/terms';
 // Isolated test identities, never funded on or connected to a public chain.
 const alice = privateKeyToAccount(toHex(1, { size: 32 })),
   bob = privateKeyToAccount(toHex(2, { size: 32 }));
@@ -45,7 +50,286 @@ const chain: CloudChain = {
     };
   },
 };
-const app = createCloudRouter(chain);
+const modules: ModuleChain = {
+  async prepare(publication, actor, action) {
+    return moduleIntentSchema.parse({
+      id: crypto.randomUUID(),
+      publication,
+      actor,
+      action,
+      nonce: publication.data.tool === 'rewards' && action === 'create' ? 9 : 7,
+      startBlock: publication.data.tool === 'rewards' && action === 'create' ? '200' : '100',
+      ...(action === 'approve' ? { amount: approvalAmount({ publication }) } : {}),
+      expiresAt: Math.floor(Date.now() / 1000) + 600,
+    });
+  },
+  async confirm() {
+    return outcome;
+  },
+  async snapshot() {
+    return {
+      state: 'ACTIVE',
+      storedState: 1,
+      activeCount: 0,
+      position: 0,
+      locked: '0',
+      credit: '0',
+      withdrawn: '0',
+      allowance: '0',
+      balance: '0',
+      paused: false,
+      block: '105',
+      blockHash: hash,
+      timestamp: Math.floor(Date.now() / 1000),
+    };
+  },
+};
+const app = createCloudRouter(chain, modules);
+describe('private delivery files with isolated D1 and R2', () => {
+  const text = () => new TextEncoder().encode('Private delivery notes.').buffer;
+  async function setup(tool: 'deliver' | 'milestones' = 'deliver') {
+    env.MODULES_ENABLED = 'true';
+    env.MODULE_PUBLISH_ENABLED = 'true';
+    env.ATTACHMENTS_ENABLED = 'true';
+    env.MODULE_DEPLOYMENTS = JSON.stringify([
+      { current: true, deployment: { ...deployment, tool } },
+    ]);
+    const state = await modules.snapshot({} as never, alice.address);
+    vi.spyOn(modules, 'snapshot').mockResolvedValue({
+      ...state,
+      state: 'FUNDED',
+      locked: '1000000',
+      settledAt: 0,
+      ...(tool === 'milestones' ? { currentStage: 0 } : {}),
+    });
+    const a = new Browser(),
+      b = new Browser();
+    await a.login(alice);
+    await b.login(bob);
+    const d = {
+      tool: 'deliver',
+      title: 'Private work',
+      description: '',
+      buyer: alice.address,
+      seller: bob.address,
+      amount: '1000000',
+      fundBy: Math.floor(Date.now() / 1000) + 86400,
+      workDuration: 3600,
+      reviewDuration: 3600,
+      disputeDuration: 86400,
+    };
+    const { amount, workDuration, reviewDuration, ...common } = d;
+    const response = await a.req(
+      '/modules',
+      'POST',
+      {
+        data:
+          tool === 'deliver'
+            ? d
+            : {
+                ...common,
+                tool,
+                stages: [0, 1].map((n) => ({
+                  title: 'Stage ' + n,
+                  description: '',
+                  amount,
+                  workDuration,
+                  reviewDuration,
+                })),
+              },
+      },
+      { 'Idempotency-Key': crypto.randomUUID() },
+    );
+    expect(response.status).toBe(200);
+    const box = (await response.json()).data as ModuleBox;
+    expect((await a.req(`/modules/${box.id}/prepare`, 'POST', { revision: 1 })).status).toBe(200);
+    outcome = { state: 'finalized', hash, block: '105', blockHash: hash };
+    expect((await a.req(`/modules/${box.id}/confirm`, 'POST', { hash })).status).toBe(200);
+    const base = `/modules/${box.id}/files`,
+      body = text(),
+      meta = {
+        name: 'delivery.txt',
+        mime: 'text/plain',
+        bytes: body.byteLength,
+        sha256: await fileDigest(body),
+        stageIndex: 0,
+      };
+    return { a, b, box, base, body, meta };
+  }
+  async function reserve(
+    x: Awaited<ReturnType<typeof setup>>,
+    meta = x.meta,
+    key = crypto.randomUUID(),
+  ) {
+    return x.a.req(x.base, 'POST', meta, { 'Idempotency-Key': key });
+  }
+  it('lets only the fixed parties reserve, upload and download verified private bytes', async () => {
+    const x = await setup(),
+      r = await reserve(x);
+    expect(r.status, await r.clone().text()).toBe(200);
+    const file = (await r.json()).data;
+    const third = new Browser();
+    await third.login(privateKeyToAccount(toHex(3, { size: 32 })));
+    expect((await third.req(x.base)).status).toBe(404);
+    expect((await third.req(`${x.base}/${file.id}`)).status).toBe(404);
+    expect((await new Browser().req(`${x.base}/${file.id}`)).status).toBe(401);
+    expect(
+      (await x.b.req(`${x.base}/${file.id}`, 'PUT', x.body, { 'Content-Type': 'text/plain' }))
+        .status,
+    ).toBe(404);
+    expect(
+      (await x.a.req(`${x.base}/${file.id}`, 'PUT', x.body, { 'Content-Type': 'text/plain' }))
+        .status,
+    ).toBe(200);
+    const download = await x.b.req(`${x.base}/${file.id}`);
+    expect(download.status).toBe(200);
+    expect(await download.text()).toBe('Private delivery notes.');
+    expect(download.headers.get('content-disposition')).toContain('attachment;');
+    expect(download.headers.get('content-type')).toBe('application/octet-stream');
+    expect(download.headers.get('cache-control')).toBe('no-store');
+    expect(download.headers.get('x-content-type-options')).toBe('nosniff');
+    expect((await (await x.b.req(x.base)).json()).data).toHaveLength(1);
+  });
+  it('enforces CSRF, origin, MIME, length, digest and bounded upload streams', async () => {
+    const x = await setup(),
+      file = (await (await reserve(x)).json()).data,
+      url = `${x.base}/${file.id}`;
+    expect(
+      (await x.a.req(url, 'PUT', x.body, { 'Content-Type': 'text/plain', 'X-CSRF-Token': 'wrong' }))
+        .status,
+    ).toBe(403);
+    expect(
+      (
+        await x.a.req(url, 'PUT', x.body, {
+          'Content-Type': 'text/plain',
+          Origin: 'https://evil.test',
+        })
+      ).status,
+    ).toBe(403);
+    expect((await x.a.req(url, 'PUT', x.body, { 'Content-Type': 'image/png' })).status).toBe(400);
+    expect(
+      (await x.a.req(url, 'PUT', new ArrayBuffer(1), { 'Content-Type': 'text/plain' })).status,
+    ).toBe(413);
+    expect(
+      (
+        await x.a.req(url, 'PUT', new Uint8Array(x.body.byteLength).buffer, {
+          'Content-Type': 'text/plain',
+        })
+      ).status,
+    ).toBe(400);
+    expect(
+      (
+        await x.a.req(url, 'PUT', new ArrayBuffer(10 * 1024 * 1024 + 1), {
+          'Content-Type': 'text/plain',
+          'Content-Length': '1',
+        })
+      ).status,
+    ).toBe(413);
+    expect((await x.b.req(url)).status).toBe(404);
+  });
+  it('rejects path traversal, dangerous content, mismatched extensions and expired reservations', async () => {
+    const x = await setup();
+    for (const changes of [
+      { name: '../secret.txt' },
+      { name: 'delivery.svg' },
+      { mime: 'text/html' },
+      { bytes: 0 },
+      { stageIndex: 1 },
+    ])
+      expect((await reserve(x, { ...x.meta, ...changes })).status).toBe(
+        changes.stageIndex ? 409 : 400,
+      );
+    const body = new TextEncoder().encode('<script>alert(1)</script>').buffer,
+      file = (
+        await (
+          await reserve(x, { ...x.meta, bytes: body.byteLength, sha256: await fileDigest(body) })
+        ).json()
+      ).data;
+    expect(
+      (await x.a.req(`${x.base}/${file.id}`, 'PUT', body, { 'Content-Type': 'text/plain' })).status,
+    ).toBe(400);
+    await db.prepare('UPDATE delivery_files SET expires_at=1 WHERE id=?').bind(file.id).run();
+    expect(
+      (await x.a.req(`${x.base}/${file.id}`, 'PUT', body, { 'Content-Type': 'text/plain' })).status,
+    ).toBe(409);
+  });
+  it('keeps retries idempotent and bounds concurrent reservations to five', async () => {
+    const x = await setup(),
+      key = crypto.randomUUID(),
+      first = (await (await reserve(x, x.meta, key)).json()).data;
+    expect((await (await reserve(x, x.meta, key)).json()).data.id).toBe(first.id);
+    expect((await reserve(x, { ...x.meta, name: 'changed.txt' }, key)).status).toBe(409);
+    const attempts = await Promise.all(Array.from({ length: 8 }, () => reserve(x)));
+    expect(attempts.filter((r) => r.status === 200)).toHaveLength(4);
+    expect(attempts.filter((r) => r.status === 429)).toHaveLength(4);
+    for (let n = 0; n < 2; n++)
+      expect(
+        (await x.a.req(`${x.base}/${first.id}`, 'PUT', x.body, { 'Content-Type': 'text/plain' }))
+          .status,
+      ).toBe(200);
+    const item = await db
+      .prepare('SELECT * FROM delivery_files WHERE id=?')
+      .bind(first.id)
+      .first<{ box_id: string; stage_index: number }>();
+    expect(item).not.toBeNull();
+    await env.FILES!.put(`monadbox-test/deliveries/${x.box.id}/0/${first.id}`, 'corrupted', {
+      customMetadata: { sha256: x.meta.sha256, boxId: x.box.id, namespace: 'monadbox-test' },
+    });
+    expect((await x.b.req(`${x.base}/${first.id}`)).status).toBe(503);
+  });
+  it('isolates each milestone stage quota and closes stale uploads without losing old files', async () => {
+    const x = await setup('milestones');
+    const ready = (await (await reserve(x)).json()).data;
+    expect(
+      (await x.a.req(`${x.base}/${ready.id}`, 'PUT', x.body, { 'Content-Type': 'text/plain' }))
+        .status,
+    ).toBe(200);
+    const stale = (await (await reserve(x)).json()).data;
+    vi.mocked(modules.snapshot).mockResolvedValue({
+      ...(await modules.snapshot({} as never, alice.address)),
+      currentStage: 1,
+    });
+    expect((await reserve(x)).status).toBe(409);
+    expect(
+      (await x.a.req(`${x.base}/${stale.id}`, 'PUT', x.body, { 'Content-Type': 'text/plain' }))
+        .status,
+    ).toBe(409);
+    expect((await x.b.req(`${x.base}/${ready.id}`)).status).toBe(200);
+    const attempts = await Promise.all(
+      Array.from({ length: 7 }, () => reserve(x, { ...x.meta, stageIndex: 1 })),
+    );
+    expect(attempts.filter((r) => r.status === 200)).toHaveLength(5);
+    expect(attempts.filter((r) => r.status === 429)).toHaveLength(2);
+    vi.mocked(modules.snapshot).mockResolvedValue({
+      ...(await modules.snapshot({} as never, alice.address)),
+      state: 'TERMINATED',
+      settledAt: Math.floor(Date.now() / 1000),
+    });
+    expect((await reserve(x, { ...x.meta, stageIndex: 1 })).status).toBe(409);
+    expect((await x.b.req(`${x.base}/${ready.id}`)).status).toBe(200);
+  });
+  it('fails closed for wrong bucket, unavailable chain, retired retention or disabled capability', async () => {
+    const x = await setup();
+    env.ATTACHMENTS_ENABLED = 'false';
+    expect((await x.a.req(x.base)).status).toBe(503);
+    env.ATTACHMENTS_ENABLED = 'true';
+    await env.FILES!.put('.monadbox-environment', 'other', {
+      customMetadata: { namespace: 'monadbox-production' },
+    });
+    expect((await x.a.req(x.base)).status).toBe(503);
+    await env.FILES!.put('.monadbox-environment', 'test', {
+      customMetadata: { namespace: 'monadbox-test' },
+    });
+    outcome = { state: 'unknown' };
+    expect((await x.a.req(x.base)).status).toBe(503);
+    outcome = { state: 'finalized', hash };
+    vi.mocked(modules.snapshot).mockResolvedValue({
+      ...(await modules.snapshot({} as never, alice.address)),
+      settledAt: 1,
+    });
+    expect((await x.a.req(x.base)).status).toBe(404);
+  });
+});
 const data = () =>
   validateGroupFields({
     ...newGroupFields(),
@@ -67,7 +351,13 @@ class Browser {
     };
     const r = await app.request(
       origin + path,
-      { method, headers, ...(body === undefined ? {} : { body: JSON.stringify(body) }) },
+      {
+        method,
+        headers,
+        ...(body === undefined
+          ? {}
+          : { body: body instanceof ArrayBuffer ? body : JSON.stringify(body) }),
+      },
       env,
     );
     for (const cookie of r.headers.getSetCookie()) {
@@ -109,10 +399,16 @@ beforeAll(async () => {
       script: 'export default {fetch(){return new Response("test")}}',
       compatibilityDate: '2026-09-18',
       d1Databases: { DB: 'cloud-test' },
+      r2Buckets: { FILES: 'private-files-test' },
     }),
   );
   db = (await mf.getD1Database('DB')) as unknown as D1Database;
-  for (const file of ['0001_foundation.sql', '0002_cloud_groups.sql'])
+  for (const file of [
+    '0001_foundation.sql',
+    '0002_cloud_groups.sql',
+    '0003_modules.sql',
+    '0004_delivery_files.sql',
+  ])
     for (const sql of (await readFile('migrations/' + file, 'utf8'))
       .replace(/^--.*$/gm, '')
       .split(';')
@@ -135,6 +431,7 @@ beforeAll(async () => {
     ASSET_ALLOWLIST: '[]',
     CONTRACT_REGISTRY: '[]',
     DB: db,
+    FILES: (await mf.getR2Bucket('FILES')) as unknown as R2Bucket,
   };
 });
 afterAll(async () => {
@@ -143,14 +440,47 @@ afterAll(async () => {
 beforeEach(async () => {
   vi.restoreAllMocks();
   await db.batch(
-    ['group_publications', 'boxes', 'sessions', 'users', 'cloud_challenges', 'cloud_limits'].map(
-      (t) => db.prepare(`DELETE FROM ${t}`),
-    ),
+    [
+      'delivery_files',
+      'module_boxes',
+      'group_publications',
+      'boxes',
+      'sessions',
+      'users',
+      'cloud_challenges',
+      'cloud_limits',
+    ].map((t) => db.prepare(`DELETE FROM ${t}`)),
   );
   outcome = { state: 'unknown' };
   eoa = true;
+  env.ATTACHMENTS_ENABLED = 'false';
+  await env.FILES!.put('.monadbox-environment', 'test', {
+    customMetadata: { namespace: 'monadbox-test' },
+  });
+  env.MODULES_ENABLED = 'false';
+  env.NETWORK_WRITES_ENABLED = 'false';
+  env.MODULE_PUBLISH_ENABLED = 'false';
+  env.MODULE_DEPLOYMENTS = '[]';
 });
 describe('SIWE and sessions with real isolated D1', () => {
+  it('rejects oversized JSON by actual bytes even with a forged Content-Length', async () => {
+    const b = new Browser();
+    const response = await b.req(
+      '/auth/nonce',
+      'POST',
+      { address: alice.address, padding: 'x'.repeat(20000) },
+      { 'Content-Length': '1' },
+    );
+    expect(response.status).toBe(413);
+    expect((await response.json()).error.code).toBe('BODY_TOO_LARGE');
+    expect(await db.prepare('SELECT COUNT(*) AS count FROM cloud_challenges').first('count')).toBe(
+      0,
+    );
+    expect(
+      (await b.req('/auth/nonce', 'POST', { address: alice.address }, { 'Content-Length': '1' }))
+        .status,
+    ).toBe(200);
+  });
   it('creates a bound session, never stores a raw signature, and revokes logout', async () => {
     const b = new Browser();
     await b.login();
@@ -497,10 +827,318 @@ describe('cloud metadata and immutable publication', () => {
     const d = (await r.json()).data;
     expect(d.paymentsEnabled).toBe(false);
     expect(d.revision).toBeUndefined();
+    // Retiring a deployment must preserve its exact original publication and recovery.
+    const previous = env.GROUP_DEPLOYMENT;
+    env.GROUP_DEPLOYMENT = JSON.stringify({
+      ...deployment,
+      address: '0x3333333333333333333333333333333333333333',
+    });
+    env.GROUP_PREVIOUS_DEPLOYMENTS = JSON.stringify([deployment]);
+    try {
+      const historical = await b.req('/public/groups/' + row.publicId);
+      expect(historical.status).toBe(200);
+      expect((await historical.json()).data.module.toLowerCase()).toBe(
+        deployment.address.toLowerCase(),
+      );
+      expect((await b.req('/groups/' + row.id + '/confirm', 'POST', { hash })).status).toBe(200);
+      env.GROUP_PREVIOUS_DEPLOYMENTS = JSON.stringify([
+        { ...deployment, runtimeHash: '0x' + '99'.repeat(32) },
+      ]);
+      expect((await b.req('/public/groups/' + row.publicId)).status).toBe(503);
+    } finally {
+      env.GROUP_DEPLOYMENT = previous;
+      env.GROUP_PREVIOUS_DEPLOYMENTS = '[]';
+    }
     outcome = { state: 'unknown' };
     expect((await b.req('/public/groups/' + row.publicId)).status).toBe(503);
     outcome = { state: 'finalized', hash };
     await db.prepare("UPDATE boxes SET metadata_json='tampered' WHERE id=?").bind(row.id).run();
     expect((await b.req('/public/groups/' + row.publicId)).status).toBe(503);
+  });
+});
+
+describe('versioned module drafts and publication with real isolated D1', () => {
+  const splitData = {
+    tool: 'split',
+    title: 'Fixed split',
+    description: 'Public rules',
+    recipients: [
+      { address: alice.address, bps: 7000 },
+      { address: bob.address, bps: 3000 },
+    ],
+  };
+  const registration = {
+    current: true,
+    deployment: {
+      ...deployment,
+      tool: 'split',
+      address: '0x3333333333333333333333333333333333333333',
+    },
+  };
+  function enable() {
+    env.MODULES_ENABLED = 'true';
+    env.MODULE_PUBLISH_ENABLED = 'true';
+    env.MODULE_DEPLOYMENTS = JSON.stringify([registration]);
+  }
+  async function create(
+    b: Browser,
+    key = crypto.randomUUID(),
+    data = splitData,
+  ): Promise<ModuleBox> {
+    const r = await b.req('/modules', 'POST', { data }, { 'Idempotency-Key': key });
+    expect(r.status, await r.clone().text()).toBe(200);
+    return (await r.json()).data;
+  }
+  it('keeps modules unavailable by default and requires a session when enabled', async () => {
+    const b = new Browser();
+    expect((await b.req('/modules')).status).toBe(503);
+    enable();
+    expect((await b.req('/modules')).status).toBe(401);
+  });
+  it('preserves original local data as an explicit independent copy, with idempotency and owner isolation', async () => {
+    enable();
+    const a = new Browser(),
+      b = new Browser();
+    await a.login();
+    await b.login(bob);
+    const key = crypto.randomUUID(),
+      first = await create(a, key);
+    expect((await create(a, key)).id).toBe(first.id);
+    expect((await b.req('/modules/' + first.id)).status).toBe(404);
+    expect(
+      (
+        await a.req(
+          '/modules',
+          'POST',
+          { data: { ...splitData, title: 'Changed' } },
+          { 'Idempotency-Key': key },
+        )
+      ).status,
+    ).toBe(409);
+    expect((await a.req('/public/modules/' + first.publicId)).status).toBe(404);
+  });
+  it('checks CSRF and revision, rejects changing tool type and stale edits', async () => {
+    enable();
+    const b = new Browser();
+    await b.login();
+    const row = await create(b);
+    expect(
+      (
+        await b.req(
+          '/modules/' + row.id,
+          'PATCH',
+          { revision: 1, data: splitData },
+          { 'X-CSRF-Token': 'bad' },
+        )
+      ).status,
+    ).toBe(403);
+    const changed = { ...splitData, title: 'Updated' };
+    expect(
+      (await b.req('/modules/' + row.id, 'PATCH', { revision: 1, data: changed })).status,
+    ).toBe(200);
+    expect(
+      (await b.req('/modules/' + row.id, 'PATCH', { revision: 1, data: splitData })).status,
+    ).toBe(409);
+    expect((await b.req('/modules/' + row.id, 'DELETE', { revision: 1 })).status).toBe(409);
+    expect((await b.req('/modules/' + row.id, 'DELETE', { revision: 2 })).status).toBe(200);
+  });
+  it('freezes publication once and retains its nonce and salt on retries and unknown outcomes', async () => {
+    enable();
+    const b = new Browser();
+    await b.login();
+    const row = await create(b);
+    const first = await b.req('/modules/' + row.id + '/prepare', 'POST', { revision: 1 });
+    expect(first.status, await first.clone().text()).toBe(200);
+    const prepared = (await first.json()).data as ModuleBox;
+    const retry = await b.req('/modules/' + row.id + '/prepare', 'POST', { revision: 1 });
+    expect((await retry.json()).data.publication).toEqual(prepared.publication);
+    expect(
+      (await b.req('/modules/' + row.id, 'PATCH', { revision: 1, data: splitData })).status,
+    ).toBe(409);
+    expect((await b.req('/modules/' + row.id, 'DELETE', { revision: 1 })).status).toBe(409);
+    outcome = { state: 'unknown', hash };
+    expect((await b.req('/modules/' + row.id + '/confirm', 'POST', { hash })).status).toBe(200);
+    outcome = { state: 'unknown', hash: toHex(43, { size: 32 }) };
+    await b.req('/modules/' + row.id + '/confirm', 'POST', {});
+    const saved = (await (await b.req('/modules/' + row.id)).json()).data as ModuleBox;
+    expect(saved.receipt?.hash).toBe(hash);
+    expect(saved.publication).toEqual(prepared.publication);
+  });
+  it('publishes only verified transactions and reads retired deployments by their original identity', async () => {
+    enable();
+    const b = new Browser();
+    await b.login();
+    const row = await create(b);
+    await b.req('/modules/' + row.id + '/prepare', 'POST', { revision: 1 });
+    outcome = { state: 'finalized', hash, block: '105', blockHash: hash };
+    expect((await b.req('/modules/' + row.id + '/confirm', 'POST', { hash })).status).toBe(200);
+    env.MODULE_DEPLOYMENTS = JSON.stringify([
+      { ...registration, current: false },
+      {
+        ...registration,
+        deployment: {
+          ...registration.deployment,
+          address: '0x4444444444444444444444444444444444444444',
+        },
+      },
+    ]);
+    const publicResponse = await new Browser().req('/public/modules/' + row.publicId);
+    expect(publicResponse.status).toBe(200);
+    expect((await publicResponse.json()).data.publication.deployment.address).toBe(
+      registration.deployment.address,
+    );
+    outcome = { state: 'unknown' };
+    expect((await b.req('/public/modules/' + row.publicId)).status).toBe(503);
+    expect((await b.req('/modules/' + row.id + '/confirm', 'POST', {})).status).toBe(503);
+    expect((await (await b.req('/modules/' + row.id)).json()).data.receipt.state).toBe('finalized');
+  });
+  it('rejects corrupted stored metadata, cross-domain terms and unknown module identity', async () => {
+    enable();
+    const b = new Browser();
+    await b.login();
+    const row = await create(b);
+    await b.req('/modules/' + row.id + '/prepare', 'POST', { revision: 1 });
+    env.MODULE_DEPLOYMENTS = JSON.stringify([
+      {
+        ...registration,
+        deployment: { ...registration.deployment, runtimeHash: toHex(1, { size: 32 }) },
+      },
+    ]);
+    expect((await b.req('/modules/' + row.id + '/confirm', 'POST', {})).status).toBe(503);
+    await db.prepare("UPDATE module_boxes SET metadata='tampered' WHERE id=?").bind(row.id).run();
+    expect((await b.req('/modules/' + row.id)).status).toBe(503);
+  });
+  it('does not enable modules against an incorrect schema', async () => {
+    enable();
+    await db.prepare('UPDATE module_schema SET version=2').run();
+    try {
+      const b = new Browser();
+      await b.login();
+      expect((await b.req('/modules')).status).toBe(503);
+    } finally {
+      await db.prepare('UPDATE module_schema SET version=1').run();
+    }
+  });
+});
+
+describe('Rewards two-step atomic-funded publication', () => {
+  async function setup() {
+    env.MODULES_ENABLED = 'true';
+    env.MODULE_PUBLISH_ENABLED = 'true';
+    env.NETWORK_WRITES_ENABLED = 'true';
+    env.MODULE_DEPLOYMENTS = JSON.stringify([
+      { current: true, deployment: { ...deployment, tool: 'rewards' } },
+    ]);
+    const b = new Browser();
+    await b.login();
+    const data = {
+      tool: 'rewards',
+      title: 'Fixed rewards',
+      description: 'Public',
+      recipients: [{ address: bob.address, amount: '101' }],
+      claimStart: 1000,
+      claimDeadline: 4000000000,
+    };
+    const response = await b.req(
+      '/modules',
+      'POST',
+      { data },
+      { 'Idempotency-Key': crypto.randomUUID() },
+    );
+    expect(response.status).toBe(200);
+    const row = (await response.json()).data as ModuleBox;
+    const path = '/modules/' + row.id;
+    const prepare = () => b.req(path + '/prepare', 'POST', { revision: 1 });
+    const read = async () => (await (await b.req(path)).json()).data as ModuleBox;
+    const confirm = () => b.req(path + '/confirm', 'POST', { hash });
+    const first = await prepare();
+    expect(first.status, await first.clone().text()).toBe(200);
+    const approval = (await first.json()).data as ModuleBox;
+    return { b, data, row, path, prepare, read, confirm, approval };
+  }
+  it('keeps approval private, freezes rules and uses a fresh creation nonce while retaining the proof', async () => {
+    const x = await setup();
+    expect(x.approval.publication?.action).toBe('approve');
+    expect(x.approval.publication?.amount).toBe('101');
+    outcome = { state: 'unknown', hash };
+    await x.confirm();
+    expect((await (await x.prepare()).json()).data.publication).toEqual(x.approval.publication);
+    expect((await x.b.req(x.path, 'PATCH', { revision: 1, data: x.data })).status).toBe(409);
+    outcome = { state: 'finalized', hash, block: '105', blockHash: hash };
+    await x.confirm();
+    expect((await x.read()).state).toBe('prepared');
+    expect((await x.b.req('/public/modules/' + x.row.publicId)).status).toBe(404);
+    const response = await x.prepare();
+    expect(response.status, await response.clone().text()).toBe(200);
+    const next = (await response.json()).data as ModuleBox;
+    expect(next.publication!.action).toBe('create');
+    expect(next.publication!.nonce).toBe(9);
+    expect(next.publication!.publication).toEqual(x.approval.publication!.publication);
+    expect(next.publication!.fundingApproval).toMatchObject({
+      id: x.approval.publication!.id,
+      nonce: 7,
+      hash,
+      block: '105',
+      blockHash: hash,
+    });
+    expect(next.receipt).toEqual({ state: 'prepared' });
+    outcome = { state: 'unknown' };
+    await x.confirm();
+    expect((await (await x.prepare()).json()).data.publication).toEqual(next.publication);
+    outcome = { state: 'finalized', hash, block: '205', blockHash: hash };
+    await x.confirm();
+    expect((await x.read()).state).toBe('published');
+    expect((await x.b.req('/public/modules/' + x.row.publicId)).status).toBe(200);
+  });
+  it('requires fresh canonical approval and capability checks without discarding original evidence', async () => {
+    const x = await setup();
+    outcome = { state: 'finalized', hash, block: '105', blockHash: hash };
+    await x.confirm();
+    const approved = await x.read();
+    outcome = { state: 'unknown' };
+    expect((await x.prepare()).status).toBe(503);
+    expect(await x.read()).toEqual(approved);
+    outcome = { state: 'finalized', hash, block: '105', blockHash: hash };
+    env.NETWORK_WRITES_ENABLED = 'false';
+    expect((await x.prepare()).status).toBe(503);
+    expect(await x.read()).toEqual(approved);
+    env.NETWORK_WRITES_ENABLED = 'true';
+    expect((await x.b.req(x.path + '/prepare', 'POST', { revision: 2 })).status).toBe(409);
+    expect(
+      (await x.b.req(x.path + '/prepare', 'POST', { revision: 1 }, { 'X-CSRF-Token': 'bad' }))
+        .status,
+    ).toBe(403);
+    const outsider = new Browser();
+    await outsider.login(bob);
+    expect((await outsider.req(x.path + '/prepare', 'POST', { revision: 1 })).status).toBe(404);
+    const original = modules.prepare.bind(modules);
+    vi.spyOn(modules, 'prepare').mockImplementation(async (...args) => ({
+      ...(await original(...args)),
+      nonce: 7,
+    }));
+    expect((await x.prepare()).status).toBe(503);
+    expect(await x.read()).toEqual(approved);
+  });
+  it('concurrent second-step prepares retain one intent and reject corrupted proof linkage', async () => {
+    const x = await setup();
+    outcome = { state: 'finalized', hash, block: '105', blockHash: hash };
+    await x.confirm();
+    const responses = await Promise.all([x.prepare(), x.prepare()]);
+    expect(responses.map((r) => r.status)).toEqual([200, 200]);
+    const [one, two] = await Promise.all(
+      responses.map(async (r) => (await r.json()).data as ModuleBox),
+    );
+    expect(one!.publication).toEqual(two!.publication);
+    const intent = one!.publication!;
+    for (const patch of [{ nonce: intent.nonce }, { id: intent.id }, { block: '201' }]) {
+      await db
+        .prepare('UPDATE module_boxes SET intent_json=? WHERE id=?')
+        .bind(
+          JSON.stringify({ ...intent, fundingApproval: { ...intent.fundingApproval, ...patch } }),
+          x.row.id,
+        )
+        .run();
+      expect((await x.b.req(x.path)).status).toBe(503);
+    }
   });
 });

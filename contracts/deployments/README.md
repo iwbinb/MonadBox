@@ -1,7 +1,9 @@
-# Deployment registry
+# 部署登记
 
-No public MonadBox business contracts or M0-C probe have been deployed by this workflow. Do not add the deterministic local Anvil addresses or transaction hashes to a public deployment registry.
+仓库尚未登记经过真实验收的公开业务合约或探针部署。不得将本地 Anvil 地址、哈希或 fixture 管理员写入公开配置。
 
-The M0-C browser lab can ask the user to deploy the exact compiled probe using their own testnet wallet, or verify an existing matching probe. A browser recovery record is not an approved shared deployment record.
+实际测试网部署完成并核验后，每个版本记录：chainId、合约名称/版本、地址、固定资产、管理员（如有）、部署交易及区块、runtime hash、源码提交、编译器/优化设置、源码验证结果、资金路径测试及剩余授权。不得记录私钥、助记词或会话秘密。
 
-After actual testnet verification, record chainId, token, probe address, creation transaction/block, code hash, compiler/optimizer, source verification, approve/fund/refund transactions and remaining allowance. Never record a private key or seed. Mainnet remains separately gated.
+Group 发布使用经过核验的部署登记；新增版本前先实现旧版本读取、恢复和退出。用户在实验室保存的探针恢复记录不是已批准的共享业务部署。
+
+创建真实资源、公开链部署及主网操作遵守[决策与放行条件](../../docs/planning/DECISIONS_AND_GATES.md)。构建和 CI 不执行这些操作。

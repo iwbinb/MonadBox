@@ -4,6 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
 import './compile-probe.mjs';
 import './compile-group.mjs';
+import './compile-modules.mjs';
 import { validateDeployment } from './validate-config.mjs';
 await validateDeployment();
 let revision = process.env.WORKERS_CI_COMMIT_SHA ?? process.env.GITHUB_SHA;
@@ -32,5 +33,6 @@ await esbuild({
   define: { __BUILD_SHA__: JSON.stringify(revision) },
 });
 await mkdir('dist', { recursive: true });
-await writeFile('dist/build.json', JSON.stringify({ revision, stage: 'M1-B' }, null, 2));
-console.log(`Built M1-B ${revision}; no deployment or chain writes performed.`);
+await writeFile('dist/build.json', JSON.stringify({ revision, stage: 'M7' }, null, 2));
+await import('./release-evidence.mjs');
+console.log(`Built M7 ${revision}; no deployment or chain writes performed.`);

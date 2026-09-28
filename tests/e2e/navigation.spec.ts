@@ -30,10 +30,15 @@ test('Chinese preference persists across refresh and navigation', async ({ page 
   await page.locator('.tool-card').first().click();
   await expect(page.locator('h1')).toHaveText('成团收款');
 });
-test('workspace tabs change the empty state without invented balances', async ({ page }) => {
+test('workspace filters explain unverified rights without invented balances', async ({ page }) => {
   await page.goto('/app');
   await page.getByRole('button', { name: 'To claim', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'No claim data yet' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'No matching records' })).toBeVisible();
+  await expect(
+    page.getByText('Connect your funds wallet and check rights to find claimable credit.', {
+      exact: true,
+    }),
+  ).toBeVisible();
   await expect(page.getByRole('button', { name: 'To claim', exact: true })).toHaveAttribute(
     'aria-pressed',
     'true',
@@ -68,7 +73,9 @@ test('configuration failure offers retry and never enables payments', async ({ p
   await page.getByRole('button', { name: 'Retry', exact: true }).click();
   await expect(page.getByRole('alert')).toHaveCount(0);
   await page.goto('/tools/split');
-  await expect(page.getByRole('button', { name: 'Creation not available yet' })).toBeDisabled();
+  await page.getByRole('link', { name: 'Prepare a split draft', exact: true }).click();
+  await expect(page.getByText('Local draft only.', { exact: false })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Sign this action', exact: true })).toHaveCount(0);
 });
 test('no horizontal overflow at mobile width and enlarged text', async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 800 });

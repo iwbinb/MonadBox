@@ -50,11 +50,7 @@ export function ToolCard({ tool }: { tool: Tool }) {
         <span className="tool-icon">
           <ToolIcon id={tool.id} />
         </span>
-        <span className="status-label">
-          {tool.id === 'group'
-            ? t('Drafts available', '可创建草稿')
-            : t('Not open yet', '尚未开放')}
-        </span>
+        <span className="status-label">{t('Drafts available', '可创建草稿')}</span>
       </div>
       <h3>{locale === 'en' ? tool.name : tool.label.zh}</h3>
       <p>{tool.description[locale]}</p>
@@ -102,7 +98,9 @@ export function Layout() {
       </a>
       <div className="environment-bar" role="status">
         <span className="status-dot" />
-        {t('Monad Testnet · Business Payments disabled', 'Monad 测试网 · 业务付款未开放')}
+        {state.status === 'ready' && state.config.capabilities.payments
+          ? t('Monad Testnet · Test assets only', 'Monad 测试网 · 仅测试资产')
+          : t('Monad Testnet · Business Payments disabled', 'Monad 测试网 · 业务付款未开放')}
       </div>
       <header className="site-header">
         <div className="container nav-row">
@@ -152,8 +150,11 @@ export function Layout() {
           <p>{t('One link. Clear rules.', '一个链接，规则清晰。')}</p>
         </div>
         <div className="footer-links">
+          <Link to="/app">{t('Funds workbench', '资金工作台')}</Link>
           <Link to="/help/refunds">{t('Refund rules', '退款规则')}</Link>
           <Link to="/status">{t('System status', '系统状态')}</Link>
+          <Link to="/privacy">{t('Privacy', '隐私说明')}</Link>
+          <Link to="/terms">{t('Test version terms', '测试版使用说明')}</Link>
           <span>
             {state.status === 'ready'
               ? `${state.config.environment} · ${state.config.revision.slice(0, 7)}`

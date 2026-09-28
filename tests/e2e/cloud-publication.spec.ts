@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import type { Address } from 'viem';
 import type { CloudBox } from '../../src/shared/cloud/model';
-const origin = 'http://127.0.0.1:8789';
+const origin = 'http://127.0.0.1:18889';
 const endpoint = 'http://127.0.0.1:18745';
 const TOKEN = '0xa9012a055bd4e0eDfF8Ce09f960291C09D5322dC';
 test('disabled remote cloud has no implicit login or fake cloud records', async ({ page }) => {

@@ -21,3 +21,4 @@ source.tar
 /chain-evidence/
 
 /src/shared/group/generated/
+/src/shared/modules/generated/

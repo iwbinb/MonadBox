@@ -2,6 +2,7 @@ import { encodeFunctionData, keccak256, stringToHex } from 'viem';
 import type { Address, Hex } from 'viem';
 import { makeClient, TOKEN, inspectNetwork } from '../lab/network';
 import type { ChainClient } from '../lab/network';
+import { recoverNonce } from '../nonce-recovery';
 import { groupArtifact } from '../group/generated/group';
 import { groupMetadata, groupTerms, groupTermsHash, groupId } from '../group/terms';
 import type { Deployment, PublishIntent, ChainSnapshot } from './model';
@@ -146,17 +147,7 @@ export function makeCloudChain(client: ChainClient = makeClient()): CloudChain {
       await verifyDeployment(client, i.deployment);
       let hash = supplied;
       if (!hash) {
-        const head = await client.getBlockNumber(),
-          start = BigInt(i.startBlock);
-        // Bounded scan; never silently create another intent or reuse a nonce.
-        for (let n = head; n >= start && head - n < 41n; n--) {
-          const block = await client.getBlock({ blockNumber: n, includeTransactions: true });
-          const tx = block.transactions.find((t) => same(t.from, i.creator) && t.nonce === i.nonce);
-          if (tx) {
-            hash = tx.hash;
-            break;
-          }
-        }
+        hash = await recoverNonce(client, i.creator, i.nonce, BigInt(i.startBlock));
       }
       if (!hash) return { state: 'unknown' };
       let tx, receipt;
