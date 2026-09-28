@@ -117,6 +117,7 @@ export function Layout() {
               {t('Tools', '工具')}
             </NavLink>
             <NavLink to="/app">{t('My boxes', '我的 Box')}</NavLink>
+            <NavLink to="/app/groups">{t('Cloud', '云端')}</NavLink>
             <NavLink to="/lab">{t('Test lab', '测试实验室')}</NavLink>
             <NavLink to="/help/refunds">{t('Help', '帮助')}</NavLink>
           </nav>

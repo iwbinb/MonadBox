@@ -20,6 +20,8 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version-file: .node-version
+      - name: Archive exact checked-out source (read-only)
+        run: mkdir -p artifacts && git archive HEAD > artifacts/source.tar
       - name: Install pinned package manager and frozen dependencies
         run: |
           npm install --global pnpm@10.11.1
@@ -33,6 +35,7 @@ jobs:
         run: bash scripts/install-test-tools.sh
       - run: pnpm test:contracts
       - run: pnpm test:chain-local
+      - run: pnpm test:cloud-local
       - name: Validate deployment without publishing
         run: pnpm deploy:dry-run
       - name: Install Chromium for browser tests
@@ -50,5 +53,7 @@ jobs:
             dist/build.json
             artifacts/local-chain.json
             artifacts/group-local-chain.json
+            artifacts/cloud-http.json
+            artifacts/source.tar
           if-no-files-found: ignore
           retention-days: 7

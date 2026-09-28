@@ -41,7 +41,7 @@
     "lint": "eslint src tests scripts *.ts *.mjs",
     "format": "prettier --write --ignore-unknown src tests scripts *.ts *.mjs *.json *.jsonc *.html .github/workflows",
     "format:check": "prettier --check --ignore-unknown src tests scripts *.ts *.mjs *.json *.jsonc *.html .github/workflows",
-    "typecheck": "node scripts/compile-probe.mjs && tsc -p tsconfig.json && tsc -p tsconfig.worker.json",
+    "typecheck": "node scripts/compile-probe.mjs && node scripts/compile-group.mjs && tsc -p tsconfig.json && tsc -p tsconfig.worker.json",
     "test": "vitest run",
     "test:e2e": "playwright test",
     "check:config": "node scripts/validate-config.mjs",
@@ -51,6 +51,7 @@
     "deploy:dry-run": "wrangler deploy --dry-run --outdir artifacts/worker-dry-run",
     "compile:probe": "node scripts/compile-probe.mjs",
     "test:contracts": "node scripts/test-contracts.mjs",
-    "test:chain-local": "node scripts/local-chain-test.mjs"
+    "test:chain-local": "node scripts/local-chain-test.mjs",
+    "test:cloud-local": "node scripts/cloud-http-test.mjs"
   }
 }

@@ -15,11 +15,19 @@ export default defineConfig({
     { name: 'desktop', use: { ...devices['Desktop Chrome'] } },
     { name: 'mobile', use: { ...devices['iPhone 13'], defaultBrowserType: 'chromium' } },
   ],
-  webServer: {
-    command:
-      'node node_modules/wrangler/bin/wrangler.js dev --config wrangler.local.jsonc --ip 127.0.0.1 --port 8787',
-    url: 'http://127.0.0.1:8787/api/v1/health',
-    reuseExistingServer: !process.env.CI,
-    timeout: 60000,
-  },
+  webServer: [
+    {
+      command:
+        'node node_modules/wrangler/bin/wrangler.js dev --config wrangler.local.jsonc --ip 127.0.0.1 --port 8787',
+      url: 'http://127.0.0.1:8787/api/v1/health',
+      reuseExistingServer: !process.env.CI,
+      timeout: 60000,
+    },
+    {
+      command: 'node scripts/cloud-test-server.mjs',
+      url: 'http://127.0.0.1:8789/api/v1/health',
+      reuseExistingServer: false,
+      timeout: 60000,
+    },
+  ],
 });

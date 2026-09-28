@@ -48,6 +48,11 @@ export function compileGroup() {
   };
   fs.mkdirSync('artifacts/group', { recursive: true });
   fs.writeFileSync('artifacts/group/GroupEscrowV1.json', JSON.stringify(artifact, null, 2) + '\n');
+  fs.mkdirSync('src/shared/group/generated', { recursive: true });
+  fs.writeFileSync(
+    'src/shared/group/generated/group.ts',
+    'export const groupArtifact = ' + JSON.stringify(artifact) + ' as const;\n',
+  );
   return artifact;
 }
 compileGroup();

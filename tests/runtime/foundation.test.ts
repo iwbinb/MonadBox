@@ -115,15 +115,15 @@ describe('actual workerd HTTP handler', () => {
     expect(res.headers.get('content-type')).toContain('application/json');
   });
   it('does not expose diagnostic or upload write endpoints', async () => {
-    for (const path of [
-      '/api/internal/probe',
-      '/api/v1/attachments/upload-intent',
-      '/api/v1/auth/verify',
-    ])
+    for (const path of ['/api/internal/probe', '/api/v1/attachments/upload-intent'])
       expect((await mf.dispatchFetch('http://localhost' + path, { method: 'POST' })).status).toBe(
         404,
       );
   });
+  it('keeps cloud login unavailable before setup', async () =>
+    expect(
+      (await mf.dispatchFetch('http://localhost/api/v1/auth/verify', { method: 'POST' })).status,
+    ).toBe(503));
   it('cannot create a fake paid order', async () =>
     expect(
       (

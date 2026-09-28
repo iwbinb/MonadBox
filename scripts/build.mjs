@@ -32,5 +32,5 @@ await esbuild({
   define: { __BUILD_SHA__: JSON.stringify(revision) },
 });
 await mkdir('dist', { recursive: true });
-await writeFile('dist/build.json', JSON.stringify({ revision, stage: 'M1-A' }, null, 2));
-console.log(`Built M1-A ${revision}; no deployment or chain writes performed.`);
+await writeFile('dist/build.json', JSON.stringify({ revision, stage: 'M1-B' }, null, 2));
+console.log(`Built M1-B ${revision}; no deployment or chain writes performed.`);

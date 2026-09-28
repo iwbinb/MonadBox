@@ -1,0 +1,155 @@
+import { setTimeout } from 'node:timers';
+import { spawn, execFileSync } from 'node:child_process';
+import { readFileSync, mkdirSync, writeFileSync, existsSync } from 'node:fs';
+import { build } from 'esbuild';
+import { Miniflare, convertV4MiniflareOptions } from 'miniflare';
+import { createPublicClient, createWalletClient, defineChain, http, keccak256 } from 'viem';
+// Fixed loopback only. No RPC/host/private-key overrides or public broadcasts.
+const rpc = 'http://127.0.0.1:18745';
+const origin = 'http://127.0.0.1:8789';
+const token = '0xa9012a055bd4e0eDfF8Ce09f960291C09D5322dC';
+const binary = existsSync('tools/anvil') ? 'tools/anvil' : 'anvil';
+if (!execFileSync(binary, ['--version'], { encoding: 'utf8' }).includes('Version: 1.8.3'))
+  throw Error('Anvil 1.8.3 required');
+const child = spawn(
+  binary,
+  ['--host', '127.0.0.1', '--port', '18745', '--chain-id', '10143', '--silent'],
+  { stdio: 'ignore' },
+);
+let mf;
+let closed = false;
+async function close() {
+  if (closed) return;
+  closed = true;
+  await mf?.dispose();
+  child.kill('SIGTERM');
+}
+process.on('SIGTERM', () => void close().finally(() => process.exit(0)));
+process.on('SIGINT', () => void close().finally(() => process.exit(0)));
+async function raw(method, params = []) {
+  const r = await fetch(rpc, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
+    signal: globalThis.AbortSignal.timeout(5000),
+  });
+  const value = await r.json();
+  if (value.error) throw Error(JSON.stringify(value.error));
+  return value.result;
+}
+try {
+  let ready = false;
+  for (let n = 0; n < 60; n++) {
+    try {
+      if ((await raw('eth_chainId')) === '0x279f') {
+        ready = true;
+        break;
+      }
+    } catch {
+      /* Local process starting. */
+    }
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  if (!ready || child.exitCode !== null || !/anvil/i.test(await raw('web3_clientVersion')))
+    throw Error('Local Anvil did not start');
+  const accounts = await raw('eth_accounts');
+  const mock = JSON.parse(readFileSync('contracts/out/MockToken.sol/MockToken.json', 'utf8'));
+  await raw('anvil_setCode', [token, mock.deployedBytecode.object]);
+  const artifact = JSON.parse(readFileSync('artifacts/group/GroupEscrowV1.json', 'utf8'));
+  const chain = defineChain({
+    id: 10143,
+    name: 'Local Anvil ONLY',
+    nativeCurrency: { name: 'Mock MON', symbol: 'MON', decimals: 18 },
+    rpcUrls: { default: { http: [rpc] } },
+  });
+  const publicClient = createPublicClient({ chain, transport: http(rpc) });
+  const wallet = createWalletClient({ chain, transport: http(rpc) });
+  const hash = await wallet.deployContract({
+    account: accounts[0],
+    abi: artifact.abi,
+    bytecode: artifact.bytecode,
+    args: [token, accounts[0]],
+  });
+  const receipt = await publicClient.waitForTransactionReceipt({ hash });
+  if (receipt.status !== 'success' || !receipt.contractAddress)
+    throw Error('Local deployment failed');
+  const address = receipt.contractAddress;
+  const code = await publicClient.getCode({ address });
+  const deployment = {
+    chainId: 10143,
+    version: 1,
+    address,
+    asset: token,
+    intakeAdmin: accounts[0],
+    runtimeHash: keccak256(code),
+  };
+  await raw('anvil_mine', ['0x41']);
+  mkdirSync('artifacts', { recursive: true });
+  writeFileSync(
+    'artifacts/cloud-test.json',
+    JSON.stringify(
+      { mode: 'LOCAL ANVIL ONLY; NOT MONAD', origin, rpc, accounts, deployment },
+      null,
+      2,
+    ),
+  );
+  await build({
+    entryPoints: ['tests/fixtures/cloud-worker.ts'],
+    outfile: 'artifacts/cloud-worker.mjs',
+    bundle: true,
+    format: 'esm',
+    platform: 'browser',
+    target: 'es2022',
+    define: { __BUILD_SHA__: JSON.stringify('local') },
+  });
+  mf = new Miniflare(
+    convertV4MiniflareOptions({
+      name: 'monadbox-cloud-test',
+      host: '127.0.0.1',
+      port: 8789,
+      modules: true,
+      scriptPath: 'artifacts/cloud-worker.mjs',
+      compatibilityDate: '2026-09-18',
+      compatibilityFlags: ['nodejs_compat'],
+      assets: {
+        directory: 'dist/client',
+        binding: 'ASSETS',
+        run_worker_first: true,
+        routerConfig: { has_user_worker: true },
+        assetConfig: { not_found_handling: 'single-page-application' },
+      },
+      bindings: {
+        APP_ENV: 'local',
+        CHAIN_ID: '10143',
+        STORAGE_NAMESPACE: 'monadbox-local',
+        STORAGE_ENABLED: 'false',
+        BACKGROUND_ENABLED: 'false',
+        NETWORK_WRITES_ENABLED: 'false',
+        MAINNET_ENABLED: 'false',
+        ASSET_ALLOWLIST: '[]',
+        CONTRACT_REGISTRY: '[]',
+        TESTNET_LAB_ENABLED: 'true',
+        CLOUD_ENABLED: 'true',
+        GROUP_PUBLISH_ENABLED: 'true',
+        APP_ORIGIN: origin,
+        GROUP_DEPLOYMENT: JSON.stringify(deployment),
+      },
+      d1Databases: { DB: 'cloud-e2e-only' },
+    }),
+  );
+  const db = await mf.getD1Database('DB');
+  for (const file of ['0001_foundation.sql', '0002_cloud_groups.sql']) {
+    const text = readFileSync('migrations/' + file, 'utf8').replace(/^--.*$/gm, '');
+    for (const sql of text
+      .split(';')
+      .map((s) => s.trim())
+      .filter(Boolean))
+      await db.prepare(sql).run();
+  }
+  await db.prepare("INSERT INTO environment_guard(id,namespace) VALUES(1,'monadbox-local')").run();
+  await mf.ready;
+  console.log('M1-B local Worker + D1 + Anvil ready at ' + origin + '; never a public deployment.');
+} catch (e) {
+  await close();
+  throw e;
+}

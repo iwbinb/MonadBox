@@ -1,80 +1,60 @@
 # 技术架构
 
-M1-A更新 · 2026-09-27。当前代码、本地验证、公开部署和未来目标分开；证据见[M1-A验收](../planning/M1-A_ACCEPTANCE.md)。
+M1-B 当前实现，六工具终态规格另见产品、资金及API目标文档。
 
-## 1. 运行结构
-
-React/TypeScript/Vite构建浏览器应用，Hono在同一Cloudflare Worker提供API，静态资源使用Workers Static Assets。一个monadbox项目：main正式站、dev Worker Previews；部署命令不变，不增加第二个完整网站Worker。
+## 1. 结构与运行边界
 
 ```text
-浏览器 UI ─ 同源config/health ─ Worker + Static Assets
-    ├─ /create/group ─ 当前浏览器localStorage草稿（不是订单或收款）
-    ├─ /app/group-drafts ─ 编辑 / 规则预览 / JSON导入导出
-    └─ /lab ─ 用户钱包显式签名 ─ Monad Testnet RPC ─ 测试探针
-
-尚未开放：
-Group公开发布/收付款 ─ 经过验收的Group部署
-业务账户/云端草稿/元数据 ─ 隔离D1
-私密附件 ─ R2；后台通知/索引任务 ─ Queues/Cron
+浏览器React/Vite UI
+  ├─ Worker/Hono同源API
+  │    ├─ config/health：始终可读，校验缺配置
+  │    └─ 可选CLOUD：SIWE、云端草稿、发布记录 → 隔离D1
+  ├─ 用户显式钱包签名 → Monad Testnet Group创建（需真实部署登记）
+  └─ /lab → 原M0-C限额技术探针
 ```
 
-M0-B工程和M0-C实验室保留；M1-A新增Group草稿及业务合约代码/本地测试。**已有合约源码不等于已经公开部署，已有本地草稿不等于已有云端订单。** 真实钱包验收按ADR-19后置，编码和自动测试继续。
+一个monadbox Worker，main正式发布、dev Worker Previews；静态页面与API同项目。当前云端与发布flags为false；远端D1未绑定，R2/Queues/Cron未启用。网站部署成功不能当成这些功能已在线验收。
 
-## 2. 已实现模块
+## 2. 模块
 
-| 模块 | 当前责任 |
+| 模块 | 实现 |
 | --- | --- |
-| src/app | 基础页面、双语、导航、状态、按路由懒加载lab/group |
-| src/app/group | 四步向导、草稿列表/编辑/规则预览、导入导出与异常提示 |
-| src/shared/group | 草稿schema/整数金额/日期/地址校验、本地存储、metadata/terms编码 |
-| src/app/lab、src/shared/lab | EOA钱包、探针、签名前确认、交易/事件/最终性核验与恢复 |
-| src/worker | config/health与内部D1/R2/Queue原语；业务HTTP写入口关闭，不签名 |
-| contracts | M0CProbe、GroupEscrowV1及各自Foundry测试；真实Group部署未登记 |
-| scripts | 编译探针/Group、构建、分支校验、固定loopback本地链测试 |
-| migrations | 基础结构，未迁移到真实Cloudflare资源 |
+| src/app/group、src/shared/group | M1-A本地草稿、整数规则、元数据和条款哈希 |
+| src/app/cloud | SIWE确认界面、账号草稿、发布管理、匿名分享页、浏览器发送日志 |
+| src/shared/cloud/model.ts | 有版本的部署/发布意图schema，JSON大整数为字符串 |
+| src/shared/cloud/chain.ts | 编译代码/固定资产/管理员验证、确切createGroup回执、finalized快照 |
+| src/worker/cloud/router.ts | 浏览器绑定挑战、会话与CSRF、owner/revision授权、D1保存与发布核验 |
+| src/worker/index.ts | 安全响应头、只读配置与健康、按路径挂载云端API |
+| contracts | GroupEscrowV1及M0CProbe；本批不改变资金逻辑、不执行公开部署 |
+| migrations/0002_cloud_groups.sql | D1会话、云端记录、不可变metadata、发布意图与schema2 |
+| tests/fixtures/cloud-worker.ts | 仅本地测试entry，连接固定loopback Anvil；不进入正式构建入口 |
 
-Node22.16.0、pnpm10.11.1、viem2.56.9等沿用锁文件；不新增钱包供应商或运行服务。wagmi、SIWE、WalletConnect、TanStack Query、托管索引不是当前已集成能力。
+Node/pnpm和依赖lockfile沿用M1-A，本批未新增第三方依赖。Group编译产物由Solidity源码生成，运行时引用和实际哈希验证不靠手写ABI。Cloud页面按路由lazy加载。
 
-## 3. 草稿与未来发布的边界
+## 3. 数据与权限
 
-草稿使用`monadbox.group-drafts.v1:{environment}:10143`，最多40份。写操作通过Web Locks串行化，revision阻止旧编辑覆盖新版；浏览器不支持安全保存时拒绝并允许导出。损坏数据保留，不静默清空。草稿无登录身份/签名证明，不存余额或私钥。
+D1不是用户资金账户。账户由随机会话token摘要映射原钱包，SIWE挑战精确绑定origin、nonce、时间和浏览器cookie。D1批处理与唯一键防双重消费；同会话请求从first-primary开始，避免以旧副本授权已撤销会话。会话和签名不出现在日志或公开响应。
 
-JSON导出明确format/version/chainId/asset，导入最多16KB并严格schema校验，生成独立草稿ID。元数据使用固定顺序JSON原始UTF-8字节，哈希后不重新序列化替换。chainId、module、creator、salt域隔离Box ID，termsHash与Solidity编码在本地集成逐字节核对。
+草稿owner由已认证会话决定，不信任请求里的任意钱包地址。修改/删除带revision，发布准备后不可改。原始metadata字节、metadataHash、结构化规则、termsHash和原发布意图相互核验。公开页不暴露未发布草稿，也不接受客户端paid/published标签。
 
-M1-B接入D1与签名发布前必须重新校验过期时间、链、资产、部署版本、收款人及元数据哈希；不能把已保存草稿中的未来时间当永远有效。明确确认后才能把本地草稿迁移到云端；导出JSON不是支付授权。
+## 4. 发布与恢复
 
-## 4. Group合约边界
+准备请求读取已登记合约及链时间/nonce，复制冻结规则和唯一salt，不签名。浏览器重新校验EOA/链/目标代码/规则/nonce，显式调用createGroup；不授权token，不入金。发送前本地记录状态并锁定同账号；未知情况不重发。
 
-单部署单资产、chainId10143、最多200份、每钱包一份且退出不能重进。固定规则、收款人和metadataHash。截止前可退出；截止后未达标可退；成功组到settleNotBefore可结算；组织者在允许状态可取消。
+确认接口只读RPC，核对交易、准确事件、canonical块和finalized覆盖高度，并读回Group。需要时以最多41块的账户+nonce搜索恢复hash，旧交易由用户补hash。数据库仅记录证据和展示状态。
 
-退款/退出/结算先把locked归属为按Box/受益人记录的credit，再由withdrawFor向固定地址转账。Checks-effects-interactions与重入保护；转账失败恢复权益；不接受转入/转出扣费造成的账务不一致。意外直接转账不产生任何可领权益。
+公开GET每次核实原发布和finalized的Group状态；不是完整事件索引器。RPC不可用/代码变更/链证据不匹配时拒绝展示“已核实”。当前每环境一个登记版本，后续增加合约版本前必须保留旧版读取与退出路径。
 
-固定intakeAdmin只有暂停/恢复新建和入金权限，不阻合法退出，不具备升级或任意提款权。没有已验证的公开Group地址，网页不允许用户随意填合约地址后立即付款。原探针的即时退款/1测试AUSD限额与Group机制分开。
+## 5. 持久化与部署
 
-## 5. 配置与签名
+新CLOUD开关只要求DB；不依赖原STORAGE开关的R2/Queue组合原语。CLOUD启用需exact origin、schema2、匹配environment_guard。生产/Preview数据库及origin均独立，配置验证拒绝相同ID；名称隔离不替代真实资源验证。
 
-`NETWORK_WRITES_ENABLED=false`、`MAINNET_ENABLED=false`和空业务登记继续生效。草稿功能不受“没有云存储”阻断，但不能开启业务签名。`TESTNET_LAB_ENABLED=true`仅允许独立/lab内用户显式测试签名；health的业务payments与实验室能力分别展示。
+GROUP_PUBLISH独立于CLOUD，必须登记实际测试网部署并核验编译runtime/asset/intakeAdmin。NETWORK_WRITES和MAINNET继续false；M1-C前没有资金按钮。现有/lab显式签名开关不变。资源创建、远端迁移和公开合约部署不随main提交自动执行。
 
-Worker不保存密钥、不代签、不提供任意RPC代理；构建/CI不broadcast公开链。公开实验室每步重新核对钱包/10143/token/runtime并显示摘要，用户确认后才签。智能/委托账户尚未验证，保持禁写。
+## 6. 测试与尚未实现
 
-## 6. 编译、回执与恢复
+Vitest分别验证伪RPC边界和真实本地D1；HTTP集成在实际workerd+Miniflare D1+Anvil下执行SIWE/保存/冻结/创建/匿名读取。Playwright另行验证页面与独立浏览器会话；钱包提供者为注入fixture，不冒称真实MetaMask/Safari。
 
-Solidity0.8.28、paris、optimizer200、OpenZeppelin5.7.0、Foundry1.8.3。探针与Group产物从源码生成；编译不意味着部署或区块浏览器源码验证。
+当前未实现：Group参与付款/退出退款等界面（M1-C）、真实资源/钱包综合验收（M1-D）、自动索引器、R2附件、队列通知、WalletConnect、智能账户/SIWE EIP-1271和法币渠道。用户已后置真实测试，保留待验收状态，不阻塞继续编码。安全测试不等于独立审计。
 
-实验室已有：先保存意图→用户签名→hash→核对真实交易/receipt/准确事件→canonical区块与finalized高度→最终状态。拒签/revert/replaced/unknown分开，未知不重发；最多回看41块按账户nonce找回，旧交易可人工补hash，无历史退款用原Payment ID。localStorage只提供恢复线索，不赋予资金权利。
-
-Group资金UI将复用经过验证的恢复思想，但需要加入Box ID/termsHash/固定受益人/credit状态，不把探针的方法名直接替换当完成集成。D1投影/outbox/游标和重组处理仍是后续工作。
-
-## 7. 验证层级
-
-M1-A Foundry覆盖Group37项及探针18项；本地Anvil对Group执行成功、失败、退出后取消三类场景25个操作，核对规则哈希和本金。Playwright覆盖草稿创建到导出/冲突/恢复；实验室模拟钱包依然仅连接本地链。
-
-公共网络当前只有既有只读链/资产证据，真实M0-C/Group签名均待用户安排。即使Anvil使用相同chainId/资产地址，也不能称真实Monad交易。GitHub CI与Cloudflare构建成功不等于所有线上功能/资源验证通过。
-
-## 8. 按需启用资源
-
-M1-B：SIWE账户、D1元数据/草稿/发布记录与对象级授权；生产/Preview独立资源、namespace防护与迁移验收。M1-C：资金UI和可重建索引；实现中按实际负载决定是否需后台队列。Deliver附件再启用私有R2。Preview不消费Queue或自动运行Cron，后台另行验收。
-
-不提前把这三项作为网站或本地草稿的必要服务，不使用共享生产数据冒充开发测试。主网仍需G-07；公开业务入金仍需相应真实网络和安全证据。
-
-参考：[草稿操作](M1-A_GROUP.md) · [实验室与官方来源](M0-C_LAB.md) · [数据/API](DATA_AND_API.md) · [资金规格](../product/FUNDS_AND_STATES.md) · [部署](DEPLOYMENT.md) · [放行条件](../planning/DECISIONS_AND_GATES.md)。
+[M1-B操作与精确API](M1-B_GROUP.md) · [M1-B验收](../planning/M1-B_ACCEPTANCE.md) · [资金规则](../product/FUNDS_AND_STATES.md) · [全阶段计划](../planning/DEVELOPMENT_PLAN.md)
