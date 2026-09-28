@@ -153,6 +153,7 @@ test('stale tab cannot overwrite a newer draft', async ({ page, context }) => {
   await finish(page);
   const url = page.url() + '/edit';
   await page.goto(url);
+  await expect(page.getByLabel('Group title', { exact: true })).toHaveValue('Workshop draft');
   const second = await context.newPage();
   await second.goto(url);
   await expect(second.getByLabel('Group title', { exact: true })).toHaveValue('Workshop draft');

@@ -27,6 +27,9 @@ import type {
 import { makeCloudChain, calldata, same } from '../../shared/cloud/chain';
 import type { CloudChain } from '../../shared/cloud/chain';
 import type { Env } from '../env';
+import { mountModuleRoutes } from '../modules/router';
+import { makeModuleChain } from '../../shared/modules/chain';
+import type { ModuleChain } from '../../shared/modules/chain';
 export class CloudError extends Error {
   constructor(
     public code: string,
@@ -41,7 +44,7 @@ type Variables = {
   session: SessionInfo;
   sessionHash: string;
 };
-type AppEnv = { Bindings: Env; Variables: Variables };
+export type AppEnv = { Bindings: Env; Variables: Variables };
 type C = Context<AppEnv>;
 const now = () => Math.floor(Date.now() / 1000);
 const uuid = z.string().uuid();
@@ -88,7 +91,7 @@ export function cloudError(c: C, error: unknown) {
     known ? error.status : validation ? 400 : 503,
   );
 }
-async function limited(db: D1DatabaseSession, key: string, limit: number, seconds: number) {
+export async function limited(db: D1DatabaseSession, key: string, limit: number, seconds: number) {
   const t = now(),
     bucket = `${key}:${Math.floor(t / seconds)}`;
   const row = await db
@@ -156,7 +159,7 @@ async function fromRow(db: D1DatabaseSession, r: Row): Promise<CloudBox> {
     publication: pub && intent ? { intent, state: pub.state, hash: pub.tx_hash } : null,
   };
 }
-async function authenticate(c: C) {
+export async function authenticate(c: C) {
   const raw = getCookie(c, cookieName(c, 'session'));
   if (!raw || !/^[a-f0-9]{64}$/.test(raw)) throw new CloudError('SIGN_IN_REQUIRED', 401);
   const hash = digest(raw);
@@ -175,7 +178,10 @@ async function authenticate(c: C) {
   c.set('sessionHash', hash);
   return session;
 }
-export function createCloudRouter(chain: CloudChain = makeCloudChain()) {
+export function createCloudRouter(
+  chain: CloudChain = makeCloudChain(),
+  modules: ModuleChain = makeModuleChain(),
+) {
   const app = new Hono<AppEnv>();
   app.use(
     '*',
@@ -561,6 +567,7 @@ export function createCloudRouter(chain: CloudChain = makeCloudChain()) {
     };
     return ok(c, data);
   });
+  mountModuleRoutes(app, modules);
   app.onError((e, c) => cloudError(c, e));
   return app;
 }

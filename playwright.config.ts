@@ -14,12 +14,12 @@ export default defineConfig({
   projects: [
     {
       name: 'desktop',
-      testIgnore: '**/group-funds.spec.ts',
+      testIgnore: ['**/group-funds.spec.ts', '**/modules-funds.spec.ts'],
       use: { ...devices['Desktop Chrome'] },
     },
     {
       name: 'mobile',
-      testIgnore: '**/group-funds.spec.ts',
+      testIgnore: ['**/group-funds.spec.ts', '**/modules-funds.spec.ts'],
       use: { ...devices['iPhone 13'], defaultBrowserType: 'chromium' },
     },
     {
@@ -32,6 +32,18 @@ export default defineConfig({
       name: 'funds-mobile',
       testMatch: '**/group-funds.spec.ts',
       dependencies: ['funds-desktop'],
+      use: { ...devices['iPhone 13'], defaultBrowserType: 'chromium' },
+    },
+    {
+      name: 'modules-desktop',
+      testMatch: '**/modules-funds.spec.ts',
+      dependencies: ['funds-mobile'],
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: 'modules-mobile',
+      testMatch: '**/modules-funds.spec.ts',
+      dependencies: ['modules-desktop'],
       use: { ...devices['iPhone 13'], defaultBrowserType: 'chromium' },
     },
   ],

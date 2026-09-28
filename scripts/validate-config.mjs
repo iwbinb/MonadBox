@@ -37,7 +37,12 @@ export function validateConfig(config, pkg) {
       throw new Error(
         'Remote resources require a reviewed binding configuration, not placeholders',
       );
-    for (const key of ['CLOUD_ENABLED', 'GROUP_PUBLISH_ENABLED'])
+    for (const key of [
+      'CLOUD_ENABLED',
+      'GROUP_PUBLISH_ENABLED',
+      'MODULES_ENABLED',
+      'MODULE_PUBLISH_ENABLED',
+    ])
       if (!['true', 'false'].includes(settings.vars[key] ?? 'false'))
         throw new Error('Invalid cloud feature flag');
     if (settings.vars.CLOUD_ENABLED === 'true') {
@@ -57,16 +62,53 @@ export function validateConfig(config, pkg) {
       databases.push(db[0].database_id.toLowerCase());
     } else if (settings.d1_databases?.length)
       throw new Error('Unused remote database must not be bound');
-    let deployment, previous;
+    let deployment, previous, modules;
     try {
       deployment = JSON.parse(settings.vars.GROUP_DEPLOYMENT ?? 'null');
       previous = JSON.parse(settings.vars.GROUP_PREVIOUS_DEPLOYMENTS ?? '[]');
+      modules = JSON.parse(settings.vars.MODULE_DEPLOYMENTS ?? '[]');
     } catch {
       throw new Error('Invalid Group deployment JSON');
     }
     if (
+      !Array.isArray(modules) ||
+      modules.length > 40 ||
+      modules.some(
+        (entry) =>
+          !entry ||
+          typeof entry.current !== 'boolean' ||
+          !entry.deployment ||
+          !['split', 'group'].includes(entry.deployment.tool) ||
+          entry.deployment.version !== (entry.deployment.tool === 'group' ? 2 : 1) ||
+          entry.deployment.chainId !== 10143 ||
+          entry.deployment.asset?.toLowerCase() !== '0xa9012a055bd4e0edff8ce09f960291c09d5322dc' ||
+          !/^0x[0-9a-f]{40}$/i.test(entry.deployment.address) ||
+          /^0x0{40}$/i.test(entry.deployment.address) ||
+          !/^0x[0-9a-f]{40}$/i.test(entry.deployment.intakeAdmin) ||
+          /^0x0{40}$/i.test(entry.deployment.intakeAdmin) ||
+          !/^0x[0-9a-f]{64}$/i.test(entry.deployment.runtimeHash),
+      )
+    )
+      throw new Error('Invalid module registry');
+    if (
+      new Set(modules.map((entry) => entry.deployment.address.toLowerCase())).size !==
+        modules.length ||
+      new Set(modules.filter((entry) => entry.current).map((entry) => entry.deployment.tool))
+        .size !== modules.filter((entry) => entry.current).length
+    )
+      throw new Error('Duplicate module registration');
+    if (settings.vars.MODULES_ENABLED === 'true' && settings.vars.CLOUD_ENABLED !== 'true')
+      throw new Error('Modules require cloud');
+    if (
+      settings.vars.MODULE_PUBLISH_ENABLED === 'true' &&
+      (settings.vars.MODULES_ENABLED !== 'true' || !modules.some((entry) => entry.current))
+    )
+      throw new Error('Module publishing requires a current deployment');
+    if (
       settings.vars.NETWORK_WRITES_ENABLED === 'true' &&
-      (settings.vars.CLOUD_ENABLED !== 'true' || !deployment)
+      (settings.vars.CLOUD_ENABLED !== 'true' ||
+        (!deployment &&
+          !(settings.vars.MODULES_ENABLED === 'true' && modules.some((entry) => entry.current))))
     )
       throw new Error('Business payments require cloud and reviewed deployment');
     if (

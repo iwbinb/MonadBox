@@ -118,7 +118,7 @@ export function ToolPage() {
         </section>
         <aside className="rule-panel">
           <span className="status-label">
-            {tool.id === 'group'
+            {['group', 'split'].includes(tool.id)
               ? t('Local drafts available', '可创建本地草稿')
               : t('Not open yet', '尚未开放')}{' '}
             · {tool.stage}
@@ -128,6 +128,10 @@ export function ToolPage() {
           {tool.id === 'group' ? (
             <Link className="button primary" to="/create/group">
               {t('Prepare a group draft', '创建成团草稿')}
+            </Link>
+          ) : tool.id === 'split' ? (
+            <Link className="button primary" to="/create/split">
+              {t('Prepare a split draft', '创建分账草稿')}
             </Link>
           ) : (
             <button className="button primary" disabled>
@@ -140,6 +144,13 @@ export function ToolPage() {
               '此工具页不请求业务签名或转账；测试网钱包操作在独立实验室进行。',
             )}
           </p>
+          {tool.id === 'group' ? (
+            <p>
+              <Link to="/create/group-split">
+                {t('Create a group with fixed split recipients', '创建固定多人分账的成团')}
+              </Link>
+            </p>
+          ) : null}
           <Link to="/help/refunds">{t('Review all refund rules', '查看全部退款规则')}</Link>
         </aside>
       </div>

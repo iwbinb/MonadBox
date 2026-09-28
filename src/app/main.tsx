@@ -17,6 +17,24 @@ import './styles.css';
 const GroupActivityPage = lazy(() =>
   import('./group/GroupFunds').then((m) => ({ default: m.GroupActivityPage })),
 );
+const ModuleBuilderPage = lazy(() =>
+  import('./modules/ModulePages').then((m) => ({ default: m.ModuleBuilderPage })),
+);
+const ModuleDraftsPage = lazy(() =>
+  import('./modules/ModulePages').then((m) => ({ default: m.ModuleDraftsPage })),
+);
+const CloudModulesPage = lazy(() =>
+  import('./modules/ModulePages').then((m) => ({ default: m.CloudModulesPage })),
+);
+const CloudModulePage = lazy(() =>
+  import('./modules/ModulePages').then((m) => ({ default: m.CloudModulePage })),
+);
+const PublicModulePage = lazy(() =>
+  import('./modules/ModulePages').then((m) => ({ default: m.PublicModulePage })),
+);
+const ModuleActivityPage = lazy(() =>
+  import('./modules/ModuleFunds').then((m) => ({ default: m.ModuleActivityPage })),
+);
 const LabPage = lazy(() => import('./lab/LabPage'));
 const GroupBuilderPage = lazy(() =>
   import('./group/GroupPages').then((m) => ({ default: m.GroupBuilderPage })),
@@ -92,7 +110,24 @@ createRoot(root).render(
                 path="app/group-drafts/:draftId/edit"
                 element={groupSurface(<GroupBuilderPage />)}
               />
+              <Route
+                path="create/split"
+                element={groupSurface(<ModuleBuilderPage kind="split" />)}
+              />
+              <Route
+                path="create/group-split"
+                element={groupSurface(<ModuleBuilderPage kind="group" />)}
+              />
               <Route path="create/:id" element={<UnavailablePage />} />
+              <Route path="app/module-drafts" element={groupSurface(<ModuleDraftsPage />)} />
+              <Route
+                path="app/module-drafts/:draftId"
+                element={groupSurface(<ModuleBuilderPage />)}
+              />
+              <Route path="app/modules" element={groupSurface(<CloudModulesPage />)} />
+              <Route path="app/modules/:id" element={groupSurface(<CloudModulePage />)} />
+              <Route path="app/module-activity" element={groupSurface(<ModuleActivityPage />)} />
+              <Route path="box/:id" element={groupSurface(<PublicModulePage />)} />
               <Route path="app/group-activity" element={groupSurface(<GroupActivityPage />)} />
               <Route path="app/groups" element={groupSurface(<CloudGroupsPage />)} />
               <Route path="app/groups/:id" element={groupSurface(<CloudGroupPage />)} />

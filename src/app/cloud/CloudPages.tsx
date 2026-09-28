@@ -28,7 +28,7 @@ import {
 } from './api';
 import './cloud.css';
 import { GroupFunds } from '../group/GroupFunds';
-function errorText(e: unknown) {
+export function errorText(e: unknown) {
   if (e instanceof ApiError) {
     const errors: Record<string, string> = {
       CLOUD_UNAVAILABLE:
@@ -83,7 +83,7 @@ function Gate({ children }: { children: ReactNode }) {
     );
   return children;
 }
-function useSession() {
+export function useSession() {
   const [session, setSession] = useState<SessionInfo | null>(null),
     [loading, setLoading] = useState(true);
   useEffect(() => {
@@ -102,7 +102,7 @@ function useSession() {
   }, []);
   return { session, setSession, loading };
 }
-function Login({ onLogin }: { onLogin: (s: SessionInfo) => void }) {
+export function Login({ onLogin }: { onLogin: (s: SessionInfo) => void }) {
   const { t } = useApp();
   const [wallets, setWallets] = useState<WalletOption[]>([]),
     [selected, setSelected] = useState(''),
@@ -197,7 +197,7 @@ function Login({ onLogin }: { onLogin: (s: SessionInfo) => void }) {
     </div>
   );
 }
-function Header({ session, onLogout }: { session: SessionInfo; onLogout: () => void }) {
+export function Header({ session, onLogout }: { session: SessionInfo; onLogout: () => void }) {
   const { t } = useApp();
   const [error, setError] = useState('');
   return (
@@ -560,8 +560,8 @@ function CloudGroup() {
                   <h2>{t('Publish on Monad Testnet', '发布到 Monad 测试网')}</h2>
                   <p>
                     {t(
-                      'Publishing freezes these rules. It creates a group but does not collect a payment. Funding controls arrive in M1-C.',
-                      '发布将冻结规则，仅创建成团，不会收取款项。付款操作在 M1-C 接入。',
+                      'Publishing freezes these rules and creates a group. Payments require a separate wallet confirmation on the verified public page.',
+                      '发布将冻结规则并创建成团。付款需要在已核验的公开页面另行确认钱包操作。',
                     )}
                   </p>
                   <GroupRules />

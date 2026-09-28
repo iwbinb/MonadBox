@@ -1,13 +1,14 @@
 import { Hono } from 'hono';
 import { createCloudRouter, requireCloud } from './cloud/router';
 import type { CloudChain } from '../shared/cloud/chain';
+import type { ModuleChain } from '../shared/modules/chain';
 import { readConfig, toPublicConfig, STAGE } from '../shared/config';
 import { requireStorage } from './storage';
 import { handleQueue, handleScheduled } from './jobs';
 import type { Env } from './env';
 declare const __BUILD_SHA__: string;
 const revision = typeof __BUILD_SHA__ === 'undefined' ? 'local' : __BUILD_SHA__;
-export function createApp(chain?: CloudChain) {
+export function createApp(chain?: CloudChain, modules?: ModuleChain) {
   const app = new Hono<{ Bindings: Env; Variables: { requestId: string } }>();
   const csp =
     "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https://testnet-rpc.monad.xyz; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'";
@@ -77,8 +78,8 @@ export function createApp(chain?: CloudChain) {
       );
     }
   });
-  const cloud = new Hono().route('/api/v1', createCloudRouter(chain));
-  for (const prefix of ['/auth', '/groups', '/public/groups']) {
+  const cloud = new Hono().route('/api/v1', createCloudRouter(chain, modules));
+  for (const prefix of ['/auth', '/groups', '/public/groups', '/modules', '/public/modules']) {
     app.all('/api/v1' + prefix, (c) => cloud.fetch(c.req.raw, c.env, c.executionCtx));
     app.all('/api/v1' + prefix + '/*', (c) => cloud.fetch(c.req.raw, c.env, c.executionCtx));
   }

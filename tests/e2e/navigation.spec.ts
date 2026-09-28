@@ -68,7 +68,9 @@ test('configuration failure offers retry and never enables payments', async ({ p
   await page.getByRole('button', { name: 'Retry', exact: true }).click();
   await expect(page.getByRole('alert')).toHaveCount(0);
   await page.goto('/tools/split');
-  await expect(page.getByRole('button', { name: 'Creation not available yet' })).toBeDisabled();
+  await page.getByRole('link', { name: 'Prepare a split draft', exact: true }).click();
+  await expect(page.getByText('Local draft only.', { exact: false })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Sign this action', exact: true })).toHaveCount(0);
 });
 test('no horizontal overflow at mobile width and enlarged text', async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 800 });

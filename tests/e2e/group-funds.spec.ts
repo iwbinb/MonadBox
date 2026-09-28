@@ -1,102 +1,12 @@
 import { test, expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
-import { createPublicClient, createWalletClient, http, erc20Abi, encodeFunctionData } from 'viem';
-import type { Address, Hex } from 'viem';
+import { erc20Abi, encodeFunctionData } from 'viem';
+import type { Address } from 'viem';
 import { calldata, groupAbi } from '../../src/shared/cloud/chain';
-import { TEST_CHAIN, TOKEN } from '../../src/shared/lab/network';
+import { TOKEN } from '../../src/shared/lab/network';
+import { origin, client, wallet, mine, warp, inject, connect } from '../fixtures/funds-browser';
 import type { CloudBox, PublishIntent, SessionInfo } from '../../src/shared/cloud/model';
-const origin = 'http://127.0.0.1:8790',
-  rpc = 'http://127.0.0.1:18746';
-const client = createPublicClient({ chain: TEST_CHAIN, transport: http(rpc) });
-const wallet = createWalletClient({ chain: TEST_CHAIN, transport: http(rpc) });
-async function raw(method: string, params: unknown[] = []) {
-  const r = await fetch(rpc, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
-  });
-  const d = (await r.json()) as { result: unknown; error?: unknown };
-  if (d.error) throw Error(JSON.stringify(d.error));
-  return d.result;
-}
-async function mine() {
-  await raw('anvil_mine', ['0x41']);
-}
-async function warp(time: number) {
-  await raw('evm_setNextBlockTimestamp', [time]);
-  await raw('evm_mine');
-  await mine();
-}
-async function inject(page: Page, actor: Address) {
-  await page.route('https://testnet-rpc.monad.xyz/**', async (route) => {
-    const q = route.request().postDataJSON() as { id: number; method: string; params: unknown[] };
-    try {
-      const result = await raw(q.method, q.params);
-      await route.fulfill({
-        contentType: 'application/json',
-        body: JSON.stringify({ jsonrpc: '2.0', id: q.id, result }),
-      });
-    } catch {
-      await route.fulfill({
-        contentType: 'application/json',
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: q.id,
-          error: { code: -32000, message: 'local error' },
-        }),
-      });
-    }
-  });
-  await page.exposeFunction('__fundsRpc', async (method: string, params: unknown[]) => {
-    if (method !== 'eth_sendTransaction') throw Error('Only explicit local sends');
-    const hash = (await raw(method, params)) as Hex;
-    await client.waitForTransactionReceipt({ hash });
-    await mine();
-    return hash;
-  });
-  await page.addInitScript(
-    ({ actor }) => {
-      const w = window as Window & {
-        ethereum?: unknown;
-        __fundsActor: string;
-        __fundsReject?: boolean;
-        __fundsLost?: boolean;
-        __fundsRpc: (m: string, p: unknown[]) => Promise<unknown>;
-      };
-      let connected = false;
-      w.__fundsActor = actor;
-      w.ethereum = {
-        request: async ({ method, params = [] }: { method: string; params?: unknown[] }) => {
-          if (method === 'eth_accounts') return connected ? [w.__fundsActor] : [];
-          if (method === 'eth_requestAccounts') {
-            connected = true;
-            return [w.__fundsActor];
-          }
-          if (method === 'eth_chainId') return '0x279f';
-          if (method === 'wallet_switchEthereumChain') return null;
-          if (w.__fundsReject) {
-            w.__fundsReject = false;
-            throw { code: 4001 };
-          }
-          const result = await w.__fundsRpc(method, params);
-          if (w.__fundsLost) {
-            w.__fundsLost = false;
-            throw Error('Response lost after local broadcast');
-          }
-          return result;
-        },
-        on: () => {},
-        removeListener: () => {},
-      };
-    },
-    { actor },
-  );
-}
-async function connect(page: Page) {
-  await page.getByRole('button', { name: 'Connect funds wallet', exact: true }).click();
-  await expect(page.getByText('Snapshot block', { exact: false })).toBeVisible();
-}
 async function action(page: Page, name: string) {
   await page.getByRole('button', { name: 'Prepare: ' + name, exact: true }).click();
   await page

@@ -84,12 +84,40 @@ try {
     intakeAdmin: accounts[0],
     runtimeHash: keccak256(code),
   };
+  const modules = [];
+  if (funds)
+    for (const [tool, name, version] of [
+      ['split', 'SplitPaymentsV1', 1],
+      ['group', 'GroupEscrowV2', 2],
+    ]) {
+      const compiled = JSON.parse(readFileSync(`artifacts/modules/${name}.json`, 'utf8'));
+      const tx = await wallet.deployContract({
+        account: accounts[0],
+        abi: compiled.abi,
+        bytecode: compiled.bytecode,
+        args: [token, accounts[0]],
+      });
+      const deployed = await publicClient.waitForTransactionReceipt({ hash: tx });
+      if (deployed.status !== 'success' || !deployed.contractAddress)
+        throw Error('Local module deployment failed');
+      const runtime = await publicClient.getCode({ address: deployed.contractAddress });
+      modules.push({
+        current: true,
+        deployment: {
+          ...deployment,
+          tool,
+          version,
+          address: deployed.contractAddress,
+          runtimeHash: keccak256(runtime),
+        },
+      });
+    }
   await raw('anvil_mine', ['0x41']);
   mkdirSync('artifacts', { recursive: true });
   writeFileSync(
     funds ? 'artifacts/funds-test.json' : 'artifacts/cloud-test.json',
     JSON.stringify(
-      { mode: 'LOCAL ANVIL ONLY; NOT MONAD', origin, rpc, accounts, deployment },
+      { mode: 'LOCAL ANVIL ONLY; NOT MONAD', origin, rpc, accounts, deployment, modules },
       null,
       2,
     ),
@@ -134,12 +162,15 @@ try {
         GROUP_PUBLISH_ENABLED: 'true',
         APP_ORIGIN: origin,
         GROUP_DEPLOYMENT: JSON.stringify(deployment),
+        MODULES_ENABLED: funds ? 'true' : 'false',
+        MODULE_PUBLISH_ENABLED: funds ? 'true' : 'false',
+        MODULE_DEPLOYMENTS: JSON.stringify(modules),
       },
       d1Databases: { DB: 'cloud-e2e-only' },
     }),
   );
   const db = await mf.getD1Database('DB');
-  for (const file of ['0001_foundation.sql', '0002_cloud_groups.sql']) {
+  for (const file of ['0001_foundation.sql', '0002_cloud_groups.sql', '0003_modules.sql']) {
     const text = readFileSync('migrations/' + file, 'utf8').replace(/^--.*$/gm, '');
     for (const sql of text
       .split(';')

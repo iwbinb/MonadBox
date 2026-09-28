@@ -1,0 +1,40 @@
+.module-recipient-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 130px auto;
+  gap: 12px;
+  align-items: end;
+}
+.module-recipients {
+  padding-left: 24px;
+}
+.module-recipients li {
+  margin: 12px 0;
+}
+.module-recipients span {
+  display: block;
+}
+.module-facts dt {
+  font-weight: 600;
+  margin-top: 12px;
+}
+.module-facts dd {
+  margin-left: 0;
+  overflow-wrap: anywhere;
+}
+.cloud-card fieldset {
+  border: 1px solid #dde1eb;
+  padding: 16px;
+  border-radius: 12px;
+  min-width: 0;
+}
+.cloud-page code {
+  overflow-wrap: anywhere;
+}
+@media (max-width: 600px) {
+  .module-recipient-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+    border-bottom: 1px solid #dde1eb;
+    padding-bottom: 12px;
+  }
+}

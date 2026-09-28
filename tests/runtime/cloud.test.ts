@@ -8,6 +8,9 @@ import type { CloudChain, ReceiptResult } from '../../src/shared/cloud/chain';
 import { GROUP_ASSET, newGroupFields, validateGroupFields } from '../../src/shared/group/draft';
 import type { CloudBox, SessionInfo } from '../../src/shared/cloud/model';
 import type { Env } from '../../src/worker/env';
+import type { ModuleChain } from '../../src/shared/modules/chain';
+import type { ModuleBox } from '../../src/shared/modules/model';
+import { moduleIntentSchema } from '../../src/shared/modules/model';
 // Isolated test identities, never funded on or connected to a public chain.
 const alice = privateKeyToAccount(toHex(1, { size: 32 })),
   bob = privateKeyToAccount(toHex(2, { size: 32 }));
@@ -45,7 +48,40 @@ const chain: CloudChain = {
     };
   },
 };
-const app = createCloudRouter(chain);
+const modules: ModuleChain = {
+  async prepare(publication, actor, action) {
+    return moduleIntentSchema.parse({
+      id: crypto.randomUUID(),
+      publication,
+      actor,
+      action,
+      nonce: 7,
+      startBlock: '100',
+      expiresAt: Math.floor(Date.now() / 1000) + 600,
+    });
+  },
+  async confirm() {
+    return outcome;
+  },
+  async snapshot() {
+    return {
+      state: 'ACTIVE',
+      storedState: 1,
+      activeCount: 0,
+      position: 0,
+      locked: '0',
+      credit: '0',
+      withdrawn: '0',
+      allowance: '0',
+      balance: '0',
+      paused: false,
+      block: '105',
+      blockHash: hash,
+      timestamp: Math.floor(Date.now() / 1000),
+    };
+  },
+};
+const app = createCloudRouter(chain, modules);
 const data = () =>
   validateGroupFields({
     ...newGroupFields(),
@@ -112,7 +148,7 @@ beforeAll(async () => {
     }),
   );
   db = (await mf.getD1Database('DB')) as unknown as D1Database;
-  for (const file of ['0001_foundation.sql', '0002_cloud_groups.sql'])
+  for (const file of ['0001_foundation.sql', '0002_cloud_groups.sql', '0003_modules.sql'])
     for (const sql of (await readFile('migrations/' + file, 'utf8'))
       .replace(/^--.*$/gm, '')
       .split(';')
@@ -143,12 +179,21 @@ afterAll(async () => {
 beforeEach(async () => {
   vi.restoreAllMocks();
   await db.batch(
-    ['group_publications', 'boxes', 'sessions', 'users', 'cloud_challenges', 'cloud_limits'].map(
-      (t) => db.prepare(`DELETE FROM ${t}`),
-    ),
+    [
+      'module_boxes',
+      'group_publications',
+      'boxes',
+      'sessions',
+      'users',
+      'cloud_challenges',
+      'cloud_limits',
+    ].map((t) => db.prepare(`DELETE FROM ${t}`)),
   );
   outcome = { state: 'unknown' };
   eoa = true;
+  env.MODULES_ENABLED = 'false';
+  env.MODULE_PUBLISH_ENABLED = 'false';
+  env.MODULE_DEPLOYMENTS = '[]';
 });
 describe('SIWE and sessions with real isolated D1', () => {
   it('creates a bound session, never stores a raw signature, and revokes logout', async () => {
@@ -524,5 +569,169 @@ describe('cloud metadata and immutable publication', () => {
     outcome = { state: 'finalized', hash };
     await db.prepare("UPDATE boxes SET metadata_json='tampered' WHERE id=?").bind(row.id).run();
     expect((await b.req('/public/groups/' + row.publicId)).status).toBe(503);
+  });
+});
+
+describe('versioned module drafts and publication with real isolated D1', () => {
+  const splitData = {
+    tool: 'split',
+    title: 'Fixed split',
+    description: 'Public rules',
+    recipients: [
+      { address: alice.address, bps: 7000 },
+      { address: bob.address, bps: 3000 },
+    ],
+  };
+  const registration = {
+    current: true,
+    deployment: {
+      ...deployment,
+      tool: 'split',
+      address: '0x3333333333333333333333333333333333333333',
+    },
+  };
+  function enable() {
+    env.MODULES_ENABLED = 'true';
+    env.MODULE_PUBLISH_ENABLED = 'true';
+    env.MODULE_DEPLOYMENTS = JSON.stringify([registration]);
+  }
+  async function create(
+    b: Browser,
+    key = crypto.randomUUID(),
+    data = splitData,
+  ): Promise<ModuleBox> {
+    const r = await b.req('/modules', 'POST', { data }, { 'Idempotency-Key': key });
+    expect(r.status, await r.clone().text()).toBe(200);
+    return (await r.json()).data;
+  }
+  it('keeps modules unavailable by default and requires a session when enabled', async () => {
+    const b = new Browser();
+    expect((await b.req('/modules')).status).toBe(503);
+    enable();
+    expect((await b.req('/modules')).status).toBe(401);
+  });
+  it('preserves original local data as an explicit independent copy, with idempotency and owner isolation', async () => {
+    enable();
+    const a = new Browser(),
+      b = new Browser();
+    await a.login();
+    await b.login(bob);
+    const key = crypto.randomUUID(),
+      first = await create(a, key);
+    expect((await create(a, key)).id).toBe(first.id);
+    expect((await b.req('/modules/' + first.id)).status).toBe(404);
+    expect(
+      (
+        await a.req(
+          '/modules',
+          'POST',
+          { data: { ...splitData, title: 'Changed' } },
+          { 'Idempotency-Key': key },
+        )
+      ).status,
+    ).toBe(409);
+    expect((await a.req('/public/modules/' + first.publicId)).status).toBe(404);
+  });
+  it('checks CSRF and revision, rejects changing tool type and stale edits', async () => {
+    enable();
+    const b = new Browser();
+    await b.login();
+    const row = await create(b);
+    expect(
+      (
+        await b.req(
+          '/modules/' + row.id,
+          'PATCH',
+          { revision: 1, data: splitData },
+          { 'X-CSRF-Token': 'bad' },
+        )
+      ).status,
+    ).toBe(403);
+    const changed = { ...splitData, title: 'Updated' };
+    expect(
+      (await b.req('/modules/' + row.id, 'PATCH', { revision: 1, data: changed })).status,
+    ).toBe(200);
+    expect(
+      (await b.req('/modules/' + row.id, 'PATCH', { revision: 1, data: splitData })).status,
+    ).toBe(409);
+    expect((await b.req('/modules/' + row.id, 'DELETE', { revision: 1 })).status).toBe(409);
+    expect((await b.req('/modules/' + row.id, 'DELETE', { revision: 2 })).status).toBe(200);
+  });
+  it('freezes publication once and retains its nonce and salt on retries and unknown outcomes', async () => {
+    enable();
+    const b = new Browser();
+    await b.login();
+    const row = await create(b);
+    const first = await b.req('/modules/' + row.id + '/prepare', 'POST', { revision: 1 });
+    expect(first.status, await first.clone().text()).toBe(200);
+    const prepared = (await first.json()).data as ModuleBox;
+    const retry = await b.req('/modules/' + row.id + '/prepare', 'POST', { revision: 1 });
+    expect((await retry.json()).data.publication).toEqual(prepared.publication);
+    expect(
+      (await b.req('/modules/' + row.id, 'PATCH', { revision: 1, data: splitData })).status,
+    ).toBe(409);
+    expect((await b.req('/modules/' + row.id, 'DELETE', { revision: 1 })).status).toBe(409);
+    outcome = { state: 'unknown', hash };
+    expect((await b.req('/modules/' + row.id + '/confirm', 'POST', { hash })).status).toBe(200);
+    outcome = { state: 'unknown', hash: toHex(43, { size: 32 }) };
+    await b.req('/modules/' + row.id + '/confirm', 'POST', {});
+    const saved = (await (await b.req('/modules/' + row.id)).json()).data as ModuleBox;
+    expect(saved.receipt?.hash).toBe(hash);
+    expect(saved.publication).toEqual(prepared.publication);
+  });
+  it('publishes only verified transactions and reads retired deployments by their original identity', async () => {
+    enable();
+    const b = new Browser();
+    await b.login();
+    const row = await create(b);
+    await b.req('/modules/' + row.id + '/prepare', 'POST', { revision: 1 });
+    outcome = { state: 'finalized', hash, block: '105', blockHash: hash };
+    expect((await b.req('/modules/' + row.id + '/confirm', 'POST', { hash })).status).toBe(200);
+    env.MODULE_DEPLOYMENTS = JSON.stringify([
+      { ...registration, current: false },
+      {
+        ...registration,
+        deployment: {
+          ...registration.deployment,
+          address: '0x4444444444444444444444444444444444444444',
+        },
+      },
+    ]);
+    const publicResponse = await new Browser().req('/public/modules/' + row.publicId);
+    expect(publicResponse.status).toBe(200);
+    expect((await publicResponse.json()).data.publication.deployment.address).toBe(
+      registration.deployment.address,
+    );
+    outcome = { state: 'unknown' };
+    expect((await b.req('/public/modules/' + row.publicId)).status).toBe(503);
+    expect((await b.req('/modules/' + row.id + '/confirm', 'POST', {})).status).toBe(503);
+    expect((await (await b.req('/modules/' + row.id)).json()).data.receipt.state).toBe('finalized');
+  });
+  it('rejects corrupted stored metadata, cross-domain terms and unknown module identity', async () => {
+    enable();
+    const b = new Browser();
+    await b.login();
+    const row = await create(b);
+    await b.req('/modules/' + row.id + '/prepare', 'POST', { revision: 1 });
+    env.MODULE_DEPLOYMENTS = JSON.stringify([
+      {
+        ...registration,
+        deployment: { ...registration.deployment, runtimeHash: toHex(1, { size: 32 }) },
+      },
+    ]);
+    expect((await b.req('/modules/' + row.id + '/confirm', 'POST', {})).status).toBe(503);
+    await db.prepare("UPDATE module_boxes SET metadata='tampered' WHERE id=?").bind(row.id).run();
+    expect((await b.req('/modules/' + row.id)).status).toBe(503);
+  });
+  it('does not enable modules against an incorrect schema', async () => {
+    enable();
+    await db.prepare('UPDATE module_schema SET version=2').run();
+    try {
+      const b = new Browser();
+      await b.login();
+      expect((await b.req('/modules')).status).toBe(503);
+    } finally {
+      await db.prepare('UPDATE module_schema SET version=1').run();
+    }
   });
 });

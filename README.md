@@ -6,7 +6,7 @@
 
 ## 从这里开始
 
-- [总目标、当前进度与分阶段任务](docs/planning/DEVELOPMENT_PLAN.md)：唯一进度入口，下一个开发阶段是 M1-C。
+- [总目标、当前进度与分阶段任务](docs/planning/DEVELOPMENT_PLAN.md)：唯一进度入口，按授权连续完成六工具开发。
 - [文档索引](docs/README.md)：按任务找规格、操作说明和历史证据。
 - [开发约定](AGENTS.md)：执行范围、Git、资金与验证规则。
 

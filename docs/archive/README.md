@@ -10,6 +10,8 @@
 | [M0-C RPC 证据](M0-C_RPC_EVIDENCE.json) | 当次公开测试网只读结果，非当前实时状态 |
 | [M1-A](M1-A_ACCEPTANCE.md) | 本地 Group 草稿和合约基础 |
 | [M1-B](M1-B_ACCEPTANCE.md) | SIWE、云端发布、分享及 PR #6 修复的测试证据 |
+| [M1-C](M1-C_ACCEPTANCE.md) | Group资金动作、回执恢复与完整CI检查点 |
+| [M2-A](M2-A_ACCEPTANCE.md) | Split、Group V2、版本化发布和52项浏览器回归 |
 
 ## 2026-09-28 文件整理
 

@@ -1,7 +1,8 @@
 import { z } from 'zod';
 import { deploymentSchema } from './cloud/model';
 import { GROUP_ASSET } from './group/draft';
-export const STAGE = 'M1-C' as const;
+import { moduleRegistrationSchema } from './modules/model';
+export const STAGE = 'M2-A' as const;
 export const TESTNET_CHAIN_ID = 10143 as const;
 const falseFlag = z.literal('false');
 const booleanFlag = z.enum(['false', 'true']).transform((value) => value === 'true');
@@ -16,6 +17,19 @@ const emptyList = z.string().refine((value) => {
 const schema = z
   .object({
     CLOUD_ENABLED: booleanFlag.default(false),
+    MODULES_ENABLED: booleanFlag.default(false),
+    MODULE_PUBLISH_ENABLED: booleanFlag.default(false),
+    MODULE_DEPLOYMENTS: z
+      .string()
+      .default('[]')
+      .transform((s, ctx) => {
+        try {
+          return moduleRegistrationSchema.array().max(40).parse(JSON.parse(s));
+        } catch {
+          ctx.addIssue({ code: 'custom', message: 'Invalid module registry' });
+          return z.NEVER;
+        }
+      }),
     GROUP_PUBLISH_ENABLED: booleanFlag.default(false),
     GROUP_PREVIOUS_DEPLOYMENTS: z
       .string()
@@ -52,6 +66,28 @@ const schema = z
     CONTRACT_REGISTRY: emptyList,
   })
   .superRefine((value, ctx) => {
+    const modules = value.MODULE_DEPLOYMENTS;
+    if (
+      new Set(modules.map((entry) => entry.deployment.address.toLowerCase())).size !==
+        modules.length ||
+      new Set(modules.filter((entry) => entry.current).map((entry) => entry.deployment.tool))
+        .size !== modules.filter((entry) => entry.current).length ||
+      modules.some((entry) => entry.deployment.asset.toLowerCase() !== GROUP_ASSET.toLowerCase())
+    )
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Module addresses must be unique with one current deployment per tool',
+      });
+    if (value.MODULES_ENABLED && !value.CLOUD_ENABLED)
+      ctx.addIssue({ code: 'custom', message: 'Modules require cloud' });
+    if (
+      value.MODULE_PUBLISH_ENABLED &&
+      (!value.MODULES_ENABLED || !modules.some((entry) => entry.current))
+    )
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Module publishing requires modules and a current deployment',
+      });
     const deployments = [value.GROUP_DEPLOYMENT, ...value.GROUP_PREVIOUS_DEPLOYMENTS].filter(
       (entry) => entry !== null,
     );
@@ -97,8 +133,8 @@ const schema = z
     if (
       value.NETWORK_WRITES_ENABLED &&
       (!value.CLOUD_ENABLED ||
-        !value.GROUP_DEPLOYMENT ||
-        value.GROUP_DEPLOYMENT.asset.toLowerCase() !== GROUP_ASSET.toLowerCase())
+        (!value.GROUP_DEPLOYMENT &&
+          !(value.MODULES_ENABLED && modules.some((entry) => entry.current))))
     )
       ctx.addIssue({
         code: 'custom',
@@ -141,6 +177,8 @@ export const publicConfigSchema = z.object({
     drafts: z.boolean(),
     cloudGroups: z.boolean().default(false),
     groupPublishing: z.boolean().default(false),
+    cloudModules: z.boolean().default(false),
+    modulePublishing: z.boolean().default(false),
     localGroupDrafts: z.literal(true),
   }),
 });
@@ -160,6 +198,8 @@ export function toPublicConfig(config: RuntimeConfig, revision: string): PublicC
       drafts: config.CLOUD_ENABLED,
       cloudGroups: config.CLOUD_ENABLED,
       groupPublishing: config.GROUP_PUBLISH_ENABLED,
+      cloudModules: config.MODULES_ENABLED,
+      modulePublishing: config.MODULE_PUBLISH_ENABLED,
       localGroupDrafts: true,
     },
   };
