@@ -22,7 +22,7 @@
 
 ## Git 与部署
 
-正式站：`https://monadbox.iwbinb.workers.dev/`。PR #1–#4已合并；M1-B从`4ee923b`继续在dev开发，等待本批PR由Bill合并。一个`monadbox` Worker：main正式发布，dev Worker Previews。不自动合并、不强推、不删除dev。
+正式站：`https://monadbox.iwbinb.workers.dev/`。PR #1–#5已合并；M1-B合并提交为`04dbcb6`，已同步到dev。本批在dev修复发布交易类型核验和恢复时原交易hash的保护，验收记录见[M1-B修复补充](docs/planning/M1-B_ACCEPTANCE.md#9-pr-5审查修复)。M1-C尚未开始。一个`monadbox` Worker：main正式发布，dev Worker Previews。不自动合并、不强推、不删除dev。
 
 | Cloudflare字段 | 命令 |
 | --- | --- |

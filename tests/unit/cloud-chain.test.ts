@@ -52,7 +52,17 @@ const i: PublishIntent = {
   expiresAt: 9999999999,
 };
 function fake() {
-  const tx = { hash: H, from: A, nonce: 7, to: M, input: calldata(i), value: 0n, blockHash: B };
+  const tx = {
+    hash: H,
+    from: A,
+    nonce: 7,
+    to: M,
+    input: calldata(i),
+    value: 0n,
+    blockHash: B,
+    type: 'eip1559' as string | undefined,
+    authorizationList: undefined as unknown[] | undefined,
+  };
   const receipt = {
     status: 'success',
     blockNumber: 99n,
@@ -127,9 +137,38 @@ describe('M1-B public publication verifier', () => {
       verifyDeployment(c as unknown as ChainClient, { ...i.deployment, runtimeHash: H }),
     ).rejects.toThrow();
   });
-  it('accepts exact finalized creation with correct event and group state', async () => {
-    const { chain } = fake();
-    expect((await chain.confirm(i, H)).state).toBe('finalized');
+  it.each(['legacy', 'eip2930', 'eip1559'])(
+    'accepts exact finalized %s creation with correct event and group state',
+    async (type) => {
+      const f = fake();
+      f.tx.type = type;
+      expect((await f.chain.confirm(i, H)).state).toBe('finalized');
+    },
+  );
+  it.each([
+    { type: 'eip7702', authorizationList: undefined },
+    { type: 'eip7702', authorizationList: [] },
+    { type: 'eip7702', authorizationList: [{ address: A }] },
+    { type: 'eip1559', authorizationList: [{ address: A }] },
+    { type: 'legacy', authorizationList: [] },
+    { type: 'eip4844', authorizationList: undefined },
+    { type: 'future-type', authorizationList: undefined },
+    { type: undefined, authorizationList: undefined },
+  ])(
+    'rejects unsupported envelope $type / $authorizationList despite valid call and event',
+    async (envelope) => {
+      const f = fake();
+      Object.assign(f.tx, envelope);
+      await expect(f.chain.confirm(i, H)).rejects.toThrow('UNSUPPORTED_TRANSACTION');
+      expect(f.c.readContract).not.toHaveBeenCalledWith(
+        expect.objectContaining({ functionName: 'getGroup' }),
+      );
+    },
+  );
+  it('applies the envelope check to a transaction recovered by nonce', async () => {
+    const f = fake();
+    f.tx.type = 'eip7702';
+    await expect(f.chain.confirm(i)).rejects.toThrow('UNSUPPORTED_TRANSACTION');
   });
   it('missing receipt remains unknown', async () => {
     const f = fake();

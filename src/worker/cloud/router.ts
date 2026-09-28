@@ -511,7 +511,8 @@ export function createCloudRouter(chain: CloudChain = makeCloudChain()) {
     await db.batch([
       db
         .prepare(
-          "UPDATE group_publications SET state=?,tx_hash=COALESCE(?,tx_hash),verified_block=?,verified_block_hash=? WHERE box_id=? AND state!='finalized'",
+          // Check the current row atomically: a late unknown result must not erase a known hash.
+          "UPDATE group_publications SET state=?,tx_hash=COALESCE(?,tx_hash),verified_block=?,verified_block_hash=? WHERE box_id=? AND state!='finalized' AND (tx_hash IS NULL OR lower(tx_hash)=lower(?) OR ?!='unknown')",
         )
         .bind(
           result.state,
@@ -519,6 +520,8 @@ export function createCloudRouter(chain: CloudChain = makeCloudChain()) {
           result.block ?? null,
           result.blockHash ?? null,
           b.id,
+          result.hash ?? null,
+          result.state,
         ),
       db
         .prepare(

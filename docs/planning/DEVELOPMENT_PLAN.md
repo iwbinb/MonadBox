@@ -1,6 +1,6 @@
 # 全阶段开发与验收计划
 
-M1-B更新。一个monadbox Worker，main正式站、dev Worker Previews；开发/本地测试/部署/真实网络验收分开。
+M1-B及PR #5审查修复更新。一个monadbox Worker，main正式站、dev Worker Previews；开发/本地测试/部署/真实网络验收分开。
 
 ## 1. 执行约定
 
@@ -16,7 +16,7 @@ M1-B更新。一个monadbox Worker，main正式站、dev Worker Previews；开�
 | M0-B | 工程、页面、CI与Git部署 | PR #2已合并；正式/Preview构建有成功证据，正式health已核验；远端数据资源未启用 |
 | M0-C | 钱包/Monad/AUSD最小验证 | PR #3已合并；本地通过，真实签名测试后置 |
 | M1-A | Group本地草稿与合约基础 | PR #4已合并；Group37项Foundry与本地场景已通过，真实部署待验收 |
-| M1-B | SIWE、云端元数据、发布和分享 | 本批代码/自动验证交付，等待用户PR审阅；远端D1/部署/钱包验收后置，云端及发布默认关闭 |
+| M1-B | SIWE、云端元数据、发布和分享 | PR #5已合并至04dbcb6并同步dev；本批修复交易类型核验及原hash恢复保护，另提PR；远端D1/部署/钱包验收后置，云端及发布默认关闭 |
 | M1-C | Group付款/退出/退款/结算/提款UI与恢复 | 未开始，依赖M1-B代码接口 |
 | M1-D | 真实Group、资源与钱包综合验收 | 待用户安排，与M0-C未完成项一起补齐 |
 | M2-A | Split与Group组合 | 未开始；M1资金模型/接口稳定后开发 |
@@ -57,7 +57,7 @@ C-01公网只读核验chainId/区块/Gas/finalized；C-02官方AUSD代码/精度
 
 [验收](M1-A_ACCEPTANCE.md)：169项单元运行时、55项合约、44项浏览器及25个Group本地操作的当时证据。后续新增测试不改写这份历史数字。草稿URL不是公开付款链接。
 
-## 6. M1-B：本批
+## 6. M1-B：已合并，本批补审查修复
 
 | 任务 | 实现与验收要点 |
 | --- | --- |
@@ -69,7 +69,7 @@ C-01公网只读核验chainId/区块/Gas/finalized；C-02官方AUSD代码/精度
 
 代码与本地证据见[M1-B验收](M1-B_ACCEPTANCE.md)，操作、实际API和D1配置见[M1-B说明](../engineering/M1-B_GROUP.md)。默认远端CLOUD_ENABLED/GROUP_PUBLISH_ENABLED=false；真实数据库schema2与namespace、部署登记、钱包和线上独立浏览器需要用户后续验收。
 
-本批停止点：dev→main PR，用户确认合并；不自动开始M1-C。接口成功或本地浏览器公开页不代替真实Monad交易。
+PR #5已合并，main/dev基线为`04dbcb6`。本批只修复两条审查意见：拒绝不支持的发布交易类型/委托授权，以及原交易hash不被未核验的新hash覆盖（含并发返回）。实际验证见[M1-B验收补充](M1-B_ACCEPTANCE.md#9-pr-5审查修复)。停止点仍为dev→main修复PR，由用户合并；不自动开始M1-C。接口成功或本地浏览器公开页不代替真实Monad交易。
 
 ## 7. M1-C：资金交互
 
