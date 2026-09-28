@@ -1,5 +1,7 @@
 # M1-B 开发与验收记录
 
+> 历史验收记录：保留当时结论与未完成项，不作为当前执行指令。最新状态与后续顺序见[总计划](../planning/DEVELOPMENT_PLAN.md)。
+
 记录更新：2026-09-28。自动测试执行：2026-09-27 UTC。
 
 PR #5现已合并为`04dbcb6`，main/dev已同步。第1–8节保留原批次交付时的记录；合并后的审查修复与本次验证见第9节。
@@ -85,7 +87,7 @@ CI artifact：`10935959815`，名称 `foundation-36333993466-1`，大小6,677,39
 
 Bill审阅并合并本批PR、保留dev。后续功能编码为 **M1-C：付款/退出/退款/结算/提款界面与恢复**，须用户明确继续，本批不自动开始。真实D1/部署/钱包验收按用户安排在M1-D补齐，并保留M0-C后置项。启用云端只需D1，不必同时增加R2或Queues。
 
-[操作、API与配置](../engineering/M1-B_GROUP.md) · [全阶段计划](DEVELOPMENT_PLAN.md) · [决策与门禁](DECISIONS_AND_GATES.md)
+[操作、API与配置](../engineering/GROUP.md) · [全阶段计划](../planning/DEVELOPMENT_PLAN.md) · [决策与门禁](../planning/DECISIONS_AND_GATES.md)
 
 ## 9. PR #5审查修复
 

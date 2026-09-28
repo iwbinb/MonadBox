@@ -1,4 +1,4 @@
-# M0-C 测试网实验室操作与恢复
+# 测试网实验室：操作与恢复
 
 2026-09-27 · 本文区分已实现功能和待实际签名的验收。入口为网站 `/lab`，独立于六个业务工具。
 
@@ -6,7 +6,7 @@
 
 浏览器通过 EIP-6963 发现注入钱包，并兼容 window.ethereum。只有点击连接按钮才请求钱包账户授权；选择测试网、确认摘要、在钱包中批准后才会写链。服务器和 CI 不持有签名密钥。
 
-支持路径：普通外部账户 EOA。代码非空的智能账户、已委托账户/EIP-7702 暂时禁止写入；WalletConnect、邮箱钱包、Gas 赞助和 SIWE 会话未实现。模拟钱包测试通过不等于已经在 MetaMask、硬件钱包或真实 Safari 中验证。
+支持路径：普通外部账户 EOA。代码非空的智能账户、已委托账户/EIP-7702 暂时禁止写入；WalletConnect、邮箱钱包和 Gas 赞助未实现。实验室不要求登录；业务云端的 SIWE 会话见 [Group 说明](GROUP.md)。模拟钱包测试通过不等于已经在 MetaMask、硬件钱包或真实 Safari 中验证。
 
 网络固定 Monad Testnet 10143；浏览器 RPC 固定 `https://testnet-rpc.monad.xyz`。资产固定官方测试 AUSD `0xa9012a055bd4e0eDfF8Ce09f960291C09D5322dC`，精度须为 6，代码和 symbol 必须可读。默认金额 **0.1 测试 AUSD**；每钱包每探针保留款最大 **1 测试 AUSD**，不是美元充值。
 
@@ -65,7 +65,7 @@ M0CProbe 没有管理员、升级、费用、验收期、分账和活动逻辑�
 
 ## 6. 验收交接
 
-把**探针地址、部署/授权/入金/退款的四个哈希、Payment ID、所用钱包/浏览器版本**交给项目维护者核对即可；不要提供密钥。记录真实网络的 code、receipt、日志、canonical/finalized 区块、余额变化和重复退款拒绝，才可关闭 C-T03/C-T06 的真实网络部分并继续 M1。
+把**探针地址、部署/授权/入金/退款的四个哈希、Payment ID、所用钱包/浏览器版本**交给项目维护者核对即可；不要提供密钥。记录真实网络的 code、receipt、日志、canonical/finalized 区块、余额变化和重复退款拒绝，才可关闭 C-T03/C-T06 的真实网络部分。按 ADR-19，真实验收后置，不阻塞后续代码和本地测试。
 
 公共地址和哈希会暴露链上活动，只用测试钱包。没有这些证据，M0-C 始终显示“开发/本地测试完成，真实链上签名验收待完成”。
 
@@ -76,6 +76,6 @@ M0CProbe 没有管理员、升级、费用、验收期、分账和活动逻辑�
 - [EIP-6963 多钱包发现](https://eips.ethereum.org/EIPS/eip-6963)
 - [EIP-1193 Provider API](https://eips.ethereum.org/EIPS/eip-1193)
 - [OpenZeppelin ERC20](https://docs.openzeppelin.com/contracts/5.x/api/token/erc20)
-- [实际只读 RPC 记录](../planning/M0-C_RPC_EVIDENCE.json)
+- [实际只读 RPC 记录](../archive/M0-C_RPC_EVIDENCE.json)
 
 公开资料核验日期为 2026-09-27；实际当前 RPC/代码以每次调用结果为准。

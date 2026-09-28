@@ -2,61 +2,53 @@
 
 **一个链接，按约定完成收款、退款与分账。**
 
-面向个人、创作者、社区和小团队的稳定币支付工具集合站。目标保留 Group、Split、Deliver、Attend、Milestones、Rewards。
+面向个人、创作者、社区和小团队的稳定币支付工具集合站：Group、Split、Deliver、Attend、Milestones、Rewards。
 
-## 当前批次：M1-B 云端成团与发布
+## 从这里开始
 
-已实现钱包SIWE登录、D1云端草稿与不可变元数据、成团发布意图/显式钱包签名/回执核验，以及无需登录的公开分享页。**代码与本地集成验证不等于已开启线上云端或公开收款。** 当前发布配置仍关闭CLOUD与GROUP_PUBLISH；真实D1绑定、Group测试网部署和真实钱包验收后置。
+- [总目标、当前进度与分阶段任务](docs/planning/DEVELOPMENT_PLAN.md)：唯一进度入口，下一个开发阶段是 M1-C。
+- [文档索引](docs/README.md)：按任务找规格、操作说明和历史证据。
+- [开发约定](AGENTS.md)：执行范围、Git、资金与验证规则。
 
-| 路径 | 能力与边界 |
+已实现本地 Group 草稿、SIWE 登录、D1 云端草稿、冻结发布及匿名分享页；PR #6 的交易类型核验与恢复修复已合并。真实资源和钱包验收后置，云端、Group 发布与业务付款默认关闭。完整 Group 资金交互和其余五工具仍待开发。
+
+## 工程地图
+
+| 目录 | 用途 |
 | --- | --- |
-| `/create/group`、`/app/group-drafts` | 可用的本地草稿；不是云同步或付款链接 |
-| `/app/groups` | 云端登录/记录入口；未配置D1时明确显示尚未启用 |
-| `/app/groups/:id` | 账号授权、云端草稿编辑、冻结发布和查链恢复 |
-| `/b/:id` | 只展示已核验发布的规则；付款按钮仍关闭 |
-| `/lab` | M0-C独立测试网钱包实验室，不是业务托管 |
+| `src/app/` | 页面、工作台、本地草稿、云端、实验室 |
+| `src/shared/` | 金额、规则、钱包、链上核验与恢复 |
+| `src/worker/` | 同源 API、会话、权限与数据访问 |
+| `contracts/` | Group 合约、实验探针及合约测试 |
+| `migrations/` | 按顺序应用的 D1 数据库迁移 |
+| `scripts/` | 编译、配置检查、部署、本地集成测试 |
+| `tests/` | 单元、Worker/D1、链上场景及浏览器测试 |
+| `docs/` | 规格、当前说明、总计划与历史归档 |
 
-主流程为：本地草稿 → 显式登录/上传 → 准备固定规则 → 用户钱包签名createGroup → 核验finalized事件 → 匿名分享页。登录不批准代币；创建Group不代表已收款。付款/退出/退款/结算/提款界面属于M1-C。
+`node_modules/`、`dist/`、`artifacts/`、合约及 ABI 生成目录均不提交。依赖和生成产物按需要复用；ABI/runtime 由源码生成，不手改。
 
-[全阶段计划](docs/planning/DEVELOPMENT_PLAN.md) · [M1-B操作与配置](docs/engineering/M1-B_GROUP.md) · [M1-B验收](docs/planning/M1-B_ACCEPTANCE.md) · [全部文档](docs/README.md)
+## 本地启动与验证
 
-## Git 与部署
-
-正式站：`https://monadbox.iwbinb.workers.dev/`。PR #1–#5已合并；M1-B合并提交为`04dbcb6`，已同步到dev。本批在dev修复发布交易类型核验和恢复时原交易hash的保护，验收记录见[M1-B修复补充](docs/planning/M1-B_ACCEPTANCE.md#9-pr-5审查修复)。M1-C尚未开始。一个`monadbox` Worker：main正式发布，dev Worker Previews。不自动合并、不强推、不删除dev。
-
-| Cloudflare字段 | 命令 |
-| --- | --- |
-| Build | `pnpm build` |
-| Deploy | `pnpm run deploy` |
-| Preview | `pnpm run deploy:preview` |
-
-当前默认部署不需要新资源。**后续开启云端仅需独立D1，不要求R2/Queues。** 两环境数据库和精确origin分别配置，schema/环境标记校验后启用。合约部署和业务放行独立审阅，Git合并/CI/Cloudflare不自动广播交易或迁移远端数据库。
-
-## 本地工程
-
-Node22.16.0、pnpm10.11.1；Solidity0.8.28、paris、optimizer200、Foundry1.8.3。依赖与lockfile锁定；ABI/字节码从源码生成。
+固定 Node 22.16.0、pnpm 10.11.1；依赖锁定在 lockfile。
 
 ```sh
 pnpm install --frozen-lockfile
 pnpm dev
-# 验证顺序
-pnpm format:check
-pnpm lint
-pnpm typecheck
-pnpm build
-pnpm test
-# 以下固定版本工具安装脚本面向Linux x86_64，核对SHA-256
-bash scripts/install-test-tools.sh
-pnpm test:contracts
-pnpm test:chain-local
-pnpm test:cloud-local
-pnpm exec playwright install --with-deps chromium
-pnpm test:e2e
-pnpm deploy:dry-run
 ```
 
-`pnpm dev`默认8787，无HMR。云端完整本地fixture使用8789/Anvil18745，测试脚本自行启动并关闭；不是公开部署。浏览器E2E使用模拟注入钱包与本地链，不能称真实钱包/Safari验收。CI只读并保存测试证据，不持有用户密钥。
+默认本地地址为 `http://localhost:8787`，无 HMR。完整云端测试自行启动固定 loopback Worker/D1/Anvil，不能当作真实 Monad 交易。
 
-## 风险边界
+| 检查 | 命令 |
+| --- | --- |
+| 格式、代码检查、类型 | `pnpm format:check`、`pnpm lint`、`pnpm typecheck` |
+| 构建、单元与运行时 | `pnpm build`、`pnpm test` |
+| 合约、本地链、HTTP | `pnpm test:contracts`、`pnpm test:chain-local`、`pnpm test:cloud-local` |
+| 浏览器、部署预检 | `pnpm test:e2e`、`pnpm deploy:dry-run` |
 
-用户决定真实签名测试后置，不阻塞继续编码，但所有真实验收项仍保留；不虚构地址、交易、用户或审计。服务器不持有私钥/助记词。D1与localStorage均不是资金权威。固定规则以链上合约为准，成团不证明现实服务交付。主网仍禁止；当前不是可接受公众资金的完整产品。
+首次运行原生测试工具需按 [合约说明](contracts/README.md) 安装固定版本；浏览器测试需先安装 Playwright Chromium。开发期间按改动选择检查，阶段交付跑完整 CI，已有依赖可复用。
+
+## 网站与链上边界
+
+[正式站](https://monadbox.iwbinb.workers.dev/) 使用一个 `monadbox` Worker：main 正式发布、dev Worker Previews，配置见[部署说明](docs/engineering/DEPLOYMENT.md)。网站 Production 不等于 Monad Mainnet。
+
+服务器不保管钱包密钥；用户显式签名每笔操作。D1 不是资金权威；Group 成团不证明现实交付，credit 不等于钱包已到账。真实测试后置不阻塞编码，公开资金及主网放行另行验收。

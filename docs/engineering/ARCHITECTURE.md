@@ -57,4 +57,4 @@ Vitest分别验证伪RPC边界和真实本地D1；HTTP集成在实际workerd+Min
 
 当前未实现：Group参与付款/退出退款等界面（M1-C）、真实资源/钱包综合验收（M1-D）、自动索引器、R2附件、队列通知、WalletConnect、智能账户/SIWE EIP-1271和法币渠道。用户已后置真实测试，保留待验收状态，不阻塞继续编码。安全测试不等于独立审计。
 
-[M1-B操作与精确API](M1-B_GROUP.md) · [M1-B验收](../planning/M1-B_ACCEPTANCE.md) · [资金规则](../product/FUNDS_AND_STATES.md) · [全阶段计划](../planning/DEVELOPMENT_PLAN.md)
+[M1-B操作与精确API](GROUP.md) · [M1-B验收](../archive/M1-B_ACCEPTANCE.md) · [资金规则](../product/FUNDS_AND_STATES.md) · [全阶段计划](../planning/DEVELOPMENT_PLAN.md)
