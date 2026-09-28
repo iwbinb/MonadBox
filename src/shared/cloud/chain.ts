@@ -169,6 +169,9 @@ export function makeCloudChain(client: ChainClient = makeClient()): CloudChain {
         return { state: 'unknown', hash };
       }
       if (!same(tx.from, i.creator) || tx.nonce !== i.nonce) throw Error('TRANSACTION_MISMATCH');
+      // Matching call fields do not exclude a delegation installed by the transaction itself.
+      if (!['legacy', 'eip2930', 'eip1559'].includes(tx.type) || tx.authorizationList != null)
+        throw Error('UNSUPPORTED_TRANSACTION');
       const [canonical, finalized] = await Promise.all([
         client.getBlock({ blockNumber: receipt.blockNumber }),
         client.getBlock({ blockTag: 'finalized' }),

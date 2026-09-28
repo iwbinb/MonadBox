@@ -2,6 +2,8 @@
 
 记录更新：2026-09-28。自动测试执行：2026-09-27 UTC。
 
+PR #5现已合并为`04dbcb6`，main/dev已同步。第1–8节保留原批次交付时的记录；合并后的审查修复与本次验证见第9节。
+
 **状态：功能代码与本地自动验证完成；真实 Cloudflare D1 绑定、公开 Group 部署和真实钱包验收后置。** 本批不是可接收公众资金的完整 Group，也不把后置测试记为通过。
 
 ## 1. Git 和交付范围
@@ -84,3 +86,34 @@ CI artifact：`10935959815`，名称 `foundation-36333993466-1`，大小6,677,39
 Bill审阅并合并本批PR、保留dev。后续功能编码为 **M1-C：付款/退出/退款/结算/提款界面与恢复**，须用户明确继续，本批不自动开始。真实D1/部署/钱包验收按用户安排在M1-D补齐，并保留M0-C后置项。启用云端只需D1，不必同时增加R2或Queues。
 
 [操作、API与配置](../engineering/M1-B_GROUP.md) · [全阶段计划](DEVELOPMENT_PLAN.md) · [决策与门禁](DECISIONS_AND_GATES.md)
+
+## 9. PR #5审查修复
+
+2026-09-28，用户要求修复PR #5的两条审查意见并同步进度。基线为`04dbcb60a71d0862947a0ef2ff510650adc3d9fb`；本批仅在dev修复，M1-C仍未开始。
+
+### 改动
+
+- P1：发布核验只接受legacy/EIP-2930/EIP-1559且不携带authorizationList的交易。EIP-7702、未知或缺失类型，即使from/nonce/to/value/calldata与事件匹配，也不能成为已核验发布。按nonce找回的交易同样执行此检查。
+- P2：已有交易hash时，任何unknown结果都不能覆盖原hash、状态或核验区块，包括同hash重查失败。首次unknown仍可保留恢复线索；经链核验的finalized/reverted/replaced结果可以更新。D1的UPDATE条件在实际写入时判断，覆盖并发请求交错返回的情况；finalized的不可替换保护保留。
+- README与全阶段表更新为PR #5已合并，决策新增ADR-25/26，操作说明补充交易类型与恢复规则。
+
+### 本地实际验证
+
+环境：macOS arm64、Node22.16.0、pnpm10.11.1、锁定依赖与真实本地Miniflare/D1；链核验使用可控RPC fixture。现有Node发行包SHA-256与对应版本校验清单一致。没有修改package.json、lockfile、合约或迁移。
+
+| 检查 | 结果与证据 |
+| --- | --- |
+| frozen-lockfile安装 | 退出0；固定版本安装成功 |
+| 首轮原实现复现 | 将两处业务源码临时替换为基线内容，运行首轮新增用例后恢复修复源码；退出1，79项中14项失败、65项通过。失败均对应交易类型或hash覆盖问题；日志`artifacts/review-fix/baseline.log` |
+| 同hash边界复现 | PR #6审查补充指出，同hash重查RPC失败也不能丢失既有核验证据。在a531f14业务源码上运行扩展后的D1用例，退出1，38项中4项失败、34项通过；日志`artifacts/review-fix/same-hash-before.log` |
+| format:check、lint、typecheck、build | 最终源码均退出0；日志位于`artifacts/review-fix/final-*.log` |
+| 全量Vitest | 最终源码退出0，8个文件、253/253通过（原229项基础上增加24项），含D1用例38项；日志`artifacts/review-fix/final-test.log` |
+| deploy:dry-run | 首轮a531f14源码本地预检退出0，未部署；日志`artifacts/review-fix/deploy-dry-run.log`。同hash补充修复的预检由对应提交CI执行 |
+
+新增覆盖：三种支持的交易类型、EIP-7702有/无/空授权列表、普通交易携带授权列表、未知/缺失类型、nonce恢复核验；unknown/reverted/replaced已有记录保护、合法替代交易、刷新读取、使用原hash重新核验、同hash与不同hash的并发交错返回，并直接核对D1中的核验区块字段。测试的链上响应是fixture，不属于真实Monad签名验收。
+
+本机没有运行Foundry、Anvil端到端或Playwright；仓库安装脚本针对Linux，完整流程由本批修复PR的只读CI执行。CI及Preview结果以本批实际提交的PR检查为准，不用PR #5的旧结果替代。
+
+### 交付边界
+
+dev→main修复PR由Bill审阅合并；无自动合并。远端D1、Group测试网部署、真实钱包和主网验收继续后置。CLOUD/GROUP_PUBLISH、业务付款和主网开关保持关闭，未更改Cloudflare资源、远端schema或合约资金规则。

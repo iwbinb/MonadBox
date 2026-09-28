@@ -32,7 +32,7 @@ D1 保存标题、说明、结构化规则、原始 UTF-8 metadata、metadataHas
 1. 保存云端草稿，核对完整规则与收款地址。
 2. 准备发布：服务器验证注册的测试网 Group 合约、固定官方测试 AUSD、实际 runtime hash、当前链时间/nonce及开始时间，冻结元数据和规则，保存唯一 salt/Box ID/intent。
 3. 页面显示固定合约、Box ID、条款、签名期限。用户勾选确认，再显式让同一登录钱包发送 `createGroup`；value=0，不调用approve或contribute。仍会消耗测试 MON Gas。
-4. 服务端重新读链，核对发起人、nonce、to、calldata、value、BoxCreated事件、规则哈希、原区块canonical及finalized高度，并读回Group状态。仅提供交易hash不算发布成功。
+4. 服务端重新读链，核对发起人、nonce、交易类型/授权字段、to、calldata、value、BoxCreated事件、规则哈希、原区块canonical及finalized高度，并读回Group状态。仅接受legacy、EIP-2930、EIP-1559且不携带authorizationList的交易；EIP-7702、未知或缺失类型拒绝，即使调用参数和事件都匹配也不能发布。仅提供交易hash不算发布成功。
 5. 核验通过后产生公开页面。另一浏览器无需登录即可读取；公开页仍显示“付款尚未开放”。
 
 服务器和用户浏览器均核验编译生成的合约运行时代码；不可变字段位置由编译产物确定，另核验固定token/admin getters及已登记runtime hash。匹配代码不等于已经安全审计。Group合约部署本身是单独的用户授权操作，本页面只发布实例，CI不代部署。
@@ -42,6 +42,8 @@ D1 保存标题、说明、结构化规则、原始 UTF-8 metadata、metadataHas
 一次记录只能有一个发布意图；重试准备不更换salt或nonce。发送前保存恢复日志并以Web Locks串行同账号签名。拒签不算成功；广播、未知、reverted、replaced、finalized分别记录。不因超时或刷新自动重发。
 
 重新查链支持已知hash，也可在最近最多41块中按原账号+nonce定位。更久的交易从钱包补入原/替代hash。刷新后云端保留原意图和已核验hash，本地日志只是恢复提示，不作为链上证据。
+
+首次查不到回执时可保存hash作为恢复线索；已有hash时，任何unknown结果都不能覆盖原hash、状态或核验区块，包括重新查询同一hash时RPC暂时失败的情况。只有服务端核验到同发起人、同nonce、canonical/finalized的交易结果（finalized/reverted/replaced）才允许更新已保存的记录。保护条件在D1写入时原子判断，因此较晚返回的unknown请求也不能覆盖并发保存的新记录。已finalized发布保留原有不可替换保护；历史核验结果不表示本次RPC查询成功。
 
 冻结后的时间或规则不能原地修改。过期/拒绝/替换记录可导出后复制成新草稿；先核实旧交易再新建，避免重复创建。签名期限是客户端安全限制，不会神奇撤销已经发出的链上交易；因此即使期限已过，也不能把旧规则解冻或丢弃，晚到回执仍需处理。
 
@@ -94,4 +96,5 @@ D1 保存标题、说明、结构化规则、原始 UTF-8 metadata、metadataHas
 - SIWE规范：https://eips.ethereum.org/EIPS/eip-4361
 - viem SIWE消息验证：https://viem.sh/docs/siwe/utilities/validateSiweMessage
 - D1 batch/会话接口：https://developers.cloudflare.com/d1/worker-api/d1-database/
+- EIP-7702交易类型与授权列表：https://eips.ethereum.org/EIPS/eip-7702
 - 实际结果见 [本批验收](../planning/M1-B_ACCEPTANCE.md)，技术规格不代替运行证据。

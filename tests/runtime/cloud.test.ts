@@ -1,4 +1,4 @@
-import { beforeAll, afterAll, beforeEach, describe, it, expect } from 'vitest';
+import { beforeAll, afterAll, beforeEach, describe, it, expect, vi } from 'vitest';
 import { Miniflare, convertV4MiniflareOptions } from 'miniflare';
 import { readFile } from 'node:fs/promises';
 import { privateKeyToAccount } from 'viem/accounts';
@@ -141,6 +141,7 @@ afterAll(async () => {
   await mf?.dispose();
 });
 beforeEach(async () => {
+  vi.restoreAllMocks();
   await db.batch(
     ['group_publications', 'boxes', 'sessions', 'users', 'cloud_challenges', 'cloud_limits'].map(
       (t) => db.prepare(`DELETE FROM ${t}`),
@@ -348,6 +349,140 @@ describe('cloud metadata and immutable publication', () => {
       expect(r.status).toBe(200);
       expect((await r.json()).data.state).toBe('prepared');
       expect((await b.req('/public/groups/' + row.publicId)).status).toBe(404);
+    },
+  );
+  it.each(['unknown', 'reverted', 'replaced'] as const)(
+    'preserves the saved %s transaction and evidence when another hash is unknown',
+    async (state) => {
+      const b = new Browser();
+      await b.login();
+      const row = await b.create();
+      await b.req('/groups/' + row.id + '/prepare', 'POST', { revision: 1 });
+      outcome = { state, hash, ...(state === 'unknown' ? {} : { block: '105', blockHash: hash }) };
+      const saved = await b.req('/groups/' + row.id + '/confirm', 'POST', { hash });
+      expect(saved.status).toBe(200);
+      const publication = (await saved.json()).data.publication;
+      const evidence = await db
+        .prepare('SELECT * FROM group_publications WHERE box_id=?')
+        .bind(row.id)
+        .first();
+      const unknownHash = toHex(43, { size: 32 });
+      outcome = { state: 'unknown', hash: unknownHash };
+      const response = await b.req('/groups/' + row.id + '/confirm', 'POST', { hash: unknownHash });
+      expect(response.status).toBe(200);
+      expect((await response.json()).data.publication).toEqual(publication);
+      // A fresh request models the cloud record used after a page reload.
+      expect((await (await b.req('/groups/' + row.id)).json()).data.publication).toEqual(
+        publication,
+      );
+      expect(
+        await db.prepare('SELECT * FROM group_publications WHERE box_id=?').bind(row.id).first(),
+      ).toEqual(evidence);
+      expect((await b.req('/public/groups/' + row.publicId)).status).toBe(404);
+    },
+  );
+  it.each(['finalized', 'reverted', 'replaced'] as const)(
+    'accepts a different hash after the chain verifier establishes %s evidence',
+    async (state) => {
+      const b = new Browser();
+      await b.login();
+      const row = await b.create();
+      await b.req('/groups/' + row.id + '/prepare', 'POST', { revision: 1 });
+      outcome = { state: 'unknown', hash };
+      expect((await b.req('/groups/' + row.id + '/confirm', 'POST', { hash })).status).toBe(200);
+      const replacement = toHex(43, { size: 32 });
+      outcome = { state, hash: replacement, block: '105', blockHash: hash };
+      const response = await b.req('/groups/' + row.id + '/confirm', 'POST', { hash: replacement });
+      expect(response.status).toBe(200);
+      expect((await response.json()).data.publication).toMatchObject({ state, hash: replacement });
+      expect(
+        await db
+          .prepare(
+            'SELECT verified_block,verified_block_hash FROM group_publications WHERE box_id=?',
+          )
+          .bind(row.id)
+          .first(),
+      ).toEqual({ verified_block: '105', verified_block_hash: hash });
+      expect((await new Browser().req('/public/groups/' + row.publicId)).status).toBe(
+        state === 'finalized' ? 200 : 404,
+      );
+    },
+  );
+  it.each(['unknown', 'reverted', 'replaced'] as const)(
+    'preserves saved %s evidence when rechecking the same hash is unavailable',
+    async (state) => {
+      const b = new Browser();
+      await b.login();
+      const row = await b.create();
+      await b.req('/groups/' + row.id + '/prepare', 'POST', { revision: 1 });
+      outcome = { state, hash, ...(state === 'unknown' ? {} : { block: '105', blockHash: hash }) };
+      expect((await b.req('/groups/' + row.id + '/confirm', 'POST', { hash })).status).toBe(200);
+      const evidence = await db
+        .prepare('SELECT * FROM group_publications WHERE box_id=?')
+        .bind(row.id)
+        .first();
+      outcome = { state: 'unknown', hash };
+      const confirm = vi.spyOn(chain, 'confirm');
+      expect((await b.req('/groups/' + row.id + '/confirm', 'POST', {})).status).toBe(200);
+      expect(confirm).toHaveBeenCalledWith(expect.any(Object), hash);
+      expect((await (await b.req('/groups/' + row.id)).json()).data.publication.hash).toBe(hash);
+      expect(
+        await db.prepare('SELECT * FROM group_publications WHERE box_id=?').bind(row.id).first(),
+      ).toEqual(evidence);
+    },
+  );
+  it.each([
+    { state: 'unknown', sameHash: false },
+    { state: 'replaced', sameHash: false },
+    { state: 'replaced', sameHash: true },
+    { state: 'reverted', sameHash: true },
+  ] as const)(
+    'a late unknown result cannot overwrite a concurrent $state transaction (same hash: $sameHash)',
+    async ({ state, sameHash }) => {
+      const b = new Browser();
+      await b.login();
+      const row = await b.create();
+      await b.req('/groups/' + row.id + '/prepare', 'POST', { revision: 1 });
+      let started!: () => void, release!: (result: ReceiptResult) => void;
+      const waiting = new Promise<void>((resolve) => {
+        started = resolve;
+      });
+      const delayed = new Promise<ReceiptResult>((resolve) => {
+        release = resolve;
+      });
+      const replacement = sameHash ? hash : toHex(43, { size: 32 });
+      vi.spyOn(chain, 'confirm')
+        .mockImplementationOnce(async () => {
+          started();
+          return delayed;
+        })
+        .mockResolvedValueOnce({
+          state,
+          hash: replacement,
+          ...(state === 'unknown' ? {} : { block: '105', blockHash: hash }),
+        });
+      const late = b.req('/groups/' + row.id + '/confirm', 'POST', { hash });
+      await waiting;
+      let publication: unknown, evidence: unknown;
+      try {
+        const first = await b.req('/groups/' + row.id + '/confirm', 'POST', { hash: replacement });
+        expect(first.status).toBe(200);
+        publication = (await first.json()).data.publication;
+        expect(publication).toMatchObject({ state, hash: replacement });
+        evidence = await db
+          .prepare('SELECT * FROM group_publications WHERE box_id=?')
+          .bind(row.id)
+          .first();
+      } finally {
+        release({ state: 'unknown', hash });
+        expect((await late).status).toBe(200);
+      }
+      expect((await (await b.req('/groups/' + row.id)).json()).data.publication).toEqual(
+        publication,
+      );
+      expect(
+        await db.prepare('SELECT * FROM group_publications WHERE box_id=?').bind(row.id).first(),
+      ).toEqual(evidence);
     },
   );
   it('publishes only finalized evidence, lets unauthenticated second browser read, rejects corruption and reorg', async () => {

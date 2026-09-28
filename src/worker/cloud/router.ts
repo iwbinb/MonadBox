@@ -511,7 +511,8 @@ export function createCloudRouter(chain: CloudChain = makeCloudChain()) {
     await db.batch([
       db
         .prepare(
-          "UPDATE group_publications SET state=?,tx_hash=COALESCE(?,tx_hash),verified_block=?,verified_block_hash=? WHERE box_id=? AND state!='finalized'",
+          // Unknown results can seed recovery once, but cannot erase any saved evidence.
+          "UPDATE group_publications SET state=?,tx_hash=COALESCE(?,tx_hash),verified_block=?,verified_block_hash=? WHERE box_id=? AND state!='finalized' AND (tx_hash IS NULL OR ?!='unknown')",
         )
         .bind(
           result.state,
@@ -519,6 +520,7 @@ export function createCloudRouter(chain: CloudChain = makeCloudChain()) {
           result.block ?? null,
           result.blockHash ?? null,
           b.id,
+          result.state,
         ),
       db
         .prepare(
