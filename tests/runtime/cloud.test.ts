@@ -85,12 +85,12 @@ const modules: ModuleChain = {
 const app = createCloudRouter(chain, modules);
 describe('private delivery files with isolated D1 and R2', () => {
   const text = () => new TextEncoder().encode('Private delivery notes.').buffer;
-  async function setup() {
+  async function setup(tool: 'deliver' | 'milestones' = 'deliver') {
     env.MODULES_ENABLED = 'true';
     env.MODULE_PUBLISH_ENABLED = 'true';
     env.ATTACHMENTS_ENABLED = 'true';
     env.MODULE_DEPLOYMENTS = JSON.stringify([
-      { current: true, deployment: { ...deployment, tool: 'deliver' } },
+      { current: true, deployment: { ...deployment, tool } },
     ]);
     const state = await modules.snapshot({} as never, alice.address);
     vi.spyOn(modules, 'snapshot').mockResolvedValue({
@@ -98,6 +98,7 @@ describe('private delivery files with isolated D1 and R2', () => {
       state: 'FUNDED',
       locked: '1000000',
       settledAt: 0,
+      ...(tool === 'milestones' ? { currentStage: 0 } : {}),
     });
     const a = new Browser(),
       b = new Browser();
@@ -115,10 +116,26 @@ describe('private delivery files with isolated D1 and R2', () => {
       reviewDuration: 3600,
       disputeDuration: 86400,
     };
+    const { amount, workDuration, reviewDuration, ...common } = d;
     const response = await a.req(
       '/modules',
       'POST',
-      { data: d },
+      {
+        data:
+          tool === 'deliver'
+            ? d
+            : {
+                ...common,
+                tool,
+                stages: [0, 1].map((n) => ({
+                  title: 'Stage ' + n,
+                  description: '',
+                  amount,
+                  workDuration,
+                  reviewDuration,
+                })),
+              },
+      },
       { 'Idempotency-Key': crypto.randomUUID() },
     );
     expect(response.status).toBe(200);
@@ -257,6 +274,37 @@ describe('private delivery files with isolated D1 and R2', () => {
       customMetadata: { sha256: x.meta.sha256, boxId: x.box.id, namespace: 'monadbox-test' },
     });
     expect((await x.b.req(`${x.base}/${first.id}`)).status).toBe(503);
+  });
+  it('isolates each milestone stage quota and closes stale uploads without losing old files', async () => {
+    const x = await setup('milestones');
+    const ready = (await (await reserve(x)).json()).data;
+    expect(
+      (await x.a.req(`${x.base}/${ready.id}`, 'PUT', x.body, { 'Content-Type': 'text/plain' }))
+        .status,
+    ).toBe(200);
+    const stale = (await (await reserve(x)).json()).data;
+    vi.mocked(modules.snapshot).mockResolvedValue({
+      ...(await modules.snapshot({} as never, alice.address)),
+      currentStage: 1,
+    });
+    expect((await reserve(x)).status).toBe(409);
+    expect(
+      (await x.a.req(`${x.base}/${stale.id}`, 'PUT', x.body, { 'Content-Type': 'text/plain' }))
+        .status,
+    ).toBe(409);
+    expect((await x.b.req(`${x.base}/${ready.id}`)).status).toBe(200);
+    const attempts = await Promise.all(
+      Array.from({ length: 7 }, () => reserve(x, { ...x.meta, stageIndex: 1 })),
+    );
+    expect(attempts.filter((r) => r.status === 200)).toHaveLength(5);
+    expect(attempts.filter((r) => r.status === 429)).toHaveLength(2);
+    vi.mocked(modules.snapshot).mockResolvedValue({
+      ...(await modules.snapshot({} as never, alice.address)),
+      state: 'TERMINATED',
+      settledAt: Math.floor(Date.now() / 1000),
+    });
+    expect((await reserve(x, { ...x.meta, stageIndex: 1 })).status).toBe(409);
+    expect((await x.b.req(`${x.base}/${ready.id}`)).status).toBe(200);
   });
   it('fails closed for wrong bucket, unavailable chain, retired retention or disabled capability', async () => {
     const x = await setup();

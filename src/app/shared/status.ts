@@ -6,6 +6,8 @@ const labels: Record<string, [string, string]> = {
   RELEASED: ['Released to seller credit', '已归属服务者'],
   REFUNDED: ['Refund assigned to buyer', '已退款给客户'],
   RESOLVED: ['Agreement settled', '协议已结算'],
+  COMPLETED: ['All stages released', '全部阶段已释放'],
+  TERMINATED: ['Remaining plan terminated and refunded', '剩余计划已终止退款'],
   EXPIRED: ['Expired unfunded', '未付款已到期'],
   NONE: ['No participation', '尚未参与'],
   REGISTERED: ['Registered; deposit locked', '已报名，押金托管中'],

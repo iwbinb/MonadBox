@@ -4,6 +4,7 @@ import { artifact as split } from './generated/SplitPaymentsV1';
 import { artifact as group } from './generated/GroupEscrowV2';
 import { artifact as attend } from './generated/AttendanceBondV1';
 import { artifact as deliver } from './generated/DeliveryEscrowV1';
+import { artifact as milestones } from './generated/MilestoneEscrowV1';
 import { moduleDataSchema, modulePublicationSchema } from './model';
 import type {
   ModuleData,
@@ -20,10 +21,12 @@ export const definitions = {
   group: { artifact: group, create: 'createGroup', get: 'getGroup', version: 2 },
   attend: { artifact: attend, create: 'createEvent', get: 'getEvent', version: 1 },
   deliver: { artifact: deliver, create: 'createOffer', get: 'getOffer', version: 1 },
+  milestones: { artifact: milestones, create: 'createOffer', get: 'getOffer', version: 1 },
 } as const;
 export const signedModuleNames = {
   deliver: 'DeliveryEscrowV1',
   attend: 'AttendanceBondV1',
+  milestones: 'MilestoneEscrowV1',
 } as const;
 export function moduleAbi(tool: ModuleData['tool']): Abi {
   return definitions[tool].artifact.abi;
@@ -35,9 +38,25 @@ export function metadataFor(input: ModuleData): string {
     tool: data.tool,
     title: data.title,
     description: data.description,
+    ...(data.tool === 'milestones'
+      ? { stages: data.stages.map((s) => ({ title: s.title, description: s.description })) }
+      : {}),
   });
 }
 export function termsFor(data: ModuleData) {
+  if (data.tool === 'milestones')
+    return {
+      buyer: data.buyer,
+      seller: data.seller,
+      fundBy: BigInt(data.fundBy),
+      disputeDuration: BigInt(data.disputeDuration),
+      stages: data.stages.map((s) => ({
+        amount: BigInt(s.amount),
+        workDuration: BigInt(s.workDuration),
+        reviewDuration: BigInt(s.reviewDuration),
+      })),
+      metadataHash: keccak256(stringToHex(metadataFor(data))),
+    };
   if (data.tool === 'attend')
     return {
       deposit: BigInt(data.deposit),
@@ -130,7 +149,7 @@ export function validatePublication(input: ModulePublication): ModulePublication
     p.metadataHash !== keccak256(stringToHex(p.metadata)) ||
     p.chainBoxId !== moduleId(p.deployment.address, p.creator, p.salt) ||
     p.termsHash !== termsHashFor(p) ||
-    (p.data.tool === 'deliver'
+    (p.data.tool === 'deliver' || p.data.tool === 'milestones'
       ? [p.data.buyer, p.data.seller].some((a) => same(a, p.deployment.address))
       : p.data.tool === 'attend'
         ? same(p.data.penaltyBeneficiary, p.deployment.address)
@@ -141,6 +160,8 @@ export function validatePublication(input: ModulePublication): ModulePublication
 }
 export function approvalAmount(i: Pick<ModuleIntent, 'publication' | 'amount'>) {
   const d = i.publication.data;
+  if (d.tool === 'milestones')
+    return d.stages.reduce((sum, s) => sum + BigInt(s.amount), 0n).toString();
   return d.tool === 'attend'
     ? d.deposit
     : d.tool === 'group'
@@ -229,10 +250,14 @@ export function moduleCall(
     } else if (!['register', 'leave', 'cancelEvent'].includes(i.action))
       throw Error('ACTION_UNAVAILABLE');
   } else if (i.action === 'creditRefund' && p.data.tool === 'group') args = [id, i.actor];
-  else if (p.data.tool === 'deliver') {
+  else if (p.data.tool === 'deliver' || p.data.tool === 'milestones') {
+    if (p.data.tool === 'milestones' && !['fund', 'cancelOffer'].includes(i.action)) {
+      if (i.stageIndex === undefined) throw Error('STAGE_REQUIRED');
+      args = [id, BigInt(i.stageIndex)];
+    }
     if (['submitDelivery', 'dispute'].includes(i.action)) {
       if (!i.evidenceHash || /^0x0{64}$/.test(i.evidenceHash)) throw Error('EVIDENCE_REQUIRED');
-      args = [id, i.evidenceHash];
+      args = [...args, i.evidenceHash];
     } else if (
       ![
         'fund',

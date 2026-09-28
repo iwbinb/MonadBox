@@ -21,7 +21,7 @@ Node22.16.0、pnpm10.11.1、Solidity0.8.28/Paris、Foundry1.8.3、本机Chrome�
 - Codex浏览器核验390px中文规则预览、最坏扣款和签到/申诉时间；宽度390px无溢出、无控制台错误。流程截图位于`artifacts/screenshots/attendance-*.png`。
 - 测试过程中发现签到回执恢复误用双签参数位置，已修复并加入独立回归。测试辅助函数也调整为在发布视图切换后等待公开链接；共用链时间场景顺序执行。
 
-日志位于本机`/private/tmp/monadbox-m4-*.log`及`/private/tmp/monadbox-attend-contracts.log`。现有dev→main PR #7继续更新；远端CI以本次提交对应run为准。
+日志位于本机`/private/tmp/monadbox-m4-*.log`及`/private/tmp/monadbox-attend-contracts.log`。提交 `2acf0a19f6fc1f507da3ff7b82ff4e73711381dd` 的 PR CI [36418590349](https://github.com/iwbinb/MonadBox/actions/runs/36418590349) 与 push CI [36418583060](https://github.com/iwbinb/MonadBox/actions/runs/36418583060) 均完成且成功。
 
 ## 外部与后续
 

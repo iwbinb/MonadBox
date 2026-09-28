@@ -61,7 +61,7 @@ SplitMath 使用全精度 mulDiv 与相应余数计算，禁止乘法溢出。�
 
 `createOffer(terms, salt)`；`fund`；`submitDelivery(evidenceHash)`；`accept`；`dispute(reasonHash)`；`refundBySeller`；`settleAfterReview`；`refundAfterMissingDelivery`；`resolveByAgreement(allocations, nonce, deadline, signatures)`；`refundAfterDisputeTimeout`。
 
-Milestones 上述动作额外绑定 currentStage；事件必须有 stageIndex。任何终止动作仅处理尚未释放总额。工作时钟按资金规则启动，不能通过重复 submit 延期。
+Milestones 除fund/cancelOffer外的阶段动作额外接收`stageIndex`并与currentStage核对；协议内亦绑定该字段，事件携带实际执行阶段。任何终止动作仅处理尚未释放总额。工作时钟按资金规则启动，不能通过重复submit延期。实现与文件说明见[Milestones](MILESTONES.md)。
 
 ### Attend
 

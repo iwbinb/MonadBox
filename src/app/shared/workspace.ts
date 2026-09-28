@@ -82,9 +82,11 @@ export function knownRow(box: KnownBox, actor: Address | null): WorkspaceBox {
           ? 'Group V2'
           : box.publication.data.tool === 'deliver'
             ? 'Deliver'
-            : box.publication.data.tool === 'attend'
-              ? 'Attend'
-              : 'Split',
+            : box.publication.data.tool === 'milestones'
+              ? 'Milestones'
+              : box.publication.data.tool === 'attend'
+                ? 'Attend'
+                : 'Split',
     source: 'chain',
     created: !!actor && actor.toLowerCase() === p.creator.toLowerCase(),
     joined: false,
@@ -145,7 +147,7 @@ export async function verifyWorkspaceBox(row: WorkspaceBox, actor: Address): Pro
     actions = moduleActions(row.known.publication, actor, s);
     const d = row.known.publication.data;
     position =
-      d.tool === 'deliver' &&
+      (d.tool === 'deliver' || d.tool === 'milestones') &&
       [d.buyer, d.seller].some((a) => a.toLowerCase() === actor.toLowerCase())
         ? 1
         : s.position;
@@ -178,7 +180,7 @@ export async function verifyWorkspaceBox(row: WorkspaceBox, actor: Address): Pro
       ),
     history:
       row.history ||
-      ['REFUNDED', 'SETTLED', 'COMPLETED', 'RESOLVED'].includes(result.state) ||
+      ['REFUNDED', 'SETTLED', 'COMPLETED', 'RESOLVED', 'TERMINATED'].includes(result.state) ||
       BigInt(result.withdrawn!) > 0n,
   };
 }

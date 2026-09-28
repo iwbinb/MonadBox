@@ -92,7 +92,7 @@ async function context(c: Context<AppEnv>, chain: ModuleChain) {
     actor = c.get('session').address;
   if (
     !i ||
-    i.publication.data.tool !== 'deliver' ||
+    (i.publication.data.tool !== 'deliver' && i.publication.data.tool !== 'milestones') ||
     ![i.publication.data.buyer, i.publication.data.seller].some((a) => same(a, actor))
   )
     throw new CloudError('NOT_FOUND', 404);
@@ -136,7 +136,10 @@ export function mountFileRoutes(app: Hono<AppEnv>, chain: ModuleChain) {
         .string()
         .regex(/^[a-zA-Z0-9_-]{16,100}$/)
         .parse(c.req.header('Idempotency-Key'));
-    if (meta.stageIndex !== 0 || !['FUNDED', 'SUBMITTED', 'DISPUTED'].includes(x.snapshot.state))
+    if (
+      meta.stageIndex !== (x.snapshot.currentStage ?? 0) ||
+      !['FUNDED', 'SUBMITTED', 'DISPUTED'].includes(x.snapshot.state)
+    )
       throw new CloudError('FILE_UPLOAD_CLOSED', 409);
     await limited(x.db, `files:${x.actor}`, 20, 600);
     const fingerprint = await fileDigest(
@@ -184,7 +187,9 @@ export function mountFileRoutes(app: Hono<AppEnv>, chain: ModuleChain) {
     if (c.req.header('Content-Type') !== r.mime) throw new CloudError('FILE_TYPE', 400);
     if (
       r.state === 'reserved' &&
-      (r.expires_at <= now() || !['FUNDED', 'SUBMITTED', 'DISPUTED'].includes(x.snapshot.state))
+      (r.expires_at <= now() ||
+        r.stage_index !== (x.snapshot.currentStage ?? 0) ||
+        !['FUNDED', 'SUBMITTED', 'DISPUTED'].includes(x.snapshot.state))
     )
       throw new CloudError('UPLOAD_EXPIRED', 409);
     const body = await readFileBody(c.req.raw, r.bytes);

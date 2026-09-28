@@ -23,7 +23,8 @@ export const agreementTypes = {
 } as const;
 export function agreementTypedData(p: ModulePublication, a: Agreement) {
   validatePublication(p);
-  if (p.data.tool !== 'deliver' && p.data.tool !== 'attend') throw Error('ACTION_UNAVAILABLE');
+  if (p.data.tool !== 'deliver' && p.data.tool !== 'attend' && p.data.tool !== 'milestones')
+    throw Error('ACTION_UNAVAILABLE');
   return {
     domain: {
       name: signedModuleNames[p.data.tool],
@@ -38,14 +39,14 @@ export function agreementTypedData(p: ModulePublication, a: Agreement) {
 }
 export function agreementContext(p: ModulePublication, s: ModuleSnapshot) {
   const d = p.data;
-  if (d.tool === 'deliver')
+  if (d.tool === 'deliver' || d.tool === 'milestones')
     return {
       buyer: d.buyer,
       seller: d.seller,
       secondSigner: d.seller,
       remaining: s.locked,
       orderId: p.chainBoxId,
-      stageIndex: 0,
+      stageIndex: d.tool === 'milestones' ? s.currentStage! : 0,
       disputed: s.state === 'DISPUTED',
     };
   if (d.tool === 'attend' && s.participant && s.positionLocked !== undefined)

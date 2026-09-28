@@ -34,13 +34,14 @@ function Files({ publication: p }: { publication: ModulePublication }) {
     { session, setSession, loading } = useSession(),
     [rows, setRows] = useState<PrivateFile[]>([]),
     [file, setFile] = useState<File | null>(null),
+    [stageIndex, setStageIndex] = useState(0),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(''),
     [revision, setRevision] = useState(0);
   const base = `/modules/${p.id}/files`,
     d = p.data,
     allowed =
-      d.tool === 'deliver' &&
+      (d.tool === 'deliver' || d.tool === 'milestones') &&
       !!session &&
       [d.buyer, d.seller].some((a) => a.toLowerCase() === session.address.toLowerCase());
   useEffect(() => {
@@ -85,6 +86,32 @@ function Files({ publication: p }: { publication: ModulePublication }) {
       ) : null}
       {allowed ? (
         <>
+          {d.tool === 'milestones' ? (
+            <label>
+              {t('File stage', '文件所属阶段')}
+              <select
+                aria-label={t('File stage', '文件所属阶段')}
+                disabled={busy}
+                value={stageIndex}
+                onChange={(e) => {
+                  setStageIndex(Number(e.target.value));
+                  setFile(null);
+                }}
+              >
+                {d.stages.map((s, index) => (
+                  <option key={index} value={index}>
+                    {index + 1}. {s.title}
+                  </option>
+                ))}
+              </select>
+              <small>
+                {t(
+                  'Only the current stage accepts new uploads. Earlier stage files remain readable by both parties.',
+                  '仅当前阶段可新增文件，先前阶段文件仍可由双方读取。',
+                )}
+              </small>
+            </label>
+          ) : null}
           <label>
             {t('Choose a private file', '选择私密文件')}
             <input
@@ -110,7 +137,7 @@ function Files({ publication: p }: { publication: ModulePublication }) {
                     mime: file.type,
                     bytes: file.size,
                     sha256: await fileDigest(body),
-                    stageIndex: 0,
+                    stageIndex,
                   });
                 if (!validFileContent(body, meta.mime))
                   throw Error(
@@ -171,7 +198,8 @@ function Files({ publication: p }: { publication: ModulePublication }) {
             {rows.map((r) => (
               <li key={r.id}>
                 <div>
-                  {r.name} · {(r.bytes / 1024).toFixed(1)} KiB
+                  {r.name} · {(r.bytes / 1024).toFixed(1)} KiB{' '}
+                  {d.tool === 'milestones' ? `· ${t('Stage', '阶段')} ${r.stageIndex + 1}` : ''}
                   <p>
                     SHA-256: <code>{r.sha256}</code>
                   </p>

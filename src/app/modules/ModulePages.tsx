@@ -23,7 +23,11 @@ export function ModuleBuilderPage({ kind }: { kind?: ModuleData['tool'] }) {
     { id, draftId } = useParams();
   if (state.status !== 'ready')
     return <p className="container">{t('Loading configuration…', '加载配置…')}</p>;
-  if (!draftId && !kind && !['split', 'group-split', 'deliver', 'attend'].includes(id ?? ''))
+  if (
+    !draftId &&
+    !kind &&
+    !['split', 'group-split', 'deliver', 'attend', 'milestones'].includes(id ?? '')
+  )
     return (
       <section className="container cloud-page">
         <h1>{t('This tool is being prepared', '工具开发中')}</h1>
@@ -40,9 +44,11 @@ export function ModuleBuilderPage({ kind }: { kind?: ModuleData['tool'] }) {
           ? 'group'
           : id === 'deliver'
             ? 'deliver'
-            : id === 'attend'
-              ? 'attend'
-              : 'split')
+            : id === 'milestones'
+              ? 'milestones'
+              : id === 'attend'
+                ? 'attend'
+                : 'split')
       }
       draftId={draftId}
     />
@@ -150,6 +156,8 @@ export function ModuleDraftsPage() {
         <Link to="/create/split">{t('New Split', '新建分账')}</Link> ·{' '}
         <Link to="/create/group-split">{t('New group with split', '新建成团分账')}</Link> ·{' '}
         <Link to="/create/deliver">{t('New delivery escrow', '新建交付托管')}</Link> ·{' '}
+        <Link to="/create/attend">{t('New attendance bond', '新建报名押金')}</Link> ·{' '}
+        <Link to="/create/milestones">{t('New milestone escrow', '新建分阶段托管')}</Link> ·{' '}
         <Link to="/app/modules">{t('Copy a draft to cloud', '复制草稿到云端')}</Link>
       </p>
       {error ? <p role="alert">{error}</p> : null}
@@ -572,7 +580,7 @@ export function PublicModulePage() {
               '保存原链接，可在其他浏览器恢复查询。',
             )}
           </p>
-          {box.publication.data.tool === 'deliver' ? (
+          {box.publication.data.tool === 'deliver' || box.publication.data.tool === 'milestones' ? (
             <PrivateFiles publication={box.publication} />
           ) : null}
           <ModuleFunds publication={box.publication} paymentsEnabled={box.paymentsEnabled} />

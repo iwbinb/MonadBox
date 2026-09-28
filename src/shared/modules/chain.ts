@@ -50,7 +50,7 @@ export async function verifyModule(client: ChainClient, d: ModuleDeployment) {
   )
     throw Error('UNVERIFIED_CONTRACT');
   if (
-    (d.tool === 'deliver' || d.tool === 'attend') &&
+    (d.tool === 'deliver' || d.tool === 'attend' || d.tool === 'milestones') &&
     (await client.readContract({ address, abi, functionName: 'domainNameHash' })) !==
       keccak256(stringToHex(signedModuleNames[d.tool]))
   )
@@ -93,6 +93,8 @@ export interface ModuleSnapshot {
   positionLocked?: string;
   cancelled?: boolean;
   checkinNonce?: string;
+  currentStage?: number;
+  released?: string;
 }
 export async function moduleSnapshot(
   client: ChainClient,
@@ -144,6 +146,8 @@ export async function moduleSnapshot(
     reviewDue?: bigint;
     disputeDue?: bigint;
     settledAt?: bigint;
+    currentStage?: bigint;
+    released?: bigint;
     evidenceHash?: Hex;
     reasonHash?: Hex;
   };
@@ -172,7 +176,7 @@ export async function moduleSnapshot(
     if (state === 'NONE') throw Error('INTEGRITY_ERROR');
   }
   const delivery =
-    p.data.tool === 'deliver'
+    p.data.tool === 'deliver' || p.data.tool === 'milestones'
       ? {
           submitDue: Number(r.submitDue),
           reviewDue: Number(r.reviewDue),
@@ -183,7 +187,7 @@ export async function moduleSnapshot(
           settlementNonce: String(await read('settlementNonce', [id])),
         }
       : {};
-  if (p.data.tool === 'deliver') {
+  if (p.data.tool === 'deliver' || p.data.tool === 'milestones') {
     state =
       [
         'NONE',
@@ -191,13 +195,27 @@ export async function moduleSnapshot(
         'FUNDED',
         'SUBMITTED',
         'DISPUTED',
-        'RELEASED',
-        'REFUNDED',
+        p.data.tool === 'milestones' ? 'COMPLETED' : 'RELEASED',
+        p.data.tool === 'milestones' ? 'TERMINATED' : 'REFUNDED',
         'RESOLVED',
         'CANCELLED',
         'EXPIRED',
       ][storedState] ?? 'NONE';
     if (state === 'NONE') throw Error('INTEGRITY_ERROR');
+  }
+  if (p.data.tool === 'milestones') {
+    const index = Number(r.currentStage);
+    if (
+      !Number.isInteger(index) ||
+      index < 0 ||
+      index >= p.data.stages.length ||
+      String(r.released) !==
+        p.data.stages
+          .slice(0, state === 'COMPLETED' ? index + 1 : index)
+          .reduce((sum, stage) => sum + BigInt(stage.amount), 0n)
+          .toString()
+    )
+      throw Error('INTEGRITY_ERROR');
   }
   let attendance: Partial<ModuleSnapshot> = {};
   if (p.data.tool === 'attend') {
@@ -246,6 +264,9 @@ export async function moduleSnapshot(
     throw Error('FINALITY_UNAVAILABLE');
   return {
     ...delivery,
+    ...(p.data.tool === 'milestones'
+      ? { currentStage: Number(r.currentStage), released: String(r.released) }
+      : {}),
     state,
     storedState,
     activeCount,
@@ -306,13 +327,14 @@ export function moduleActions(
     }
     return actions;
   }
-  if (d.tool === 'deliver') {
+  if (d.tool === 'deliver' || d.tool === 'milestones') {
     const buyer = same(actor, d.buyer),
       seller = same(actor, d.seller),
-      now = s.timestamp;
+      now = s.timestamp,
+      fullAmount = approvalAmount({ publication: p })!;
     if (s.state === 'AWAITING_FUNDS') {
-      if (!s.paused && buyer && now < d.fundBy && BigInt(s.balance) >= BigInt(d.amount))
-        actions.push(BigInt(s.allowance) < BigInt(d.amount) ? 'approve' : 'fund');
+      if (!s.paused && buyer && now < d.fundBy && BigInt(s.balance) >= BigInt(fullAmount))
+        actions.push(BigInt(s.allowance) < BigInt(fullAmount) ? 'approve' : 'fund');
       if (buyer || seller || now >= d.fundBy) actions.push('cancelOffer');
     }
     if (s.state === 'FUNDED') {
@@ -347,6 +369,7 @@ export function moduleActions(
   return actions;
 }
 export interface ModuleActionOptions {
+  stageIndex?: number;
   evidenceHash?: Hex;
   agreement?: Agreement;
   signatures?: ModuleSignatures;
@@ -370,8 +393,16 @@ export async function prepareModuleAction(
     client.getCode({ address: actor }),
   ]);
   if (code && code !== '0x') throw Error('EOA_REQUIRED');
+  let currentStage = 0;
   if (action !== 'create') {
     const snapshot = await moduleSnapshot(client, p, actor, options.participant);
+    currentStage = snapshot.currentStage ?? 0;
+    if (
+      p.data.tool === 'milestones' &&
+      options.stageIndex !== undefined &&
+      options.stageIndex !== currentStage
+    )
+      throw Error('ACTION_CHANGED');
     if (!moduleActions(p, actor, snapshot, amount).includes(action))
       throw Error('ACTION_UNAVAILABLE');
     if (action === 'checkIn') validateCheckIn(p, snapshot, options.checkIn);
@@ -391,6 +422,7 @@ export async function prepareModuleAction(
     publication: p,
     actor,
     action,
+    ...(p.data.tool === 'milestones' ? { stageIndex: currentStage } : {}),
     ...(paymentAmount ? { amount: paymentAmount } : {}),
     ...(['submitDelivery', 'dispute', 'challengeNoShow'].includes(action) && options.evidenceHash
       ? { evidenceHash: options.evidenceHash }
@@ -491,11 +523,11 @@ function eventMatches(
         );
       default:
         return (
-          p.data.tool === 'deliver' &&
+          (p.data.tool === 'deliver' || p.data.tool === 'milestones') &&
           event.eventName === 'ActionExecuted' &&
           addressMatches('actor', i.actor) &&
           a.action === keccak256(stringToHex(i.action)) &&
-          a.stageIndex === 0n
+          a.stageIndex === BigInt(i.stageIndex ?? 0)
         );
     }
   } catch {

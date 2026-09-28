@@ -114,16 +114,52 @@ export const attendanceSchema = z
       BigInt(d.deposit) * BigInt(d.capacity) <= MAX_UINT256,
     'Invalid event dates or capacity / 活动时间或人数不合法',
   );
+export const milestoneStageSchema = z.strictObject({
+  title: z.string().trim().min(1).max(80),
+  description: z.string().trim().max(500),
+  amount: amountSchema,
+  workDuration: z
+    .number()
+    .int()
+    .min(3600)
+    .max(30 * 86400),
+  reviewDuration: z
+    .number()
+    .int()
+    .min(3600)
+    .max(7 * 86400),
+});
+export const milestonesSchema = z
+  .strictObject({
+    tool: z.literal('milestones'),
+    ...common,
+    buyer: addressSchema,
+    seller: addressSchema,
+    fundBy: timeSchema,
+    disputeDuration: z
+      .number()
+      .int()
+      .min(86400)
+      .max(30 * 86400),
+    stages: z.array(milestoneStageSchema).min(2).max(10),
+  })
+  .refine(
+    (d) =>
+      d.buyer.toLowerCase() !== d.seller.toLowerCase() &&
+      d.stages.reduce((sum, s) => sum + BigInt(s.amount), 0n) <= MAX_UINT256,
+    'Invalid parties or total / 双方地址或总额无效',
+  );
 export const moduleDataSchema = z.discriminatedUnion('tool', [
   splitSchema,
   groupV2Schema,
   deliverySchema,
   attendanceSchema,
+  milestonesSchema,
 ]);
 export type ModuleData = z.infer<typeof moduleDataSchema>;
 export const moduleDeploymentSchema = z
   .strictObject({
-    tool: z.enum(['split', 'group', 'deliver', 'attend']),
+    tool: z.enum(['split', 'group', 'deliver', 'attend', 'milestones']),
     chainId: z.literal(10143),
     version: z.number().int(),
     address: addressSchema,
@@ -234,6 +270,7 @@ export const moduleIntentSchema = z.strictObject({
   checkIn: checkInSchema.optional(),
   agreement: agreementSchema.optional(),
   calldataHash: hashSchema.optional(),
+  stageIndex: z.number().int().min(0).max(9).optional(),
   nonce: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
   startBlock: z.string().regex(/^\d+$/),
   expiresAt: timeSchema,

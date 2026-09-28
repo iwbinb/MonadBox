@@ -280,11 +280,40 @@ export function ModuleFunds({
             </button>
           </>
         ) : null}
-        {snapshot && publication.data.tool === 'deliver' ? (
+        {snapshot &&
+        (publication.data.tool === 'deliver' || publication.data.tool === 'milestones') ? (
           <>
             <p>
               {t('Remaining escrow', '剩余托管款')}：{formatUnits(BigInt(snapshot.locked), 6)} AUSD
             </p>
+            {publication.data.tool === 'milestones' ? (
+              <>
+                <p>
+                  {t('Current stage', '当前阶段')}：{(snapshot.currentStage ?? 0) + 1} /{' '}
+                  {publication.data.stages.length}
+                </p>
+                <p>
+                  {t('Released stages total', '已释放阶段总额')}：
+                  {formatUnits(BigInt(snapshot.released ?? '0'), 6)} AUSD
+                </p>
+                <ol className="cloud-list">
+                  {publication.data.stages.map((stage, index) => (
+                    <li key={index}>
+                      {index + 1}. {stage.title} · {formatUnits(BigInt(stage.amount), 6)} AUSD ·{' '}
+                      {index < (snapshot.currentStage ?? 0) || snapshot.state === 'COMPLETED'
+                        ? t('Released', '已释放')
+                        : index === snapshot.currentStage
+                          ? statusLabel(snapshot.state, t)
+                          : ['TERMINATED', 'RESOLVED', 'CANCELLED', 'EXPIRED'].includes(
+                                snapshot.state,
+                              )
+                            ? t('Ended with remaining plan', '随剩余计划终止')
+                            : t('Waiting for earlier stages', '等待前序阶段')}
+                    </li>
+                  ))}
+                </ol>
+              </>
+            ) : null}
             {(['submitDue', 'reviewDue', 'disputeDue'] as const)
               .filter((key) => snapshot[key])
               .map((key) => (
@@ -504,6 +533,10 @@ export function ModuleFunds({
                         value,
                         {
                           ...options,
+                          ...(publication.data.tool === 'milestones' &&
+                          snapshot?.currentStage !== undefined
+                            ? { stageIndex: snapshot.currentStage }
+                            : {}),
                           ...(publication.data.tool === 'attend'
                             ? { participant: snapshot?.participant ?? wallet.actor! }
                             : {}),
@@ -530,6 +563,11 @@ export function ModuleFunds({
               {t('Signing wallet', '签名钱包')}：<code>{prepared.actor}</code> · nonce{' '}
               {prepared.nonce}
             </p>
+            {publication.data.tool === 'milestones' && prepared.stageIndex !== undefined ? (
+              <p>
+                {t('Stage for this action', '本次操作阶段')}：{prepared.stageIndex + 1}
+              </p>
+            ) : null}
             {prepared.participant ? (
               <p>
                 {t('Participant for this action', '本次操作的参加者')}：
