@@ -71,7 +71,8 @@ export interface PublicGroup {
   chainBoxId: Hex;
   transactionHash: Hex;
   snapshot: ChainSnapshot;
-  paymentsEnabled: false;
+  paymentsEnabled: boolean;
+  intent: PublishIntent;
 }
 export const LOGIN_STATEMENT =
   'Sign in to MonadBox to manage group drafts. This does not authorize payments or token approvals.';

@@ -22,11 +22,9 @@ export function validateConfig(config, pkg) {
     if (
       settings.vars.CHAIN_ID !== '10143' ||
       settings.vars.MAINNET_ENABLED !== 'false' ||
-      settings.vars.NETWORK_WRITES_ENABLED !== 'false'
+      !['true', 'false'].includes(settings.vars.NETWORK_WRITES_ENABLED)
     )
-      throw new Error(
-        'Business payments remain disabled; testnet lab is a separate explicit wallet action',
-      );
+      throw new Error('Only explicit testnet configuration is supported');
     if (!['true', 'false'].includes(settings.vars.TESTNET_LAB_ENABLED ?? 'false'))
       throw new Error('Invalid testnet lab flag');
     if (settings.vars.ASSET_ALLOWLIST !== '[]' || settings.vars.CONTRACT_REGISTRY !== '[]')
@@ -65,6 +63,11 @@ export function validateConfig(config, pkg) {
     } catch {
       throw new Error('Invalid Group deployment JSON');
     }
+    if (
+      settings.vars.NETWORK_WRITES_ENABLED === 'true' &&
+      (settings.vars.CLOUD_ENABLED !== 'true' || !deployment)
+    )
+      throw new Error('Business payments require cloud and reviewed deployment');
     if (
       settings.vars.GROUP_PUBLISH_ENABLED === 'true' &&
       (settings.vars.CLOUD_ENABLED !== 'true' || !deployment)

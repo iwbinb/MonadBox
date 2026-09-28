@@ -14,6 +14,9 @@ import {
   NotFoundPage,
 } from './pages';
 import './styles.css';
+const GroupActivityPage = lazy(() =>
+  import('./group/GroupFunds').then((m) => ({ default: m.GroupActivityPage })),
+);
 const LabPage = lazy(() => import('./lab/LabPage'));
 const GroupBuilderPage = lazy(() =>
   import('./group/GroupPages').then((m) => ({ default: m.GroupBuilderPage })),
@@ -90,6 +93,7 @@ createRoot(root).render(
                 element={groupSurface(<GroupBuilderPage />)}
               />
               <Route path="create/:id" element={<UnavailablePage />} />
+              <Route path="app/group-activity" element={groupSurface(<GroupActivityPage />)} />
               <Route path="app/groups" element={groupSurface(<CloudGroupsPage />)} />
               <Route path="app/groups/:id" element={groupSurface(<CloudGroupPage />)} />
               <Route path="b/:id" element={groupSurface(<PublicGroupPage />)} />

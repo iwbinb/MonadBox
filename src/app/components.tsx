@@ -102,7 +102,9 @@ export function Layout() {
       </a>
       <div className="environment-bar" role="status">
         <span className="status-dot" />
-        {t('Monad Testnet · Business Payments disabled', 'Monad 测试网 · 业务付款未开放')}
+        {state.status === 'ready' && state.config.capabilities.payments
+          ? t('Monad Testnet · Test assets only', 'Monad 测试网 · 仅测试资产')
+          : t('Monad Testnet · Business Payments disabled', 'Monad 测试网 · 业务付款未开放')}
       </div>
       <header className="site-header">
         <div className="container nav-row">
@@ -152,6 +154,7 @@ export function Layout() {
           <p>{t('One link. Clear rules.', '一个链接，规则清晰。')}</p>
         </div>
         <div className="footer-links">
+          <Link to="/app/group-activity">{t('Funds workbench', '资金工作台')}</Link>
           <Link to="/help/refunds">{t('Refund rules', '退款规则')}</Link>
           <Link to="/status">{t('System status', '系统状态')}</Link>
           <span>

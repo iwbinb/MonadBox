@@ -560,7 +560,8 @@ export function createCloudRouter(chain: CloudChain = makeCloudChain()) {
       chainBoxId: pub.intent.chainBoxId,
       transactionHash: pub.hash,
       snapshot,
-      paymentsEnabled: false,
+      paymentsEnabled: readConfig(c.env).NETWORK_WRITES_ENABLED,
+      intent: pub.intent,
     };
     return ok(c, data);
   });

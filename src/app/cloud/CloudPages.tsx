@@ -27,6 +27,7 @@ import {
   sameAccount,
 } from './api';
 import './cloud.css';
+import { GroupFunds } from '../group/GroupFunds';
 function errorText(e: unknown) {
   if (e instanceof ApiError) {
     const errors: Record<string, string> = {
@@ -818,9 +819,12 @@ export function PublicGroupPage() {
               {new Date(value.snapshot.timestamp * 1000).toISOString()}
             </p>
             <GroupRules />
-            <button className="button primary" disabled>
-              {t('Payments are not enabled yet', '付款功能尚未开放')}
-            </button>
+            {!value.paymentsEnabled ? (
+              <button className="button primary" disabled>
+                {t('Payments are not enabled yet', '付款功能尚未开放')}
+              </button>
+            ) : null}
+            <GroupFunds key={value.publicId} group={value} />
             <button className="button secondary" onClick={() => setAttempt((x) => x + 1)}>
               {t('Refresh chain state', '刷新链状态')}
             </button>

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { deploymentSchema } from './cloud/model';
 import { GROUP_ASSET } from './group/draft';
-export const STAGE = 'M1-B' as const;
+export const STAGE = 'M1-C' as const;
 export const TESTNET_CHAIN_ID = 10143 as const;
 const falseFlag = z.literal('false');
 const booleanFlag = z.enum(['false', 'true']).transform((value) => value === 'true');
@@ -35,7 +35,7 @@ const schema = z
     STORAGE_ENABLED: booleanFlag,
     TESTNET_LAB_ENABLED: booleanFlag.default(false),
     BACKGROUND_ENABLED: booleanFlag,
-    NETWORK_WRITES_ENABLED: falseFlag,
+    NETWORK_WRITES_ENABLED: booleanFlag,
     MAINNET_ENABLED: falseFlag,
     ASSET_ALLOWLIST: emptyList,
     CONTRACT_REGISTRY: emptyList,
@@ -71,6 +71,16 @@ const schema = z
         code: 'custom',
         message: 'Publishing requires cloud and official testnet deployment',
       });
+    if (
+      value.NETWORK_WRITES_ENABLED &&
+      (!value.CLOUD_ENABLED ||
+        !value.GROUP_DEPLOYMENT ||
+        value.GROUP_DEPLOYMENT.asset.toLowerCase() !== GROUP_ASSET.toLowerCase())
+    )
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Funds actions require cloud and verified Group deployment',
+      });
     if (value.STORAGE_NAMESPACE !== `monadbox-${value.APP_ENV}`)
       ctx.addIssue({
         code: 'custom',
@@ -104,7 +114,7 @@ export const publicConfigSchema = z.object({
   capabilities: z.object({
     wallets: z.boolean(),
     testnetLab: z.boolean(),
-    payments: z.literal(false),
+    payments: z.boolean(),
     drafts: z.boolean(),
     cloudGroups: z.boolean().default(false),
     groupPublishing: z.boolean().default(false),
@@ -123,7 +133,7 @@ export function toPublicConfig(config: RuntimeConfig, revision: string): PublicC
     capabilities: {
       wallets: config.TESTNET_LAB_ENABLED,
       testnetLab: config.TESTNET_LAB_ENABLED,
-      payments: false,
+      payments: config.NETWORK_WRITES_ENABLED,
       drafts: config.CLOUD_ENABLED,
       cloudGroups: config.CLOUD_ENABLED,
       groupPublishing: config.GROUP_PUBLISH_ENABLED,

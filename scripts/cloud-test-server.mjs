@@ -5,15 +5,16 @@ import { build } from 'esbuild';
 import { Miniflare, convertV4MiniflareOptions } from 'miniflare';
 import { createPublicClient, createWalletClient, defineChain, http, keccak256 } from 'viem';
 // Fixed loopback only. No RPC/host/private-key overrides or public broadcasts.
-const rpc = 'http://127.0.0.1:18745';
-const origin = 'http://127.0.0.1:8789';
+const funds = process.env.MONADBOX_LOCAL_FUNDS_TEST === '1';
+const rpc = funds ? 'http://127.0.0.1:18746' : 'http://127.0.0.1:18745';
+const origin = funds ? 'http://127.0.0.1:8790' : 'http://127.0.0.1:8789';
 const token = '0xa9012a055bd4e0eDfF8Ce09f960291C09D5322dC';
 const binary = existsSync('tools/anvil') ? 'tools/anvil' : 'anvil';
 if (!execFileSync(binary, ['--version'], { encoding: 'utf8' }).includes('Version: 1.8.3'))
   throw Error('Anvil 1.8.3 required');
 const child = spawn(
   binary,
-  ['--host', '127.0.0.1', '--port', '18745', '--chain-id', '10143', '--silent'],
+  ['--host', '127.0.0.1', '--port', funds ? '18746' : '18745', '--chain-id', '10143', '--silent'],
   { stdio: 'ignore' },
 );
 let mf;
@@ -86,7 +87,7 @@ try {
   await raw('anvil_mine', ['0x41']);
   mkdirSync('artifacts', { recursive: true });
   writeFileSync(
-    'artifacts/cloud-test.json',
+    funds ? 'artifacts/funds-test.json' : 'artifacts/cloud-test.json',
     JSON.stringify(
       { mode: 'LOCAL ANVIL ONLY; NOT MONAD', origin, rpc, accounts, deployment },
       null,
@@ -94,8 +95,8 @@ try {
     ),
   );
   await build({
-    entryPoints: ['tests/fixtures/cloud-worker.ts'],
-    outfile: 'artifacts/cloud-worker.mjs',
+    entryPoints: [funds ? 'tests/fixtures/funds-worker.ts' : 'tests/fixtures/cloud-worker.ts'],
+    outfile: funds ? 'artifacts/funds-worker.mjs' : 'artifacts/cloud-worker.mjs',
     bundle: true,
     format: 'esm',
     platform: 'browser',
@@ -106,9 +107,9 @@ try {
     convertV4MiniflareOptions({
       name: 'monadbox-cloud-test',
       host: '127.0.0.1',
-      port: 8789,
+      port: funds ? 8790 : 8789,
       modules: true,
-      scriptPath: 'artifacts/cloud-worker.mjs',
+      scriptPath: funds ? 'artifacts/funds-worker.mjs' : 'artifacts/cloud-worker.mjs',
       compatibilityDate: '2026-09-18',
       compatibilityFlags: ['nodejs_compat'],
       assets: {
@@ -124,7 +125,7 @@ try {
         STORAGE_NAMESPACE: 'monadbox-local',
         STORAGE_ENABLED: 'false',
         BACKGROUND_ENABLED: 'false',
-        NETWORK_WRITES_ENABLED: 'false',
+        NETWORK_WRITES_ENABLED: funds ? 'true' : 'false',
         MAINNET_ENABLED: 'false',
         ASSET_ALLOWLIST: '[]',
         CONTRACT_REGISTRY: '[]',

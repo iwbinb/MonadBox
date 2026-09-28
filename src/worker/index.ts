@@ -58,7 +58,7 @@ export function createApp(chain?: CloudChain) {
           chainId: 10143,
           storage: config.STORAGE_ENABLED ? 'bound-and-checked' : 'disabled',
           background: config.BACKGROUND_ENABLED ? 'enabled' : 'disabled',
-          payments: 'disabled',
+          payments: config.NETWORK_WRITES_ENABLED ? 'wallet-signed-only' : 'disabled',
           cloudGroups: config.CLOUD_ENABLED ? 'bound-and-checked' : 'disabled',
         },
         requestId: c.get('requestId'),
