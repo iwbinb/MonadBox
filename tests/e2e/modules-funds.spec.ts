@@ -109,10 +109,50 @@ test('Split browser publication and final payment; Group V2 successful split and
     await expect(receivePage.getByText('Withdrawable credit', { exact: false })).toContainText(
       '0.000071 AUSD',
     );
+    await receivePage
+      .getByRole('button', { name: 'Prepare: Withdraw to my wallet', exact: true })
+      .click();
+    await receivePage.evaluate(
+      (account) =>
+        (window as unknown as { __fundsSwitch: (a: string) => void }).__fundsSwitch(account),
+      partner,
+    );
+    await expect(
+      receivePage.getByRole('button', { name: 'Sign this action', exact: true }),
+    ).toHaveCount(0);
+    await expect(receivePage.getByText('Withdrawable credit', { exact: false })).toHaveCount(0);
+    await receivePage.evaluate(
+      (account) =>
+        (window as unknown as { __fundsSwitch: (a: string) => void }).__fundsSwitch(account),
+      recipient,
+    );
+    await receivePage.goto(origin + '/app');
+    await receivePage
+      .getByRole('textbox', { name: 'Restore from an original public link', exact: true })
+      .fill(path!);
+    await receivePage.getByRole('button', { name: 'Verify and open link', exact: true }).click();
+    await expect(receivePage).toHaveURL(origin + path);
+    await receivePage.goto(origin + '/app');
+    await connect(receivePage);
+    await receivePage.getByRole('button', { name: 'Check chain rights', exact: true }).click();
+    await receivePage.getByRole('button', { name: 'To claim', exact: true }).click();
+    await expect(receivePage.locator('.workspace-grid article')).toContainText('0.000071 AUSD');
+    await receivePage.getByRole('link', { name: 'Open rules and actions', exact: true }).click();
+    await connect(receivePage);
     await action(receivePage, 'Withdraw to my wallet');
     await expect(
       receivePage.getByText('Already transferred to wallet', { exact: false }),
     ).toContainText('0.000071 AUSD');
+    await receivePage.goto(origin + '/app');
+    await connect(receivePage);
+    await receivePage.getByRole('button', { name: 'Check chain rights', exact: true }).click();
+    await expect(
+      receivePage.getByRole('status').filter({ hasText: 'Checked 1 / 1' }),
+    ).toBeVisible();
+    await receivePage.getByRole('button', { name: 'To claim', exact: true }).click();
+    await expect(receivePage.locator('.workspace-grid article')).toHaveCount(0);
+    await receivePage.getByRole('button', { name: 'History', exact: true }).click();
+    await expect(receivePage.locator('.workspace-grid article')).toContainText('0.000071 AUSD');
     // Two immutable V2 groups on the same isolated local chain. Publication HTTP uses the real verifier.
     const session = (await (await page.request.get(origin + '/api/v1/auth/session')).json())
       .data as SessionInfo;

@@ -7,13 +7,13 @@ import { Layout } from './components';
 import {
   HomePage,
   ToolPage,
-  DashboardPage,
   RefundsPage,
   StatusPage,
   UnavailablePage,
   NotFoundPage,
 } from './pages';
 import './styles.css';
+const WorkspacePage = lazy(() => import('./WorkspacePage'));
 const GroupActivityPage = lazy(() =>
   import('./group/GroupFunds').then((m) => ({ default: m.GroupActivityPage })),
 );
@@ -92,7 +92,7 @@ createRoot(root).render(
             <Route element={<Layout />}>
               <Route index element={<HomePage />} />
               <Route path="tools/:id" element={<ToolPage />} />
-              <Route path="app" element={<DashboardPage />} />
+              <Route path="app" element={groupSurface(<WorkspacePage />)} />
               <Route path="help/refunds" element={<RefundsPage />} />
               <Route path="status" element={<StatusPage />} />
               <Route

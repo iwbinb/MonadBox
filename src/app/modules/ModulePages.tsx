@@ -1,10 +1,12 @@
+import { formatUnits } from 'viem';
+import { statusLabel } from '../shared/status';
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import type { Hex } from 'viem';
 import { useApp } from '../context';
 import { api } from '../cloud/api';
-import { Login, Header, useSession, errorText } from '../cloud/CloudPages';
+import { Login, Header, useSession, errorText } from '../shared/Session';
 import type { SessionInfo } from '../../shared/cloud/model';
 import type { ModuleBox, ModuleData, ModulePublication } from '../../shared/modules/model';
 import type { ModuleSnapshot } from '../../shared/modules/chain';
@@ -550,8 +552,8 @@ export function PublicModulePage() {
             · <code>{box.publication.deployment.address}</code>
           </p>
           <p>
-            {t('Contract state', '合约状态')}：{box.snapshot.state} · {t('Locked', '锁定金额')}：
-            {box.snapshot.locked} {t('token units', '最小单位')}
+            {t('Contract state', '合约状态')}：{statusLabel(box.snapshot.state, t)} ·{' '}
+            {t('Locked', '锁定金额')}：{formatUnits(BigInt(box.snapshot.locked), 6)} AUSD
           </p>
           <p>
             {t(

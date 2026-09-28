@@ -1,0 +1,39 @@
+.workspace-start,
+.workspace-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+.workspace-start > .cloud-card,
+.workspace-grid > .cloud-card {
+  margin: 0 0 20px;
+  min-width: 0;
+}
+.workspace-amounts {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+  font-variant-numeric: tabular-nums;
+}
+.workspace-amounts dd {
+  margin: 0 0 12px;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+.workspace-page .tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.workspace-page article {
+  overflow-wrap: anywhere;
+}
+@media (max-width: 760px) {
+  .workspace-start,
+  .workspace-grid {
+    grid-template-columns: 1fr;
+  }
+  .workspace-page .page-heading {
+    align-items: flex-start;
+  }
+}

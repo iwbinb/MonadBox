@@ -14,6 +14,7 @@ import { same } from '../../shared/cloud/chain';
 import { makeClient } from '../../shared/lab/network';
 import { errorCode, requireWallet } from '../../shared/lab/wallet';
 import type { InjectedProvider } from '../../shared/lab/wallet';
+import { requireResolvedTransactions } from '../shared/transaction-storage';
 
 export const actionRecordSchema = z.strictObject({
   intent: actionIntentSchema,
@@ -76,6 +77,7 @@ export async function sendGroupAction(
     key = actionKey(environment, i.actor);
   if (!navigator.locks) throw Error('JOURNAL_UNAVAILABLE');
   return navigator.locks.request(`monadbox.sign:${i.actor.toLowerCase()}`, async () => {
+    requireResolvedTransactions(localStorage, environment, i.actor);
     const rows = readActions(localStorage, key);
     if (rows.some((r) => !terminal.includes(r.state))) throw Error('UNRESOLVED_TRANSACTION');
     if (rows.some((r) => r.intent.id === i.id && r.state !== 'rejected'))

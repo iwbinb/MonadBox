@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { deploymentSchema } from './cloud/model';
 import { GROUP_ASSET } from './group/draft';
 import { moduleRegistrationSchema } from './modules/model';
-export const STAGE = 'M2-A' as const;
+export const STAGE = 'M2-B' as const;
 export const TESTNET_CHAIN_ID = 10143 as const;
 const falseFlag = z.literal('false');
 const booleanFlag = z.enum(['false', 'true']).transform((value) => value === 'true');

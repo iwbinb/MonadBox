@@ -63,11 +63,17 @@ export async function inject(page: Page, actor: Address) {
       const w = window as Window & {
         ethereum?: unknown;
         __fundsActor: string;
+        __fundsSwitch: (actor: string) => void;
         __fundsReject?: boolean;
         __fundsLost?: boolean;
         __fundsRpc: (m: string, p: unknown[]) => Promise<unknown>;
       };
       let connected = false;
+      const listeners = new Map<string, Set<(...args: unknown[]) => void>>();
+      w.__fundsSwitch = (next) => {
+        w.__fundsActor = next;
+        for (const listener of listeners.get('accountsChanged') ?? []) listener([next]);
+      };
       w.__fundsActor = actor;
       w.ethereum = {
         request: async ({ method, params = [] }: { method: string; params?: unknown[] }) => {
@@ -89,8 +95,14 @@ export async function inject(page: Page, actor: Address) {
           }
           return result;
         },
-        on: () => {},
-        removeListener: () => {},
+        on: (event: string, listener: (...args: unknown[]) => void) => {
+          const group = listeners.get(event) ?? new Set();
+          group.add(listener);
+          listeners.set(event, group);
+        },
+        removeListener: (event: string, listener: (...args: unknown[]) => void) => {
+          listeners.get(event)?.delete(listener);
+        },
       };
     },
     { actor },

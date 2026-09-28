@@ -9,6 +9,7 @@ import { confirmModuleAction, verifyModule } from '../../shared/modules/chain';
 import { makeClient } from '../../shared/lab/network';
 import { requireWallet } from '../../shared/lab/wallet';
 import type { InjectedProvider } from '../../shared/lab/wallet';
+import { requireResolvedTransactions } from '../shared/transaction-storage';
 export const transactionRecordSchema = z.strictObject({
   intent: moduleIntentSchema,
   state: z.enum([
@@ -70,6 +71,7 @@ export async function sendModuleAction(
   const i = moduleIntentSchema.parse(input);
   if (!navigator.locks) throw Error('LOCKS_REQUIRED');
   return navigator.locks.request(`monadbox.sign:${i.actor.toLowerCase()}`, async () => {
+    requireResolvedTransactions(localStorage, environment, i.actor);
     const key = journalKey(environment, i.actor),
       rows = readRecords(localStorage, key);
     if (

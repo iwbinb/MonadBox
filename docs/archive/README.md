@@ -12,6 +12,7 @@
 | [M1-B](M1-B_ACCEPTANCE.md) | SIWE、云端发布、分享及 PR #6 修复的测试证据 |
 | [M1-C](M1-C_ACCEPTANCE.md) | Group资金动作、回执恢复与完整CI检查点 |
 | [M2-A](M2-A_ACCEPTANCE.md) | Split、Group V2、版本化发布和52项浏览器回归 |
+| [M2-B](M2-B_ACCEPTANCE.md) | 共用工作台、恢复组件、换账号及60项浏览器回归 |
 
 ## 2026-09-28 文件整理
 

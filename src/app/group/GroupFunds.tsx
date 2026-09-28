@@ -1,16 +1,17 @@
+import { RecoveryHistory } from '../shared/RecoveryHistory';
+import { statusLabel } from '../shared/status';
 import { useEffect, useRef, useState } from 'react';
 import '../cloud/cloud.css';
 import { Link } from 'react-router-dom';
 import type { Address, Hex } from 'viem';
 import { formatUnits } from 'viem';
 import { useApp } from '../context';
-import { discoverWallets, walletState, switchTestnet, userError } from '../../shared/lab/wallet';
-import type { WalletOption } from '../../shared/lab/wallet';
-import { makeClient, explorerTransaction } from '../../shared/lab/network';
+import { userError } from '../../shared/lab/wallet';
+import { useFundsWallet, WalletChoice } from '../shared/FundsWallet';
+import { makeClient } from '../../shared/lab/network';
 import { availableActions, groupAccount, prepareAction } from '../../shared/group/actions';
 import type { GroupAction, GroupAccount, GroupActionIntent } from '../../shared/group/actions';
 import type { PublicGroup } from '../../shared/cloud/model';
-import { hashSchema } from '../../shared/cloud/model';
 import { actionKey, readActions, recheckAction, sendGroupAction } from './action-journal';
 import type { ActionRecord } from './action-journal';
 
@@ -39,76 +40,6 @@ function message(e: unknown) {
   };
   return errors[text] ?? userError(e);
 }
-export function useGroupWallet() {
-  const [wallets, setWallets] = useState<WalletOption[]>([]),
-    [selected, setSelected] = useState('');
-  const [actor, setActor] = useState<Address | null>(null);
-  const wallet = wallets.find((w) => w.id === selected) ?? wallets[0];
-  useEffect(() => discoverWallets(window, setWallets), []);
-  useEffect(() => {
-    setActor(null);
-    if (!wallet) return;
-    const reset = () => setActor(null);
-    wallet.provider.on?.('accountsChanged', reset);
-    wallet.provider.on?.('chainChanged', reset);
-    return () => {
-      wallet.provider.removeListener?.('accountsChanged', reset);
-      wallet.provider.removeListener?.('chainChanged', reset);
-    };
-  }, [wallet]);
-  async function connect() {
-    if (!wallet) throw Error('INVALID_WALLET');
-    let s = await walletState(wallet.provider, true);
-    if (s.chainId !== 10143) s = await switchTestnet(wallet.provider);
-    if (!s.account) throw Error('INVALID_WALLET');
-    setActor(s.account);
-    return s.account;
-  }
-  return { wallets, wallet, selected, setSelected, actor, connect };
-}
-export function WalletChoice({
-  value,
-  busy,
-  connect,
-}: {
-  value: ReturnType<typeof useGroupWallet>;
-  busy: boolean;
-  connect: () => void;
-}) {
-  const { t } = useApp();
-  return (
-    <>
-      <label>
-        {t('Funds wallet', '资金钱包')}
-        <select value={value.wallet?.id ?? ''} onChange={(e) => value.setSelected(e.target.value)}>
-          <option value="" disabled>
-            {t('Select wallet', '选择钱包')}
-          </option>
-          {value.wallets.map((w) => (
-            <option key={w.id} value={w.id}>
-              {w.name}
-            </option>
-          ))}
-        </select>
-      </label>
-      <button className="button secondary" disabled={busy || !value.wallet} onClick={connect}>
-        {t('Connect funds wallet', '连接资金钱包')}
-      </button>
-      {value.actor ? (
-        <p>
-          <code>{value.actor}</code>
-        </p>
-      ) : (
-        <p>
-          {t(
-            'Connect to read your rights; connection does not sign a payment.',
-            '连接后读取你的权益，连接不会签署付款。',
-          )}
-        </p>
-      )}
-    </>
-  );
-}
 export function ActionHistory({
   rows,
   busy,
@@ -119,77 +50,25 @@ export function ActionHistory({
   recheck: (row: ActionRecord, hash?: Hex) => void;
 }) {
   const { t } = useApp();
-  const [hash, setHash] = useState(''),
-    [error, setError] = useState('');
   return (
-    <div className="cloud-card">
-      <h3>{t('Transactions and recovery', '交易与恢复')}</h3>
-      <p>
-        {t(
-          'Finalized confirms the action shown, not every step of a payment. Unknown is not failure; recheck before sending again.',
-          '最终确认仅代表所列动作完成。未知不等于失败，发送下一笔前先核验。',
-        )}
-      </p>
-      <label>
-        {t('Original or replacement hash (optional)', '原交易或替代交易哈希（选填）')}
-        <input value={hash} onChange={(e) => setHash(e.target.value)} placeholder="0x…" />
-      </label>
-      {error ? <p role="alert">{error}</p> : null}
-      <ul className="cloud-list">
-        {[...rows].reverse().map((r) => (
-          <li key={r.intent.id}>
-            <p>
-              {t(...labels[r.intent.action])} · <strong>{r.state}</strong>
-            </p>
-            <p>
-              <Link to={`/b/${r.intent.group.publicId}`}>{r.intent.group.data.title}</Link>
-            </p>
-            {r.hash ? (
-              <a href={explorerTransaction(r.hash)} target="_blank" rel="noreferrer">
-                <code>{r.hash}</code>
-              </a>
-            ) : null}
-            <button
-              className="button secondary"
-              disabled={busy}
-              onClick={() => {
-                try {
-                  const supplied = hash ? hashSchema.parse(hash) : undefined;
-                  setError('');
-                  recheck(r, supplied);
-                } catch {
-                  setError(t('Enter a 32-byte transaction hash.', '请输入32字节交易哈希。'));
-                }
-              }}
-            >
-              {t('Recheck transaction', '重新核验交易')}
-            </button>
-          </li>
-        ))}
-      </ul>
-      {!rows.length ? (
-        <p>
-          {t(
-            'No transaction history in this browser. The original public link still lets you read your on-chain rights.',
-            '当前浏览器暂无交易记录，凭原公开链接仍可读取链上权益。',
-          )}
-        </p>
-      ) : (
-        <details>
-          <summary>{t('Export recovery records', '导出恢复记录')}</summary>
-          <textarea
-            readOnly
-            aria-label={t('Recovery JSON', '恢复 JSON')}
-            value={JSON.stringify(rows, null, 2)}
-          />
-        </details>
-      )}
-    </div>
+    <RecoveryHistory
+      rows={rows}
+      busy={busy}
+      recheck={recheck}
+      describe={(r) => ({
+        id: r.intent.id,
+        label: t(...labels[r.intent.action]),
+        title: r.intent.group.data.title,
+        href: '/b/' + r.intent.group.publicId,
+        state: r.state,
+        ...(r.hash ? { hash: r.hash } : {}),
+      })}
+    />
   );
 }
 export function GroupFunds({ group }: { group: PublicGroup }) {
   const { state, t } = useApp(),
-    wallet = useGroupWallet();
+    wallet = useFundsWallet();
   const environment = state.status === 'ready' ? state.config.environment : '';
   const [account, setAccount] = useState<GroupAccount | null>(null),
     [prepared, setPrepared] = useState<GroupActionIntent | null>(null);
@@ -244,7 +123,9 @@ export function GroupFunds({ group }: { group: PublicGroup }) {
     }
   }
   async function check(row: ActionRecord, hash?: Hex) {
+    const current = epoch.current;
     const result = await recheckAction(environment, row, hash);
+    if (current !== epoch.current) return;
     setNotice(
       t(
         `Latest lookup: ${result.result.state}. Existing verified records are preserved on an unknown response.`,
@@ -291,7 +172,7 @@ export function GroupFunds({ group }: { group: PublicGroup }) {
         <>
           <p>
             {t('Position', '参与状态')}：{['NONE', 'ACTIVE', 'LEFT', 'REFUNDED'][account.position]}{' '}
-            · {account.snapshot.state}
+            · {statusLabel(account.snapshot.state, t)}
           </p>
           <p>
             {t('Withdrawable credit', '可领取余额')}：{formatUnits(BigInt(account.credit), 6)} AUSD
@@ -379,7 +260,9 @@ export function GroupFunds({ group }: { group: PublicGroup }) {
             disabled={busy || !ack || !wallet.actor || !wallet.wallet}
             onClick={() =>
               void run(async () => {
+                const current = epoch.current;
                 const hash = await sendGroupAction(wallet.wallet!.provider, environment, prepared);
+                if (current !== epoch.current) return;
                 setNotice(
                   t(`Sent: ${hash}. Recheck; do not resend.`, `已发送：${hash}，请核验，勿重发。`),
                 );
@@ -407,7 +290,7 @@ export function GroupFunds({ group }: { group: PublicGroup }) {
 }
 export function GroupActivityPage() {
   const { state, t } = useApp(),
-    wallet = useGroupWallet();
+    wallet = useFundsWallet();
   const environment = state.status === 'ready' ? state.config.environment : '';
   const [rows, setRows] = useState<ActionRecord[]>([]),
     [busy, setBusy] = useState(false),

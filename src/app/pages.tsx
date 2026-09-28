@@ -76,8 +76,8 @@ export function HomePage() {
       <div className="notice">
         <p>
           {t(
-            'Group drafts are now available on this browser. On-chain publishing and business payments are not enabled. Wallet testing remains separate in the lab.',
-            '成团收款现可创建本地草稿；链上发布和业务付款仍未开放，钱包测试保留在独立实验室中。',
+            'Group and Split drafts are available in this browser. Publishing and business payments depend on the capabilities enabled in this environment.',
+            '本浏览器支持成团与分账草稿；发布和业务付款以当前环境已开放能力为准。',
           )}
         </p>
         <Link to="/status">
@@ -154,49 +154,6 @@ export function ToolPage() {
           <Link to="/help/refunds">{t('Review all refund rules', '查看全部退款规则')}</Link>
         </aside>
       </div>
-    </div>
-  );
-}
-export function DashboardPage() {
-  const { t } = useApp();
-  const [tab, setTab] = useState('created');
-  return (
-    <div className="container workspace-page">
-      <div className="page-heading">
-        <div>
-          <h1>{t('My boxes', '我的 Box')}</h1>
-          <p>
-            {t(
-              'Your shared workspace for payments, returns and next steps.',
-              '统一查看收付款、退款与待处理事项。',
-            )}
-          </p>
-        </div>
-        <Link className="button secondary" to="/app/group-drafts">
-          {t('Group drafts', '成团草稿')}
-          <Arrow />
-        </Link>
-      </div>
-      <div className="tabs" aria-label={t('Box views', 'Box 视图')}>
-        {[
-          ['created', t('Created by me', '我创建的')],
-          ['joined', t('Joined by me', '我参与的')],
-          ['claim', t('To claim', '待领取')],
-        ].map(([key, label]) => (
-          <button key={key} aria-pressed={tab === key} onClick={() => setTab(key!)}>
-            {label}
-          </button>
-        ))}
-      </div>
-      <Unavailable
-        title={
-          tab === 'created'
-            ? t('Your next project starts here', '从这里开始你的下一个项目')
-            : tab === 'joined'
-              ? t('No participation data yet', '尚无参与记录')
-              : t('No claim data yet', '尚无领取记录')
-        }
-      />
     </div>
   );
 }

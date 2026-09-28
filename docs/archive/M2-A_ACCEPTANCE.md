@@ -1,6 +1,6 @@
 # M2-A Split 与 Group V2 工程验收
 
-2026-09-28，本地工程检查通过，远端完整CI随本阶段dev提交复验。真实测试网登记、官方测试AUSD、真实钱包和外部审阅仍待验收。
+2026-09-28，本地工程检查通过。提交`a0fc6e0a7597c04ac45fc7e38e2e3a284242e578`的[PR完整CI](https://github.com/iwbinb/MonadBox/actions/runs/36407318598)及[dev完整CI](https://github.com/iwbinb/MonadBox/actions/runs/36407314035)均通过。真实测试网登记、官方测试AUSD、真实钱包和外部审阅仍待验收。
 
 ## 交付
 

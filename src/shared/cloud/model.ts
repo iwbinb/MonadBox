@@ -75,4 +75,4 @@ export interface PublicGroup {
   intent: PublishIntent;
 }
 export const LOGIN_STATEMENT =
-  'Sign in to MonadBox to manage group drafts. This does not authorize payments or token approvals.';
+  'Sign in to MonadBox to manage payment drafts and private delivery files. This does not authorize payments or token approvals.';

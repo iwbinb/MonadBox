@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { formatUnits } from 'viem';
+import { formatUnits, isAddress } from 'viem';
 import { useApp } from '../context';
 import { parseAmount } from '../../shared/amount';
 import { localDateInput, parseLocalDate } from '../../shared/group/draft';
 import { moduleDataSchema } from '../../shared/modules/model';
 import type { ModuleData } from '../../shared/modules/model';
 import { allocateSplit } from '../../shared/modules/terms';
+import { exportModule } from './drafts';
 export function ModuleRules({ data }: { data: ModuleData }) {
   const { t } = useApp();
   const [example, setExample] = useState('1');
@@ -120,7 +121,70 @@ export function ModuleEditor({
     [settle, setSettle] = useState(localDateInput(g?.settleNotBefore ?? time + 172800));
   const [preview, setPreview] = useState<ModuleData | null>(null),
     [error, setError] = useState('');
+  const [problems, setProblems] = useState<Record<string, string>>({});
   function review() {
+    const issues: Record<string, string> = {};
+    const seen = new Set<string>();
+    let total = 0;
+    recipients.forEach((r, index) => {
+      if (
+        !isAddress(r.address) ||
+        /^0x0{40}$/i.test(r.address) ||
+        seen.has(r.address.toLowerCase())
+      )
+        issues[`address-${index}`] = t(
+          'Enter a unique, nonzero wallet address.',
+          '请输入非零且不重复的钱包地址。',
+        );
+      seen.add(r.address.toLowerCase());
+      try {
+        const bps = parseAmount(r.percent, 2);
+        if (bps === 0n || bps > 10000n) throw Error();
+        total += Number(bps);
+      } catch {
+        issues[`share-${index}`] = t(
+          'Use a positive percentage with at most two decimals.',
+          '比例须大于0、不超过100，最多两位小数。',
+        );
+      }
+    });
+    if (total !== 10000)
+      issues.recipients = t('Shares must add up to exactly 100%.', '比例合计必须恰好为100%。');
+    if (tool === 'group') {
+      try {
+        if (parseAmount(amount, 6) === 0n) throw Error();
+      } catch {
+        issues.amount = t(
+          'Use a positive AUSD amount with at most six decimals.',
+          '请输入正数 AUSD 金额，最多六位小数。',
+        );
+      }
+      const start = parseLocalDate(startsAt),
+        end = parseLocalDate(deadline),
+        release = parseLocalDate(settle);
+      if (!start || !end || !release || start >= end || end > release)
+        issues.times = t(
+          'Start must precede the deadline; settlement cannot precede the deadline.',
+          '开始时间须早于募集截止，结算不能早于募集截止。',
+        );
+      if (
+        !/^\d+$/.test(minimum) ||
+        !/^\d+$/.test(capacity) ||
+        Number(minimum) < 2 ||
+        Number(capacity) > 200 ||
+        Number(minimum) > Number(capacity)
+      )
+        issues.capacity = t(
+          'Use 2–200 places, with capacity at least the target.',
+          '人数为2至200，上限不能小于目标。',
+        );
+    }
+    setProblems(issues);
+    if (Object.keys(issues).length) {
+      setPreview(null);
+      setError(t('Correct the marked fields before reviewing.', '请先修正标记的字段。'));
+      return;
+    }
     try {
       const data = {
         tool,
@@ -189,6 +253,10 @@ export function ModuleEditor({
                 {t('Recipient', '收款人')} {index + 1}
                 <input
                   required
+                  aria-invalid={!!problems[`address-${index}`]}
+                  aria-describedby={
+                    problems[`address-${index}`] ? `module-address-${index}` : undefined
+                  }
                   value={r.address}
                   onChange={(e) =>
                     setRecipients(
@@ -198,12 +266,19 @@ export function ModuleEditor({
                     )
                   }
                 />
+                {problems[`address-${index}`] ? (
+                  <small id={`module-address-${index}`}>{problems[`address-${index}`]}</small>
+                ) : null}
               </label>
               <label>
                 {t('Share (%)', '比例（%）')} {index + 1}
                 <input
                   required
                   inputMode="decimal"
+                  aria-invalid={!!problems[`share-${index}`]}
+                  aria-describedby={
+                    problems[`share-${index}`] ? `module-share-${index}` : undefined
+                  }
                   value={r.percent}
                   onChange={(e) =>
                     setRecipients(
@@ -213,6 +288,9 @@ export function ModuleEditor({
                     )
                   }
                 />
+                {problems[`share-${index}`] ? (
+                  <small id={`module-share-${index}`}>{problems[`share-${index}`]}</small>
+                ) : null}
               </label>
               <button
                 type="button"
@@ -228,6 +306,7 @@ export function ModuleEditor({
               </button>
             </div>
           ))}
+          {problems.recipients ? <p>{problems.recipients}</p> : null}
           <button
             type="button"
             className="button secondary"
@@ -248,8 +327,10 @@ export function ModuleEditor({
               <input
                 value={amount}
                 inputMode="decimal"
+                aria-invalid={!!problems.amount}
                 onChange={(e) => setAmount(e.target.value)}
               />
+              {problems.amount ? <small>{problems.amount}</small> : null}
             </label>
             <label>
               {t('Target participants', '成团人数')}
@@ -297,6 +378,8 @@ export function ModuleEditor({
             </label>
           </fieldset>
         ) : null}
+        {problems.capacity ? <p>{problems.capacity}</p> : null}
+        {problems.times ? <p>{problems.times}</p> : null}
         <button className="button secondary" disabled={busy}>
           {t('Review rules', '预览规则')}
         </button>
@@ -305,6 +388,17 @@ export function ModuleEditor({
       {preview ? (
         <>
           <ModuleRules data={preview} />
+          <details className="cloud-card">
+            <summary>
+              {t('Export reviewed rules without saving', '导出已预览规则，无需保存')}
+            </summary>
+            <textarea
+              aria-label={t('Reviewed rules JSON', '已预览规则 JSON')}
+              rows={6}
+              readOnly
+              value={exportModule(preview)}
+            />
+          </details>
           <button className="button primary" disabled={busy} onClick={() => onSave(preview)}>
             {t('Save reviewed draft', '保存已预览草稿')}
           </button>
