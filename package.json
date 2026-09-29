@@ -57,6 +57,7 @@
   },
   "pnpm": {
     "overrides": {
+      "miniflare>undici": "7.29.1",
       "solc>tmp": "0.2.7"
     }
   }

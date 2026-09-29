@@ -29,6 +29,8 @@
 
 浏览器回归增加了实际 MON 付款后顶部状态同步、交付后验收、图片授权读取与完整性核验、阶段款剩余余额，以及七个合约部署/恢复/配置导出。拒签和响应丢失已有回归覆盖，本轮修复确认页隐藏错误提示的问题。
 
+远端 CI 56 检查时，漏洞库新增了 Miniflare 间接依赖 undici 7.29.0 的记录。按 [undici 官方通告](https://github.com/nodejs/undici/security/advisories/GHSA-3wwx-pv8p-q78v) 固定到补丁版7.29.1，未跳过漏洞检查。更新后369个依赖再次检查为0已知漏洞，受影响的云端运行测试56/56通过；证据为 /private/tmp/monad-release-audit-patched.json 和 monad-release-runtime-patched.log。最终完整远端结果见 main Actions。
+
 ## 公开环境边界
 
 - D1/R2创建、5份远端迁移和ID登记：尚未执行，已提出资源授权问题。
