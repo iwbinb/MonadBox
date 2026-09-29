@@ -117,14 +117,11 @@ test('Group complete funds flows and lost-response recovery on isolated LOCAL ch
   await expect(page.getByRole('alert')).toBeVisible();
   await page.reload();
   await connect(page);
-  await page
-    .locator('.cloud-list li')
-    .filter({ hasText: 'Pay and join' })
-    .filter({ hasText: 'Outcome unknown' })
-    .getByRole('button', { name: 'Recheck transaction' })
-    .click();
+  await expect(page.getByRole('heading', { name: 'Check the earlier transaction' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Prepare: Pay and join' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Check and continue' }).click();
   await expect(
-    page.getByRole('status').filter({ hasText: 'Latest lookup: finalized' }),
+    page.getByRole('status').filter({ hasText: 'Checked. You can continue here.' }),
   ).toBeVisible({ timeout: 20000 });
   await action(page, 'Exit to refundable credit');
   await action(page, 'Withdraw to my wallet');

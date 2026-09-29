@@ -2,8 +2,13 @@ import { CheckInPanel } from './CheckInPanel';
 import { attendanceDates } from '../../shared/modules/attendance-fields';
 import { addressSchema } from '../../shared/cloud/model';
 import { AgreementPanel } from './AgreementPanel';
+import { PendingRecovery } from './PendingRecovery';
+import type { PendingCheck } from './PendingRecovery';
+import { recheckPendingTransaction } from './pending-recovery';
 import { RecoveryHistory } from '../shared/RecoveryHistory';
 import { statusLabel } from '../shared/status';
+import { pendingTransactions } from '../shared/transaction-storage';
+import type { PendingTransaction } from '../shared/transaction-storage';
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { formatUnits, keccak256, stringToHex } from 'viem';
@@ -16,7 +21,7 @@ import { parseAmount } from '../../shared/amount';
 import type { ModuleAction, ModuleIntent, ModulePublication } from '../../shared/modules/model';
 import { moduleActions, moduleSnapshot, prepareModuleAction } from '../../shared/modules/chain';
 import type { ModuleActionOptions, ModuleSnapshot } from '../../shared/modules/chain';
-import { journalKey, readRecords, recheckModule, sendModuleAction, terminal } from './journal';
+import { journalKey, readRecords, recheckModule, sendModuleAction } from './journal';
 import type { TransactionRecord } from './journal';
 export const actionLabels: Record<ModuleAction, [string, string]> = {
   claimFor: ['Claim my reward credit', '领取我的奖励权益'],
@@ -77,6 +82,8 @@ export function moduleError(error: unknown): string {
       'Rules do not match their original hash. Signing is blocked. / 规则与原哈希不符，已禁止签名。',
     FINALITY_UNAVAILABLE:
       'The RPC has not confirmed a stable state. Recheck later. / 节点尚未确认稳定状态，请稍后核验。',
+    TRANSACTION_MISMATCH:
+      'This hash does not match the earlier transaction. Check it and try again. / 交易哈希与上一笔操作不符，请核对后重试。',
   };
   return messages[code] ?? userError(error);
 }
@@ -128,6 +135,7 @@ export function ModuleFunds({
     [ack, setAck] = useState(false);
   const [amount, setAmount] = useState(publication.data.tool === 'split' ? '' : '1'),
     [rows, setRows] = useState<TransactionRecord[]>([]),
+    [pending, setPending] = useState<PendingTransaction[]>([]),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(''),
     [notice, setNotice] = useState('');
@@ -154,11 +162,13 @@ export function ModuleFunds({
     setPrepared(null);
     setAck(false);
     setRows([]);
+    setPending([]);
     setNotice('');
     setError('');
     if (!wallet.actor) return;
     try {
       setRows(readRecords(localStorage, journalKey(environment, wallet.actor)));
+      setPending(pendingTransactions(localStorage, environment, wallet.actor));
     } catch (e) {
       setError(moduleError(e));
     }
@@ -174,6 +184,24 @@ export function ModuleFunds({
       epoch.current = version + 1;
     };
   }, [wallet.actor, environment, publication, creation, participant]);
+  useEffect(() => {
+    if (!wallet.actor) return;
+    const actor = wallet.actor;
+    const update = () => {
+      try {
+        const next = pendingTransactions(localStorage, environment, actor);
+        setPending(next);
+        if (next.length) {
+          setPrepared(null);
+          setAck(false);
+        }
+      } catch (e) {
+        setError(moduleError(e));
+      }
+    };
+    window.addEventListener('storage', update);
+    return () => window.removeEventListener('storage', update);
+  }, [wallet.actor, environment]);
   async function run(fn: () => Promise<void>) {
     setBusy(true);
     setError('');
@@ -183,6 +211,12 @@ export function ModuleFunds({
     } catch (e) {
       setError(moduleError(e));
     } finally {
+      if (wallet.actor)
+        try {
+          setPending(pendingTransactions(localStorage, environment, wallet.actor));
+        } catch (e) {
+          setError(moduleError(e));
+        }
       setBusy(false);
     }
   }
@@ -197,6 +231,7 @@ export function ModuleFunds({
     setPrepared(null);
     setAck(false);
     setRows(readRecords(localStorage, journalKey(environment, actor)));
+    setPending(pendingTransactions(localStorage, environment, actor));
   }
   let value: string | undefined;
   try {
@@ -210,7 +245,7 @@ export function ModuleFunds({
       : snapshot && wallet.actor
         ? moduleActions(publication, wallet.actor, snapshot, value)
         : [];
-  const unresolved = rows.some((r) => !terminal(r));
+  const unresolved = pending.length > 0;
   const isSplitPayment = publication.data.tool === 'split' && !creation;
   const requiresPayment = (action: ModuleAction) =>
     ['approve', 'pay', 'contribute', 'fund', 'register'].includes(action) ||
@@ -222,6 +257,7 @@ export function ModuleFunds({
       await onCreationChecked(result.result.hash);
     if (epoch.current !== version) return;
     setRows(result.records);
+    if (wallet.actor) setPending(pendingTransactions(localStorage, environment, wallet.actor));
     setNotice(
       t(
         `Latest lookup: ${result.result.state}. Previous evidence is retained when unknown.`,
@@ -229,6 +265,38 @@ export function ModuleFunds({
       ),
     );
     if (!creation) await refresh();
+  }
+  async function recoverPending(checks: PendingCheck[]) {
+    const actor = wallet.actor;
+    if (!actor) return;
+    await run(async () => {
+      const version = epoch.current;
+      let firstError: unknown;
+      for (const { entry, hash } of checks) {
+        try {
+          const result = await recheckPendingTransaction(environment, actor, entry, hash);
+          if (creation?.id === entry.id && onCreationChecked) await onCreationChecked(result.hash);
+        } catch (e) {
+          firstError ??= e;
+        }
+      }
+      if (epoch.current !== version) return;
+      if (!creation) await refresh();
+      else {
+        setRows(readRecords(localStorage, journalKey(environment, actor)));
+        setPending(pendingTransactions(localStorage, environment, actor));
+      }
+      const remaining = pendingTransactions(localStorage, environment, actor);
+      setNotice(
+        remaining.length
+          ? t(
+              'Still pending. Check again after the network confirms it.',
+              '交易尚未确认，请稍后在这里再核验。',
+            )
+          : t('Checked. You can continue here.', '已核验，可以在这里继续。'),
+      );
+      if (firstError) throw firstError;
+    });
   }
   return (
     <>
@@ -251,7 +319,7 @@ export function ModuleFunds({
             })
           }
         />
-        {!creation && publication.data.tool === 'attend' ? (
+        {!creation && !unresolved && publication.data.tool === 'attend' ? (
           <div>
             <label>
               {t('Participant wallet to inspect', '要查询的参加者钱包')}
@@ -289,7 +357,7 @@ export function ModuleFunds({
             </p>
           </div>
         ) : null}
-        {snapshot && !isSplitPayment ? (
+        {snapshot && !isSplitPayment && !unresolved ? (
           <>
             <p>
               {t('Contract state', '合约状态')}：{statusLabel(snapshot.state, t)}
@@ -314,6 +382,7 @@ export function ModuleFunds({
           </>
         ) : null}
         {snapshot &&
+        !unresolved &&
         isSplitPayment &&
         (BigInt(snapshot.credit) > 0n || BigInt(snapshot.withdrawn) > 0n) ? (
           <details className="split-balance-details">
@@ -334,6 +403,7 @@ export function ModuleFunds({
           </details>
         ) : null}
         {snapshot &&
+        !unresolved &&
         (publication.data.tool === 'deliver' || publication.data.tool === 'milestones') ? (
           <>
             <p>
@@ -437,7 +507,7 @@ export function ModuleFunds({
             ) : null}
           </>
         ) : null}
-        {snapshot && publication.data.tool === 'rewards' ? (
+        {snapshot && !unresolved && publication.data.tool === 'rewards' ? (
           <>
             <p>
               {t('My listed reward', '名单中我的奖励')}：
@@ -465,7 +535,7 @@ export function ModuleFunds({
             </p>
           </>
         ) : null}
-        {snapshot && publication.data.tool === 'attend' ? (
+        {snapshot && !unresolved && publication.data.tool === 'attend' ? (
           <>
             <p>
               {t('Selected participant', '已选择参加者')}：<code>{snapshot.participant}</code> ·{' '}
@@ -548,7 +618,7 @@ export function ModuleFunds({
             ) : null}
           </>
         ) : null}
-        {!creation && publication.data.tool === 'split' ? (
+        {!creation && publication.data.tool === 'split' && !unresolved ? (
           <div className="split-amount-field">
             <label>
               {t('Final payment (MON)', '最终付款金额（MON）')}
@@ -565,7 +635,7 @@ export function ModuleFunds({
             </label>
           </div>
         ) : null}
-        {!isSplitPayment && !creation ? (
+        {!isSplitPayment && !creation && !unresolved ? (
           <p>
             {t(
               'Pay directly in MON. Claimable credit needs a withdrawal to your wallet. Review each transaction before confirming.',
@@ -573,7 +643,7 @@ export function ModuleFunds({
             )}
           </p>
         ) : null}
-        {!paymentsEnabled ? (
+        {!paymentsEnabled && !unresolved ? (
           <p className="notice">
             {t(
               'New payments are disabled; verified exits remain available.',
@@ -582,98 +652,98 @@ export function ModuleFunds({
           </p>
         ) : null}
         {unresolved ? (
-          <p role="status">
-            {t(
-              'Recheck the unresolved transaction in this wallet before another send.',
-              '发送前请先核验该钱包未确认的交易。',
-            )}{' '}
-            <Link to="/app/module-activity">{t('Open workbench', '打开工作台')}</Link>
-          </p>
+          <PendingRecovery
+            entries={pending}
+            busy={busy}
+            onCheck={(checks) => void recoverPending(checks)}
+          />
         ) : null}
-        {actions.map((action) => {
-          const button = (
-            <button
-              key={action}
-              className={
-                'button action-button ' +
-                ([
-                  'pay',
-                  'fund',
-                  'contribute',
-                  'register',
-                  'accept',
-                  'withdrawFor',
-                  'claimFor',
-                  'submitDelivery',
-                  'create',
-                ].includes(action)
-                  ? 'primary'
-                  : 'secondary')
-              }
-              disabled={
-                busy ||
-                unresolved ||
-                (!paymentsEnabled && requiresPayment(action)) ||
-                (['submitDelivery', 'dispute', 'challengeNoShow'].includes(action) &&
-                  !evidence.trim()) ||
-                (action === 'resolveByAgreement' &&
-                  (!options.signatures?.first || !options.signatures.second)) ||
-                (action === 'checkIn' && !options.signatures?.checkIn)
-              }
-              onClick={() =>
-                void run(async () => {
-                  setPrepared(null);
-                  setAck(false);
-                  const version = epoch.current;
-                  const intent =
-                    creation && action === creation.action
-                      ? creation!
-                      : await prepareModuleAction(
-                          makeClient(),
-                          publication,
-                          wallet.actor!,
-                          action,
-                          value,
-                          {
-                            ...options,
-                            ...(publication.data.tool === 'milestones' &&
-                            snapshot?.currentStage !== undefined
-                              ? { stageIndex: snapshot.currentStage }
-                              : {}),
-                            ...(publication.data.tool === 'attend'
-                              ? { participant: snapshot?.participant ?? wallet.actor! }
-                              : {}),
-                            ...(evidence.trim()
-                              ? { evidenceHash: keccak256(stringToHex(evidence)) }
-                              : {}),
-                          },
-                        );
-                  if (epoch.current === version) setPrepared(intent);
-                })
-              }
-            >
-              {isSplitPayment && action === 'pay' ? (
-                t('Review payment', '核对付款')
-              ) : creation && publication.data.tool === 'split' && action === 'create' ? (
-                t('Review publication', '核对发布')
+        {!unresolved
+          ? actions.map((action) => {
+              const button = (
+                <button
+                  key={action}
+                  className={
+                    'button action-button ' +
+                    ([
+                      'pay',
+                      'fund',
+                      'contribute',
+                      'register',
+                      'accept',
+                      'withdrawFor',
+                      'claimFor',
+                      'submitDelivery',
+                      'create',
+                    ].includes(action)
+                      ? 'primary'
+                      : 'secondary')
+                  }
+                  disabled={
+                    busy ||
+                    unresolved ||
+                    (!paymentsEnabled && requiresPayment(action)) ||
+                    (['submitDelivery', 'dispute', 'challengeNoShow'].includes(action) &&
+                      !evidence.trim()) ||
+                    (action === 'resolveByAgreement' &&
+                      (!options.signatures?.first || !options.signatures.second)) ||
+                    (action === 'checkIn' && !options.signatures?.checkIn)
+                  }
+                  onClick={() =>
+                    void run(async () => {
+                      setPrepared(null);
+                      setAck(false);
+                      const version = epoch.current;
+                      const intent =
+                        creation && action === creation.action
+                          ? creation!
+                          : await prepareModuleAction(
+                              makeClient(),
+                              publication,
+                              wallet.actor!,
+                              action,
+                              value,
+                              {
+                                ...options,
+                                ...(publication.data.tool === 'milestones' &&
+                                snapshot?.currentStage !== undefined
+                                  ? { stageIndex: snapshot.currentStage }
+                                  : {}),
+                                ...(publication.data.tool === 'attend'
+                                  ? { participant: snapshot?.participant ?? wallet.actor! }
+                                  : {}),
+                                ...(evidence.trim()
+                                  ? { evidenceHash: keccak256(stringToHex(evidence)) }
+                                  : {}),
+                              },
+                            );
+                      if (epoch.current === version) setPrepared(intent);
+                    })
+                  }
+                >
+                  {isSplitPayment && action === 'pay' ? (
+                    t('Review payment', '核对付款')
+                  ) : creation && publication.data.tool === 'split' && action === 'create' ? (
+                    t('Review publication', '核对发布')
+                  ) : (
+                    <>
+                      {t('Prepare: ', '准备：')}
+                      {t(...moduleActionLabels(action, publication.data.tool))}
+                    </>
+                  )}
+                </button>
+              );
+              return isSplitPayment && action === 'withdrawFor' ? (
+                <details className="split-withdraw" key={action}>
+                  <summary>{t('Withdraw my credit', '提取我的可领取余额')}</summary>
+                  {button}
+                </details>
               ) : (
-                <>
-                  {t('Prepare: ', '准备：')}
-                  {t(...moduleActionLabels(action, publication.data.tool))}
-                </>
-              )}
-            </button>
-          );
-          return isSplitPayment && action === 'withdrawFor' ? (
-            <details className="split-withdraw" key={action}>
-              <summary>{t('Withdraw my credit', '提取我的可领取余额')}</summary>
-              {button}
-            </details>
-          ) : (
-            button
-          );
-        })}
-        {prepared ? (
+                button
+              );
+            })
+          : null}
+        {prepared && !unresolved ? (
           <div className="checkout-review">
             <h3>{t(...moduleActionLabels(prepared.action, publication.data.tool))}</h3>
             {publication.data.tool === 'split' ? (
@@ -789,7 +859,7 @@ export function ModuleFunds({
         {notice ? <p role="status">{notice}</p> : null}
         {error ? <p role="alert">{error}</p> : null}
       </section>
-      {rows.some((r) => r.intent.publication.publicId === publication.publicId) ? (
+      {!unresolved && rows.some((r) => r.intent.publication.publicId === publication.publicId) ? (
         isSplitPayment && !unresolved ? (
           <details className="cloud-card split-history">
             <summary>{t('Transaction history', '交易记录')}</summary>
@@ -815,15 +885,50 @@ export function ModuleActivityPage() {
     wallet = useFundsWallet();
   const environment = state.status === 'ready' ? state.config.environment : '';
   const [rows, setRows] = useState<TransactionRecord[]>([]),
+    [pending, setPending] = useState<PendingTransaction[]>([]),
     [busy, setBusy] = useState(false),
-    [error, setError] = useState('');
+    [error, setError] = useState(''),
+    [notice, setNotice] = useState('');
   useEffect(() => {
     try {
       setRows(wallet.actor ? readRecords(localStorage, journalKey(environment, wallet.actor)) : []);
+      setPending(wallet.actor ? pendingTransactions(localStorage, environment, wallet.actor) : []);
     } catch (e) {
       setError(moduleError(e));
     }
   }, [wallet.actor, environment]);
+  async function checkPending(checks: PendingCheck[]) {
+    if (!wallet.actor) return;
+    const actor = wallet.actor;
+    setBusy(true);
+    setError('');
+    setNotice('');
+    let firstError: unknown;
+    try {
+      for (const { entry, hash } of checks)
+        try {
+          await recheckPendingTransaction(environment, actor, entry, hash);
+        } catch (e) {
+          firstError ??= e;
+        }
+      setRows(readRecords(localStorage, journalKey(environment, actor)));
+      const next = pendingTransactions(localStorage, environment, actor);
+      setPending(next);
+      setNotice(
+        next.length
+          ? t(
+              'Still pending. Check again after the network confirms it.',
+              '交易尚未确认，请稍后再核验。',
+            )
+          : t('Checked. You can continue with your Box.', '已核验，可以返回 Box 继续。'),
+      );
+      if (firstError) throw firstError;
+    } catch (e) {
+      setError(moduleError(e));
+    } finally {
+      setBusy(false);
+    }
+  }
   return (
     <section className="container cloud-page">
       <h1>{t('Funds workbench', '资金工作台')}</h1>
@@ -842,27 +947,33 @@ export function ModuleActivityPage() {
         <Link to="/app/modules">{t('My cloud boxes', '我的云端 Box')}</Link>
       </div>
       {error ? <p role="alert">{error}</p> : null}
-      <TransactionHistory
-        rows={rows}
+      <PendingRecovery
+        entries={pending}
         busy={busy}
-        onRecheck={(row, hash) => {
-          setBusy(true);
-          setError('');
-          void recheckModule(environment, row, hash)
-            .then((r) => {
-              setRows(r.records);
-              if (r.result.state === 'unknown')
-                setError(
-                  t(
-                    'Lookup is unknown; earlier evidence is retained.',
-                    '本次查询未知，已保留此前证据。',
-                  ),
-                );
-            })
-            .catch((e) => setError(moduleError(e)))
-            .finally(() => setBusy(false));
-        }}
+        onCheck={(checks) => void checkPending(checks)}
       />
+      {notice ? <p role="status">{notice}</p> : null}
+      {rows.length && !pending.length ? (
+        <details className="cloud-card split-history">
+          <summary>{t('Transaction history', '交易记录')}</summary>
+          <TransactionHistory
+            rows={rows}
+            busy={busy}
+            onRecheck={(row, hash) => {
+              setBusy(true);
+              setError('');
+              void recheckModule(environment, row, hash)
+                .then((r) => {
+                  setRows(r.records);
+                  if (wallet.actor)
+                    setPending(pendingTransactions(localStorage, environment, wallet.actor));
+                })
+                .catch((e) => setError(moduleError(e)))
+                .finally(() => setBusy(false));
+            }}
+          />
+        </details>
+      ) : null}
     </section>
   );
 }

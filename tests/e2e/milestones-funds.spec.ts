@@ -160,9 +160,9 @@ test('Milestones full sequence, stage files, recovery, remaining refund and bila
     await expect(page.getByRole('alert')).toBeVisible();
     await page.reload();
     await connect(page);
+    await expect(page.locator('.pending-recovery')).toContainText('Payment Box');
+    await page.getByRole('button', { name: 'Check and continue' }).click();
     const recovery = page.getByRole('listitem').filter({ hasText: 'Accept and release payment' });
-    await expect(recovery).toContainText('Outcome unknown');
-    await recovery.getByRole('button', { name: 'Recheck transaction', exact: true }).click();
     await expect(recovery).toContainText('Finalized');
     expect((await record()).currentStage).toBe(1n);
     expect(await credit(seller)).toBe(31n);

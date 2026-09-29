@@ -276,9 +276,9 @@ test('Deliver normal acceptance, private files, missing delivery, silent review,
     await expect(page.getByRole('alert')).toBeVisible();
     await page.reload();
     await connect(page);
+    await expect(page.locator('.pending-recovery')).toContainText('LOCAL bilateral settlement');
+    await page.getByRole('button', { name: 'Check and continue' }).click();
     const recovery = page.getByRole('listitem').filter({ hasText: 'Submit bilateral agreement' });
-    await expect(recovery).toContainText('Outcome unknown');
-    await recovery.getByRole('button', { name: 'Recheck transaction', exact: true }).click();
     await expect(recovery).toContainText('Finalized');
     const stored = await page.evaluate(() => JSON.stringify(localStorage));
     expect(stored).not.toContain(first);

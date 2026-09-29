@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { requireResolvedTransactions } from '../../src/app/shared/transaction-storage';
+import {
+  pendingTransactions,
+  requireResolvedTransactions,
+} from '../../src/app/shared/transaction-storage';
 import { inView, readBookmarks, verifyWorkspaceBox } from '../../src/app/shared/workspace';
 import type { WorkspaceBox } from '../../src/app/shared/workspace';
 import { moduleSnapshot, moduleActions } from '../../src/shared/modules/chain';
@@ -10,6 +13,40 @@ vi.mock('../../src/shared/modules/chain', () => ({
 const actor = '0x1111111111111111111111111111111111111111';
 afterEach(() => vi.resetAllMocks());
 describe('shared funds transaction protection', () => {
+  it('shows every journal that can block the connected wallet', () => {
+    const states = new Map([
+      ['monadbox.setup.mon-v2', 'unknown'],
+      ['monadbox.actions.mon-v2', 'broadcast'],
+      ['monadbox.module-actions.mon-v2', 'finalized'],
+    ]);
+    const storage = {
+      getItem: (key: string) => {
+        const prefix = key.split(':')[0]!;
+        return key.endsWith(`:test:10143:${actor}`) && states.has(prefix)
+          ? JSON.stringify([
+              {
+                intent: {
+                  id: '7be49550-a607-47d0-95b8-8621bb8f1166',
+                  kind: 'split',
+                  ...(prefix === 'monadbox.setup.mon-v2'
+                    ? {}
+                    : { publication: { data: { title: 'My Box' } } }),
+                },
+                state: states.get(prefix),
+              },
+            ])
+          : null;
+      },
+    };
+    expect(pendingTransactions(storage, 'test', actor)).toMatchObject([
+      { prefix: 'monadbox.setup.mon-v2', state: 'unknown', title: 'split' },
+      { prefix: 'monadbox.actions.mon-v2', state: 'broadcast', title: 'My Box' },
+    ]);
+    expect(pendingTransactions(storage, 'other', actor)).toEqual([]);
+    expect(() => requireResolvedTransactions(storage, 'test', actor)).toThrow(
+      'UNRESOLVED_TRANSACTION',
+    );
+  });
   it.each(['signing', 'broadcast', 'unknown'])('blocks %s across both tool families', (state) => {
     for (const prefix of ['monadbox.actions.v1', 'monadbox.module-actions.v1']) {
       const storage = {

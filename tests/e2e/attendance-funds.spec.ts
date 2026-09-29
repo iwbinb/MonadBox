@@ -181,9 +181,9 @@ test('Attend signed check-in recovery, independent appeal, no-show deduction, ex
     await expect(participant.getByRole('alert')).toBeVisible();
     await participant.reload();
     await connect(participant);
+    await expect(participant.locator('.pending-recovery')).toContainText('Payment Box');
+    await participant.getByRole('button', { name: 'Check and continue' }).click();
     const recovery = participant.getByRole('listitem').filter({ hasText: 'Submit check-in proof' });
-    await expect(recovery).toContainText('Outcome unknown');
-    await recovery.getByRole('button', { name: 'Recheck transaction', exact: true }).click();
     await expect(recovery).toContainText('Finalized');
     expect(await participant.evaluate(() => JSON.stringify(localStorage))).not.toContain(signature);
     expect(await credit(p, attendee)).toBe(101n);

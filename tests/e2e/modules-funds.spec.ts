@@ -114,6 +114,46 @@ test('Split browser publication and final payment; Group V2 successful split and
     await expect(
       payPage.getByRole('status').filter({ hasText: 'Latest lookup: finalized' }),
     ).toBeVisible({ timeout: 20000 });
+    await payPage.evaluate((account) => {
+      const key = `monadbox.module-actions.mon-v2:local:10143:${account.toLowerCase()}`;
+      const rows = JSON.parse(localStorage.getItem(key) || '[]');
+      const payment = rows.findLast(
+        (row: { intent: { action: string } }) => row.intent.action === 'pay',
+      );
+      if (!payment?.hash) throw Error('Missing completed local payment');
+      payment.state = 'unknown';
+      localStorage.setItem(key, JSON.stringify(rows));
+    }, payer);
+    await payPage.reload();
+    await connect(payPage);
+    await expect(
+      payPage.getByRole('heading', { name: 'Check the earlier transaction' }),
+    ).toBeVisible();
+    await expect(payPage.getByRole('button', { name: 'Review payment' })).toHaveCount(0);
+    await payPage.getByRole('button', { name: 'Check and continue' }).click();
+    await expect(
+      payPage.getByRole('heading', { name: 'Check the earlier transaction' }),
+    ).toHaveCount(0);
+    await expect(payPage.getByRole('textbox', { name: 'Final payment (MON)' })).toBeVisible();
+    await payPage.evaluate((account) => {
+      const currentKey = `monadbox.module-actions.mon-v2:local:10143:${account.toLowerCase()}`;
+      const rows = JSON.parse(localStorage.getItem(currentKey) || '[]');
+      const payment = rows.findLast(
+        (row: { intent: { action: string } }) => row.intent.action === 'pay',
+      );
+      if (!payment?.hash) throw Error('Missing completed local payment');
+      const legacyKey = `monadbox.actions.v1:local:10143:${account.toLowerCase()}`;
+      localStorage.setItem(legacyKey, JSON.stringify([{ ...payment, state: 'unknown' }]));
+    }, payer);
+    await payPage.reload();
+    await connect(payPage);
+    await expect(payPage.locator('.pending-recovery')).toContainText('Earlier version');
+    await expect(payPage.getByRole('button', { name: 'Review payment' })).toHaveCount(0);
+    await payPage.getByRole('button', { name: 'Check and continue' }).click();
+    await expect(
+      payPage.getByRole('heading', { name: 'Check the earlier transaction' }),
+    ).toHaveCount(0);
+    await expect(payPage.getByRole('textbox', { name: 'Final payment (MON)' })).toBeVisible();
     await receivePage.goto(origin + path);
     await connect(receivePage);
     await expect(receivePage.getByText('Withdrawable credit', { exact: false })).toContainText(

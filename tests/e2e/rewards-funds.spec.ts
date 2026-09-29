@@ -134,11 +134,8 @@ test('100 rewards: exact funding, atomic native funding recovery, fixed claims a
     await expect(page.getByRole('alert')).toBeVisible();
     await page.reload();
     await connect(page);
-    const history = page
-      .getByRole('listitem')
-      .filter({ hasText: 'Publish and fund full reward list' });
-    await expect(history).toContainText('Outcome unknown');
-    await history.getByRole('button', { name: 'Recheck transaction', exact: true }).click();
+    await expect(page.locator('.pending-recovery')).toContainText('Payment Box');
+    await page.getByRole('button', { name: 'Check and continue' }).click();
     await expect(
       page.getByRole('link', { name: 'Open verified public link', exact: true }),
     ).toBeVisible();

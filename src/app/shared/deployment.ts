@@ -243,9 +243,17 @@ export async function recoverSetup(
   row: SetupRow,
   storage: Storage = localStorage,
   client: ChainClient = makeClient(),
+  supplied?: Hex,
 ) {
-  const checked = await checkSetup(row, client);
-  save(storage, setupKey(environment, row.intent.actor), checked);
+  const key = setupKey(environment, row.intent.actor);
+  const saved = readSetup(storage, key).find((item) => item.intent.id === row.intent.id);
+  if (!saved || JSON.stringify(saved.intent) !== JSON.stringify(row.intent))
+    throw Error('JOURNAL_UNAVAILABLE');
+  const checked = await checkSetup(
+    { ...saved, ...(supplied ? { hash: hashSchema.parse(supplied) } : {}) },
+    client,
+  );
+  save(storage, key, checked);
   return checked;
 }
 export function setupRegistry(rows: SetupRow[]) {

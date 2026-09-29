@@ -69,6 +69,70 @@
 .split-payment-panel > .split-balance-details {
   order: 0;
 }
+.public-module-page .funds-panel > .pending-recovery {
+  order: -3;
+}
+.pending-recovery {
+  border: 1px solid #d8cdfd;
+  background: #f7f4ff;
+  border-radius: 14px;
+  padding: 18px;
+  margin: 16px 0;
+}
+.pending-recovery-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.pending-recovery h3 {
+  font-size: 17px;
+  margin: 0;
+}
+.pending-recovery-head > span {
+  border-radius: 999px;
+  background: #e4dcff;
+  padding: 3px 10px;
+  font-weight: 700;
+}
+.pending-recovery > p {
+  margin: 8px 0 14px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.pending-recovery ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.pending-recovery li {
+  border-top: 1px solid #ded8f0;
+  padding: 12px 0;
+}
+.pending-recovery li > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.pending-recovery li strong {
+  overflow-wrap: anywhere;
+}
+.pending-recovery li small,
+.pending-recovery li a,
+.pending-recovery li summary {
+  font-size: 12px;
+}
+.pending-recovery li details {
+  margin-top: 8px;
+}
+.pending-recovery li input {
+  margin-top: 8px;
+}
+.pending-recovery > button {
+  width: 100%;
+  margin-top: 8px;
+}
 @media (max-width: 600px) {
   .module-recipient-row {
     grid-template-columns: minmax(0, 1fr);

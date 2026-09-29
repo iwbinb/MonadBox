@@ -1,5 +1,10 @@
 import { RecoveryHistory } from '../shared/RecoveryHistory';
 import { statusLabel } from '../shared/status';
+import { pendingTransactions } from '../shared/transaction-storage';
+import type { PendingTransaction } from '../shared/transaction-storage';
+import { PendingRecovery } from '../modules/PendingRecovery';
+import type { PendingCheck } from '../modules/PendingRecovery';
+import { recheckPendingTransaction } from '../modules/pending-recovery';
 import { useEffect, useRef, useState } from 'react';
 import '../cloud/cloud.css';
 import { Link } from 'react-router-dom';
@@ -25,7 +30,6 @@ const labels: Record<GroupAction, [string, string]> = {
   settle: ['Settle to beneficiary credit', '结算到收款人可领取余额'],
   withdrawFor: ['Withdraw to my wallet', '提款到我的钱包'],
 };
-const terminal = ['rejected', 'finalized', 'reverted', 'replaced'];
 function message(e: unknown) {
   const text = e instanceof Error ? e.message : '';
   const errors: Record<string, string> = {
@@ -37,6 +41,8 @@ function message(e: unknown) {
       'This browser has reached 200 records. Export them; use a fresh browser and the original public link for recovery. / 本地记录已满200条，请导出；可在新浏览器凭原链接读取链上权益。',
     UNSUPPORTED_TRANSACTION:
       'Delegated or unsupported transaction type. Do not resend. / 不支持此交易类型，请勿重发。',
+    TRANSACTION_MISMATCH:
+      'This hash does not match the earlier transaction. Check it and try again. / 交易哈希与上一笔操作不符，请核对后重试。',
   };
   return errors[text] ?? userError(e);
 }
@@ -79,6 +85,7 @@ export function GroupFunds({
   const [account, setAccount] = useState<GroupAccount | null>(null),
     [prepared, setPrepared] = useState<GroupActionIntent | null>(null);
   const [rows, setRows] = useState<ActionRecord[]>([]),
+    [pending, setPending] = useState<PendingTransaction[]>([]),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(''),
     [notice, setNotice] = useState(''),
@@ -92,17 +99,23 @@ export function GroupFunds({
     setAccount(null);
     setPrepared(null);
     setRows([]);
+    setPending([]);
     setAck(false);
   }, [wallet.actor, group.publicId]);
   useEffect(() => {
     if (!wallet.actor) return;
     let active = true;
     const actor = wallet.actor;
+    try {
+      setRows(readActions(localStorage, actionKey(environment, actor)));
+      setPending(pendingTransactions(localStorage, environment, actor));
+    } catch (e) {
+      setError(message(e));
+    }
     void groupAccount(makeClient(), group.intent, actor)
       .then((value) => {
         if (active) {
           setAccount(value);
-          setRows(readActions(localStorage, actionKey(environment, actor)));
         }
       })
       .catch((e) => {
@@ -112,12 +125,31 @@ export function GroupFunds({
       active = false;
     };
   }, [wallet.actor, group.intent, environment]);
+  useEffect(() => {
+    if (!wallet.actor) return;
+    const actor = wallet.actor;
+    const update = () => {
+      try {
+        const next = pendingTransactions(localStorage, environment, actor);
+        setPending(next);
+        if (next.length) {
+          setPrepared(null);
+          setAck(false);
+        }
+      } catch (e) {
+        setError(message(e));
+      }
+    };
+    window.addEventListener('storage', update);
+    return () => window.removeEventListener('storage', update);
+  }, [wallet.actor, environment]);
   async function refresh(actor: Address) {
     const current = epoch.current;
     const next = await groupAccount(makeClient(), group.intent, actor);
     if (current !== epoch.current) return;
     setAccount(next);
     setRows(readActions(localStorage, actionKey(environment, actor)));
+    setPending(pendingTransactions(localStorage, environment, actor));
   }
   async function run(fn: () => Promise<void>) {
     setBusy(true);
@@ -128,6 +160,12 @@ export function GroupFunds({
     } catch (e) {
       setError(message(e));
     } finally {
+      if (wallet.actor)
+        try {
+          setPending(pendingTransactions(localStorage, environment, wallet.actor));
+        } catch (e) {
+          setError(message(e));
+        }
       setBusy(false);
     }
   }
@@ -146,7 +184,32 @@ export function GroupFunds({
   }
   const actions =
     account && wallet.actor ? availableActions(group.intent, wallet.actor, account) : [];
-  const unresolved = rows.some((r) => !terminal.includes(r.state));
+  const unresolved = pending.length > 0;
+  async function recoverPending(checks: PendingCheck[]) {
+    const actor = wallet.actor;
+    if (!actor) return;
+    await run(async () => {
+      let firstError: unknown;
+      for (const { entry, hash } of checks)
+        try {
+          await recheckPendingTransaction(environment, actor, entry, hash);
+        } catch (e) {
+          firstError ??= e;
+        }
+      await refresh(actor);
+      const next = pendingTransactions(localStorage, environment, actor);
+      setPending(next);
+      setNotice(
+        next.length
+          ? t(
+              'Still pending. Check again here after confirmation.',
+              '交易尚未确认，请稍后在这里再核验。',
+            )
+          : t('Checked. You can continue here.', '已核验，可以在这里继续。'),
+      );
+      if (firstError) throw firstError;
+    });
+  }
   return (
     <div className="cloud-card funds-panel group-funds-panel">
       <h2>{t('My funds and actions', '我的资金与操作')}</h2>
@@ -160,7 +223,7 @@ export function GroupFunds({
           })
         }
       />
-      {wallet.actor ? (
+      {wallet.actor && !unresolved ? (
         <button
           className="button secondary"
           disabled={busy}
@@ -169,7 +232,7 @@ export function GroupFunds({
           {t('Read my rights', '读取我的权益')}
         </button>
       ) : null}
-      {!group.paymentsEnabled ? (
+      {!group.paymentsEnabled && !unresolved ? (
         <p className="notice">
           {t(
             'New payments are disabled. Existing refunds and withdrawals remain available when verified.',
@@ -177,7 +240,7 @@ export function GroupFunds({
           )}
         </p>
       ) : null}
-      {account ? (
+      {account && !unresolved ? (
         <>
           <p>
             {t('Position', '参与状态')}：{['NONE', 'ACTIVE', 'LEFT', 'REFUNDED'][account.position]}{' '}
@@ -190,60 +253,51 @@ export function GroupFunds({
             {t('Already transferred to wallet', '已转入钱包')}：
             {formatUnits(BigInt(account.withdrawn), 18)} MON
           </p>
-          <p>
-            {t('Snapshot block', '快照区块')}：{account.snapshot.blockNumber}
-          </p>
         </>
       ) : null}
-      <p>
-        {t(
-          'Pay directly in MON. Credit requires withdrawal. Before the deadline you may exit once; the same address cannot rejoin. A successful group is not proof of delivery.',
-          '直接使用 MON 付款，可领取款需单独提款。截止前可退出，同地址不能重新加入。成团不代表服务已交付。',
-        )}
-      </p>
-      <div className="button-row">
-        {actions.map((action) => (
-          <button
-            key={action}
-            className={
-              'button action-button ' +
-              (['contribute', 'withdrawFor', 'creditRefund'].includes(action)
-                ? 'primary'
-                : 'secondary')
-            }
-            disabled={
-              busy ||
-              unresolved ||
-              (!group.paymentsEnabled && ['approve', 'contribute'].includes(action))
-            }
-            onClick={() =>
-              void run(async () => {
-                setPrepared(null);
-                setAck(false);
-                const actor = wallet.actor!;
-                const current = epoch.current;
-                const i = await prepareAction(makeClient(), group.intent, actor, action);
-                if (current !== epoch.current) return;
-                setPrepared(i);
-                setAck(false);
-              })
-            }
-          >
-            {t('Prepare: ', '准备：')}
-            {t(...labels[action])}
-          </button>
-        ))}
-      </div>
-      {unresolved ? (
-        <p role="status">
-          {t(
-            'Resolve the earlier transaction in this wallet before another send. The workbench includes actions on other groups.',
-            '请先核验该钱包的上一笔交易，工作台包含其他成团的记录。',
-          )}{' '}
-          <Link to="/app/group-activity">{t('Open workbench', '打开工作台')}</Link>
-        </p>
+      {!unresolved ? (
+        <div className="button-row">
+          {actions.map((action) => (
+            <button
+              key={action}
+              className={
+                'button action-button ' +
+                (['contribute', 'withdrawFor', 'creditRefund'].includes(action)
+                  ? 'primary'
+                  : 'secondary')
+              }
+              disabled={
+                busy ||
+                unresolved ||
+                (!group.paymentsEnabled && ['approve', 'contribute'].includes(action))
+              }
+              onClick={() =>
+                void run(async () => {
+                  setPrepared(null);
+                  setAck(false);
+                  const actor = wallet.actor!;
+                  const current = epoch.current;
+                  const i = await prepareAction(makeClient(), group.intent, actor, action);
+                  if (current !== epoch.current) return;
+                  setPrepared(i);
+                  setAck(false);
+                })
+              }
+            >
+              {t('Prepare: ', '准备：')}
+              {t(...labels[action])}
+            </button>
+          ))}
+        </div>
       ) : null}
-      {prepared ? (
+      {unresolved ? (
+        <PendingRecovery
+          entries={pending}
+          busy={busy}
+          onCheck={(checks) => void recoverPending(checks)}
+        />
+      ) : null}
+      {prepared && !unresolved ? (
         <div className="checkout-review">
           <h3>{t(...labels[prepared.action])}</h3>
           <details className="verification-note">
@@ -345,11 +399,13 @@ export function GroupFunds({
       ) : null}
       {notice ? <p role="status">{notice}</p> : null}
       {error ? <p role="alert">{error}</p> : null}
-      <ActionHistory
-        rows={rows.filter((r) => r.intent.group.publicId === group.publicId)}
-        busy={busy}
-        recheck={(r, h) => void run(() => check(r, h))}
-      />
+      {!unresolved ? (
+        <ActionHistory
+          rows={rows.filter((r) => r.intent.group.publicId === group.publicId)}
+          busy={busy}
+          recheck={(r, h) => void run(() => check(r, h))}
+        />
+      ) : null}
     </div>
   );
 }
@@ -358,12 +414,14 @@ export function GroupActivityPage() {
     wallet = useFundsWallet();
   const environment = state.status === 'ready' ? state.config.environment : '';
   const [rows, setRows] = useState<ActionRecord[]>([]),
+    [pending, setPending] = useState<PendingTransaction[]>([]),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(''),
     [link, setLink] = useState('');
   useEffect(() => {
     try {
       setRows(wallet.actor ? readActions(localStorage, actionKey(environment, wallet.actor)) : []);
+      setPending(wallet.actor ? pendingTransactions(localStorage, environment, wallet.actor) : []);
     } catch (e) {
       setRows([]);
       setError(message(e));
@@ -380,6 +438,22 @@ export function GroupActivityPage() {
       setBusy(false);
     }
   }
+  async function checkPending(checks: PendingCheck[]) {
+    const actor = wallet.actor;
+    if (!actor) return;
+    await run(async () => {
+      let firstError: unknown;
+      for (const { entry, hash } of checks)
+        try {
+          await recheckPendingTransaction(environment, actor, entry, hash);
+        } catch (e) {
+          firstError ??= e;
+        }
+      setRows(readActions(localStorage, actionKey(environment, actor)));
+      setPending(pendingTransactions(localStorage, environment, actor));
+      if (firstError) throw firstError;
+    });
+  }
   return (
     <section className="container cloud-page">
       <h1>{t('Group funds workbench', '成团资金工作台')}</h1>
@@ -394,6 +468,7 @@ export function GroupActivityPage() {
             void run(async () => {
               const a = await wallet.connect();
               setRows(readActions(localStorage, actionKey(environment, a)));
+              setPending(pendingTransactions(localStorage, environment, a));
             })
           }
         />
@@ -426,23 +501,32 @@ export function GroupActivityPage() {
         </form>
         {error ? <p role="alert">{error}</p> : null}
       </div>
-      <ActionHistory
-        rows={rows}
+      <PendingRecovery
+        entries={pending}
         busy={busy}
-        recheck={(r, h) =>
-          void run(async () => {
-            const result = await recheckAction(environment, r, h);
-            setRows(result.records);
-            if (result.result.state === 'unknown')
-              setError(
-                t(
-                  'RPC lookup is unknown; previous evidence is retained.',
-                  '本次查询未知，已保留原记录。',
-                ),
-              );
-          })
-        }
+        onCheck={(checks) => void checkPending(checks)}
       />
+      {!pending.length ? (
+        <ActionHistory
+          rows={rows}
+          busy={busy}
+          recheck={(r, h) =>
+            void run(async () => {
+              const result = await recheckAction(environment, r, h);
+              setRows(result.records);
+              if (wallet.actor)
+                setPending(pendingTransactions(localStorage, environment, wallet.actor));
+              if (result.result.state === 'unknown')
+                setError(
+                  t(
+                    'RPC lookup is unknown; previous evidence is retained.',
+                    '本次查询未知，已保留原记录。',
+                  ),
+                );
+            })
+          }
+        />
+      ) : null}
     </section>
   );
 }
