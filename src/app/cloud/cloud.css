@@ -118,3 +118,14 @@
     padding-top: 24px;
   }
 }
+
+.setup-export [role='alert'] {
+  border-left: 3px solid #a93434;
+  padding: 4px 16px;
+  margin: 12px 0;
+  overflow-wrap: anywhere;
+}
+.setup-export textarea {
+  font-family: monospace;
+  font-size: 13px;
+}

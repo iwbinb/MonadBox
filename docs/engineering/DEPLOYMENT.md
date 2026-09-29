@@ -56,7 +56,9 @@ D1 创建与本次迁移已经用户授权并执行，后续 main 构建仍不�
 2. 核对管理员地址；该地址只控制新收款开关，不能更换收款人或提走他人余额。
 3. 对 Group V1、Split、Group V2、Deliver、Attend、Milestones、Rewards，分别准备和确认部署。
 4. 每笔点击“核验部署”。结果未知时继续核验原交易，不重新发送。
-5. 七笔均核验完成后点击“核验并导出登记配置”。由真实交易得到 GROUP_DEPLOYMENT 和 MODULE_DEPLOYMENTS。
+5. 七笔均核验完成后点击“核验并导出登记配置”。按钮下逐个显示核验进度；完成后点击“复制 JSON”或“下载 JSON”，得到 GROUP_DEPLOYMENT 和 MODULE_DEPLOYMENTS。核验无需签名和手续费。
+   - 失败时在按钮旁查看具体合约与原因；节点限流或45秒超时后，可再次核验，不需要重新部署。刷新时使用原浏览器和原钱包账户，部署记录会保留。
+   - 任何一笔核验未完成都不会输出登记JSON；不要跳过代码、资产、管理员与最终确认检查。
 6. 将导出值登记到 Production。所有 asset 值为原生币标识 `0x0000000000000000000000000000000000000000`，合约 address 必须是实际部署地址。
 
 Monad 按交易设置的 Gas 上限收费，页面提供预计费用，最终由钱包确认。[官方 Gas 说明](https://docs.monad.xyz/developer-essentials/gas-pricing)。不要提供私钥、助记词或原始签名。

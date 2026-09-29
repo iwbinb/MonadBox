@@ -4,27 +4,18 @@ import { useApp } from './context';
 import { useFundsWallet, WalletChoice } from './shared/FundsWallet';
 import { errorText } from './shared/Session';
 import {
-  checkSetup,
   prepareSetup,
   readSetup,
   recoverSetup,
   sendSetup,
   setupKey,
   setupKinds,
-  setupRegistry,
 } from './shared/deployment';
 import type { SetupIntent, SetupRow } from './shared/deployment';
 import { explorerTransaction } from '../shared/network';
 import './cloud/cloud.css';
-const names = {
-  'group-v1': 'Group V1',
-  split: 'Split',
-  group: 'Group V2',
-  deliver: 'Deliver',
-  attend: 'Attend',
-  milestones: 'Milestones',
-  rewards: 'Rewards',
-};
+import { setupNames as names } from './shared/setup-registration';
+import { SetupRegistration } from './shared/SetupRegistration';
 export default function SetupPage() {
   const { state, t } = useApp(),
     wallet = useFundsWallet();
@@ -33,8 +24,7 @@ export default function SetupPage() {
     [prepared, setPrepared] = useState<SetupIntent | null>(null),
     [ack, setAck] = useState(false),
     [busy, setBusy] = useState(false),
-    [error, setError] = useState(''),
-    [registry, setRegistry] = useState('');
+    [error, setError] = useState('');
   const owner = `${environment}:${wallet.actor}`;
   const activeOwner = useRef(owner);
   activeOwner.current = owner;
@@ -46,7 +36,6 @@ export default function SetupPage() {
     setPrepared(null);
     setRows([]);
     setAck(false);
-    setRegistry('');
     setError('');
     if (!environment || !wallet.actor) return;
     try {
@@ -201,41 +190,7 @@ export default function SetupPage() {
           </li>
         ))}
       </ul>
-      <button
-        className="button primary"
-        disabled={
-          busy ||
-          !setupKinds.every((k) => rows.some((r) => r.intent.kind === k && r.state === 'finalized'))
-        }
-        onClick={() =>
-          void run(async () => {
-            const verified = await Promise.all(
-              rows.filter((r) => r.state === 'finalized').map((r) => checkSetup(r)),
-            );
-            if (activeOwner.current === owner)
-              setRegistry(JSON.stringify(setupRegistry(verified), null, 2));
-          })
-        }
-      >
-        {t('Verify and export registration', '核验并导出登记配置')}
-      </button>
-      {registry ? (
-        <section className="cloud-card">
-          <h2>{t('Verified MON registration', '已核验 MON 配置')}</h2>
-          <textarea
-            rows={14}
-            readOnly
-            aria-label={t('Verified registration JSON', '已核验配置 JSON')}
-            value={registry}
-          />
-          <p>
-            {t(
-              'Register these values in the Production configuration after the database migration is ready.',
-              '数据库迁移就绪后，将这些地址和哈希登记到 Production 配置。',
-            )}
-          </p>
-        </section>
-      ) : null}
+      <SetupRegistration key={owner} rows={rows} disabled={busy} onBusyChange={setBusy} />
     </section>
   );
 }
