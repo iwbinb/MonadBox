@@ -126,7 +126,7 @@ export function ModuleFunds({
   const [snapshot, setSnapshot] = useState<ModuleSnapshot | null>(null),
     [prepared, setPrepared] = useState<ModuleIntent | null>(null),
     [ack, setAck] = useState(false);
-  const [amount, setAmount] = useState('1'),
+  const [amount, setAmount] = useState(publication.data.tool === 'split' ? '' : '1'),
     [rows, setRows] = useState<TransactionRecord[]>([]),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(''),
@@ -136,6 +136,9 @@ export function ModuleFunds({
   const [participant, setParticipant] = useState<Address | undefined>(),
     [participantInput, setParticipantInput] = useState('');
   const renderEpoch = epoch.current;
+  useEffect(() => {
+    setAmount(publication.data.tool === 'split' ? '' : '1');
+  }, [publication.id, publication.data.tool]);
   useEffect(() => {
     if (snapshot) onSnapshot?.(snapshot);
   }, [snapshot, onSnapshot]);
@@ -517,18 +520,27 @@ export function ModuleFunds({
           </>
         ) : null}
         {!creation && publication.data.tool === 'split' ? (
-          <label>
-            {t('Final payment (MON)', '最终付款金额（MON）')}
-            <input
-              inputMode="decimal"
-              value={amount}
-              onChange={(e) => {
-                setAmount(e.target.value);
-                setPrepared(null);
-                setAck(false);
-              }}
-            />
-          </label>
+          <div>
+            <label>
+              {t('Final payment (MON)', '最终付款金额（MON）')}
+              <input
+                inputMode="decimal"
+                placeholder={t('Enter the amount to pay', '输入本次实际付款金额')}
+                value={amount}
+                onChange={(e) => {
+                  setAmount(e.target.value);
+                  setPrepared(null);
+                  setAck(false);
+                }}
+              />
+            </label>
+            <small>
+              {t(
+                'The amount shown in the rules preview was only an example. Enter the amount for this transaction.',
+                '规则预览中的金额只是示例，请在这里输入本次实际付款金额。',
+              )}
+            </small>
+          </div>
         ) : null}
         <p>
           {t(

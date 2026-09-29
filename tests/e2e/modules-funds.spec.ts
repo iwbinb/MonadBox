@@ -46,16 +46,23 @@ test('Split browser publication and final payment; Group V2 successful split and
   await expect(page.getByRole('region', { name: 'Frozen rules preview' })).toContainText(
     '70.00% · 0.7 MON',
   );
-  await page.getByRole('button', { name: 'Save reviewed draft', exact: true }).click();
-  await expect(page).toHaveURL(/\/app\/module-drafts\//);
-  await page.goto(origin + '/app/modules');
+  let copies = 0;
+  page.on('request', (request) => {
+    if (request.url().endsWith('/api/v1/modules') && request.method() === 'POST') copies++;
+  });
+  await page.getByRole('button', { name: 'Save and continue to publish', exact: true }).click();
+  await expect(page).toHaveURL(/\/app\/modules\?draft=/);
+  await expect(page.getByRole('heading', { name: 'Next: publish ' + title })).toBeVisible();
+  expect(copies).toBe(0);
   await connect(page);
   await page.getByRole('button', { name: 'Prepare sign-in', exact: true }).click();
   await page.getByRole('button', { name: 'Sign in (no payment)', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Sign out', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Copy to cloud', exact: true }).click();
+  await page
+    .getByRole('button', { name: 'Copy rules and prepare publication', exact: true })
+    .click();
   await expect(page).toHaveURL(/\/app\/modules\//);
-  await page.getByRole('button', { name: 'Freeze and prepare publication', exact: true }).click();
+  expect(copies).toBe(1);
   await connect(page);
   await page.getByRole('button', { name: 'Prepare: Publish fixed rules', exact: true }).click();
   await page
@@ -65,7 +72,7 @@ test('Split browser publication and final payment; Group V2 successful split and
     })
     .check();
   await page.getByRole('button', { name: 'Sign this action', exact: true }).click();
-  const publicLink = page.getByRole('link', { name: 'Open verified public link', exact: true });
+  const publicLink = page.getByRole('link', { name: 'Next: open payment page', exact: true });
   await expect(publicLink).toBeVisible({ timeout: 20000 });
   const path = (await publicLink.getAttribute('href'))!;
   const payerContext = await browser.newContext({ viewport: page.viewportSize() ?? undefined });

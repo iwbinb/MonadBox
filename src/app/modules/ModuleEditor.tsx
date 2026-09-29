@@ -104,6 +104,7 @@ interface EditorProps {
   initial?: ModuleData | undefined;
   busy: boolean;
   onSave: (data: ModuleData) => void;
+  continueToPublish?: boolean;
 }
 export function ModuleEditor(props: EditorProps) {
   if (props.tool === 'rewards')
@@ -152,11 +153,13 @@ function SplitGroupEditor({
   initial,
   busy,
   onSave,
+  continueToPublish,
 }: {
   tool: ModuleData['tool'];
   initial?: Extract<ModuleData, { tool: 'split' | 'group' }> | undefined;
   busy: boolean;
   onSave: (data: ModuleData) => void;
+  continueToPublish?: boolean;
 }) {
   const { t } = useApp();
   const time = Math.floor(Date.now() / 60000) * 60;
@@ -460,7 +463,9 @@ function SplitGroupEditor({
             />
           </details>
           <button className="button primary" disabled={busy} onClick={() => onSave(preview)}>
-            {t('Save reviewed draft', '保存已预览草稿')}
+            {continueToPublish
+              ? t('Save and continue to publish', '保存并继续发布')
+              : t('Save reviewed draft', '保存已预览草稿')}
           </button>
         </>
       ) : null}

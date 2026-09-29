@@ -30,6 +30,17 @@
 .cloud-page code {
   overflow-wrap: anywhere;
 }
+.publish-next {
+  border-color: #8d79e4;
+  background: #f5f2ff;
+}
+.publish-next > .button {
+  width: 100%;
+  margin-top: 16px;
+}
+.publish-next > .cloud-card {
+  background: #fff;
+}
 @media (max-width: 600px) {
   .module-recipient-row {
     grid-template-columns: minmax(0, 1fr);

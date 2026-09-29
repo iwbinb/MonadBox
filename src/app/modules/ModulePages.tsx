@@ -5,7 +5,7 @@ import { statusLabel } from '../shared/status';
 import { useCallback, useEffect, useState } from 'react';
 import { PublicOverview, PublicAmount } from './PublicOverview';
 import type { ReactNode } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import type { Hex } from 'viem';
 import { useApp } from '../context';
 import { api } from '../cloud/api';
@@ -55,6 +55,9 @@ export function ModuleBuilderPage({ kind }: { kind?: ModuleData['tool'] }) {
                   : 'split')
       }
       draftId={draftId}
+      cloudEnabled={
+        state.config.capabilities.cloudModules && state.config.capabilities.modulePublishing
+      }
     />
   );
 }
@@ -62,10 +65,12 @@ function Builder({
   environment,
   tool,
   draftId,
+  cloudEnabled,
 }: {
   environment: string;
   tool: ModuleData['tool'];
   draftId?: string | undefined;
+  cloudEnabled: boolean;
 }) {
   const { t } = useApp(),
     navigate = useNavigate(),
@@ -115,6 +120,7 @@ function Builder({
           tool={draft?.data.tool ?? tool}
           initial={draft?.data}
           busy={busy}
+          continueToPublish={cloudEnabled && tool === 'split'}
           onSave={(data) => {
             setBusy(true);
             setError('');
@@ -122,7 +128,9 @@ function Builder({
               .then((row) => {
                 setDraft(row);
                 setSaved(true);
-                if (!draftId) navigate('/app/module-drafts/' + row.id, { replace: true });
+                if (cloudEnabled && data.tool === 'split')
+                  navigate('/app/modules?draft=' + encodeURIComponent(row.id));
+                else if (!draftId) navigate('/app/module-drafts/' + row.id, { replace: true });
               })
               .catch((e) => setError(errorText(e)))
               .finally(() => setBusy(false));
@@ -184,6 +192,11 @@ export function ModuleDraftsPage() {
                 {row.data.tool} · {t('Local', '本地')} · rev {row.revision}
               </span>
             </Link>
+            {state.status === 'ready' && state.config.capabilities.cloudModules ? (
+              <Link className="button secondary" to={'/app/modules?draft=' + row.id}>
+                {t('Continue to publish', '继续发布')}
+              </Link>
+            ) : null}
             <button className="button secondary" onClick={() => setRemove(row)}>
               {t('Delete', '删除')}
             </button>
@@ -272,12 +285,16 @@ export function CloudModulesPage() {
 function CloudModules() {
   const { state, t } = useApp(),
     { session, setSession, loading } = useSession(),
+    [searchParams] = useSearchParams(),
     [rows, setRows] = useState<ModuleBox[]>([]),
     [raw, setRaw] = useState(''),
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false);
   const [local, setLocal] = useState<ModuleDraft[]>([]),
+    [localLoaded, setLocalLoaded] = useState(false),
     navigate = useNavigate();
+  const selectedId = searchParams.get('draft');
+  const selectedDraft = local.find((row) => row.id === selectedId);
   useEffect(() => {
     setRows([]);
     if (session)
@@ -291,6 +308,8 @@ function CloudModules() {
         setLocal(readDrafts(draftKey(state.config.environment)));
       } catch (e) {
         setError(errorText(e));
+      } finally {
+        setLocalLoaded(true);
       }
   }, [state]);
   function copy(data: ModuleData) {
@@ -302,6 +321,36 @@ function CloudModules() {
       .catch((e) => setError(errorText(e)))
       .finally(() => setBusy(false));
   }
+  async function copyAndPrepare(draft: ModuleDraft) {
+    if (!session || busy || state.status !== 'ready' || !state.config.capabilities.modulePublishing)
+      return;
+    setBusy(true);
+    setError('');
+    try {
+      const box = await api<ModuleBox>(
+        '/modules',
+        'POST',
+        { data: draft.data },
+        session.csrf,
+        crypto.randomUUID(),
+      );
+      try {
+        await api<ModuleBox>(
+          `/modules/${box.id}/prepare`,
+          'POST',
+          { revision: box.revision },
+          session.csrf,
+        );
+        navigate('/app/modules/' + box.id);
+      } catch (e) {
+        navigate('/app/modules/' + box.id, { state: { handoffError: errorText(e) } });
+      }
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setBusy(false);
+    }
+  }
   return (
     <section className="container cloud-page">
       <h1>{t('My cloud payment boxes', '我的云端付款 Box')}</h1>
@@ -310,9 +359,47 @@ function CloudModules() {
         <Link to="/app/module-activity">{t('Funds workbench', '资金工作台')}</Link> ·{' '}
         <Link to="/app/groups">{t('Original Group V1', '原版 Group V1')}</Link>
       </p>
+      {session ? <Header session={session} onLogout={() => setSession(null)} /> : null}
+      {selectedId && localLoaded && !selectedDraft ? (
+        <p role="alert">
+          {t(
+            'This local draft is unavailable in this browser. Open your local drafts to choose one.',
+            '当前浏览器找不到这份本地草稿，请从本地草稿列表重新选择。',
+          )}{' '}
+          <Link to="/app/module-drafts">{t('Local drafts', '本地草稿')}</Link>
+        </p>
+      ) : null}
+      {selectedDraft ? (
+        <section className="cloud-card publish-next">
+          <h2>
+            {t('Next: publish ', '下一步：发布“')}
+            {selectedDraft.data.title}
+            {t('', '”')}
+          </h2>
+          <p>
+            {t(
+              'Review these rules. The button copies them to cloud storage and freezes them for publication. Your wallet will confirm the publication separately; no MON is paid here.',
+              '请核对规则。下方按钮会将公开规则复制到云端并冻结；下一页仍需钱包确认发布，此处不会支付 MON。',
+            )}
+          </p>
+          <ModuleRules data={selectedDraft.data} />
+          {session ? (
+            <button
+              className="button primary"
+              disabled={
+                busy || state.status !== 'ready' || !state.config.capabilities.modulePublishing
+              }
+              onClick={() => void copyAndPrepare(selectedDraft)}
+            >
+              {t('Copy rules and prepare publication', '复制规则并准备发布')}
+            </button>
+          ) : (
+            <p>{t('Sign in below to continue.', '请先在下方签名登录，再继续发布。')}</p>
+          )}
+        </section>
+      ) : null}
       {session ? (
         <>
-          <Header session={session} onLogout={() => setSession(null)} />
           <ul className="cloud-list">
             {rows.map((b) => (
               <li key={b.id}>
@@ -325,40 +412,42 @@ function CloudModules() {
               </li>
             ))}
           </ul>
-          <div className="cloud-card">
-            <h2>{t('Explicitly copy a local draft', '明确复制本地草稿')}</h2>
-            <p>
-              {t(
-                'Only the selected public rules are uploaded. The local original remains.',
-                '仅上传你选择的公开规则，本地原稿保留。',
-              )}
-            </p>
-            {local.map((d) => (
-              <p key={d.id}>
-                {d.data.title}{' '}
-                <button className="button secondary" disabled={busy} onClick={() => copy(d.data)}>
-                  {t('Copy to cloud', '复制到云端')}
-                </button>
+          {!selectedDraft ? (
+            <div className="cloud-card">
+              <h2>{t('Explicitly copy a local draft', '明确复制本地草稿')}</h2>
+              <p>
+                {t(
+                  'Only the selected public rules are uploaded. The local original remains.',
+                  '仅上传你选择的公开规则，本地原稿保留。',
+                )}
               </p>
-            ))}
-            <label>
-              {t('Or paste an exported draft', '或粘贴导出的草稿')}
-              <textarea rows={5} value={raw} onChange={(e) => setRaw(e.target.value)} />
-            </label>
-            <button
-              className="button secondary"
-              disabled={busy}
-              onClick={() => {
-                try {
-                  copy(importModule(raw));
-                } catch (e) {
-                  setError(errorText(e));
-                }
-              }}
-            >
-              {t('Copy imported rules to cloud', '复制导入规则到云端')}
-            </button>
-          </div>
+              {local.map((d) => (
+                <p key={d.id}>
+                  {d.data.title}{' '}
+                  <button className="button secondary" disabled={busy} onClick={() => copy(d.data)}>
+                    {t('Copy to cloud', '复制到云端')}
+                  </button>
+                </p>
+              ))}
+              <label>
+                {t('Or paste an exported draft', '或粘贴导出的草稿')}
+                <textarea rows={5} value={raw} onChange={(e) => setRaw(e.target.value)} />
+              </label>
+              <button
+                className="button secondary"
+                disabled={busy}
+                onClick={() => {
+                  try {
+                    copy(importModule(raw));
+                  } catch (e) {
+                    setError(errorText(e));
+                  }
+                }}
+              >
+                {t('Copy imported rules to cloud', '复制导入规则到云端')}
+              </button>
+            </div>
+          ) : null}
         </>
       ) : loading ? (
         <p>{t('Checking session…', '核对登录…')}</p>
@@ -378,6 +467,7 @@ export function CloudModulePage() {
 }
 function CloudModule() {
   const { id } = useParams(),
+    location = useLocation(),
     { state, t } = useApp(),
     { session, setSession, loading } = useSession(),
     [box, setBox] = useState<ModuleBox | null>(null),
@@ -440,6 +530,15 @@ function CloudModule() {
         <Login onLogin={setSession} />
       )}
       {error ? <p role="alert">{error}</p> : null}
+      {box?.state === 'draft' && typeof location.state?.handoffError === 'string' ? (
+        <p role="alert">
+          {t(
+            'The rules were copied, but preparation did not finish. Review this cloud draft and retry below.',
+            '规则已复制到云端，但准备发布未完成。请核对这份云端草稿后在下方重试。',
+          )}{' '}
+          {location.state.handoffError}
+        </p>
+      ) : null}
       {box && session ? (
         <>
           <p>
@@ -523,7 +622,9 @@ function CloudModule() {
           ) : null}
           {box.state === 'published' ? (
             <Link className="button primary" to={'/box/' + box.publicId}>
-              {t('Open verified public link', '打开已核验公开链接')}
+              {box.data.tool === 'split'
+                ? t('Next: open payment page', '下一步：打开付款页面')
+                : t('Open verified public link', '打开已核验公开链接')}
             </Link>
           ) : null}
           <button
