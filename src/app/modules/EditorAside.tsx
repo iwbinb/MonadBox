@@ -48,20 +48,24 @@ export function EditorAside({
           ))}
         </dl>
       ) : null}
-      <p>{definition.scenario[locale]}</p>
-      <ol>
-        {definition.steps.map((s) => (
-          <li key={s.en}>{s[locale]}</li>
-        ))}
-      </ol>
-      <p>{definition.caution[locale]}</p>
-      <hr />
-      <p>
-        {t(
-          'All payments use Monad Testnet MON. Review your rules to see the participant view before saving.',
-          '所有付款使用 Monad 测试网 MON。填写后点击预览规则，检查参与者将看到的内容。',
-        )}
-      </p>
+      {tool !== 'split' ? (
+        <>
+          <p>{definition.scenario[locale]}</p>
+          <ol>
+            {definition.steps.map((s) => (
+              <li key={s.en}>{s[locale]}</li>
+            ))}
+          </ol>
+          <p>{definition.caution[locale]}</p>
+          <hr />
+          <p>
+            {t(
+              'All payments use Monad Testnet MON. Review your rules to see the participant view before saving.',
+              '所有付款使用 Monad 测试网 MON。填写后点击预览规则，检查参与者将看到的内容。',
+            )}
+          </p>
+        </>
+      ) : null}
       {action}
     </aside>
   );
@@ -88,7 +92,9 @@ export function SplitAside({
   return (
     <EditorAside
       tool={tool}
-      amount={shares ? formatUnits(parseAmount(amount, 18), 18) : '—'}
+      {...(tool === 'split'
+        ? {}
+        : { amount: shares ? formatUnits(parseAmount(amount, 18), 18) : '—' })}
       label={t('Example distribution', '分配金额（示例）')}
     >
       {shares ? (
@@ -109,7 +115,8 @@ export function SplitAside({
                 : `${t('Recipient', '收款人')} ${i + 1}`}
             </dt>
             <dd>
-              {r.percent || '—'}% · {shares ? formatUnits(shares[i]!, 18) : '—'} MON
+              {r.percent || '—'}%
+              {tool !== 'split' ? ` · ${shares ? formatUnits(shares[i]!, 18) : '—'} MON` : ''}
             </dd>
           </div>
         ))}

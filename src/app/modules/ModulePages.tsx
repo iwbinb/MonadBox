@@ -173,15 +173,19 @@ export function ModuleDraftsPage() {
           '这些规则仅存于当前浏览器，清理网站数据前请先导出。',
         )}
       </p>
-      <p>
-        <Link to="/create/split">{t('New Split', '新建分账')}</Link> ·{' '}
-        <Link to="/create/group-split">{t('New group with split', '新建成团分账')}</Link> ·{' '}
-        <Link to="/create/deliver">{t('New delivery escrow', '新建交付托管')}</Link> ·{' '}
-        <Link to="/create/attend">{t('New attendance bond', '新建报名押金')}</Link> ·{' '}
-        <Link to="/create/milestones">{t('New milestone escrow', '新建分阶段托管')}</Link> ·{' '}
-        <Link to="/create/rewards">{t('New rewards', '新建奖励')}</Link> ·{' '}
-        <Link to="/app/modules">{t('Copy a draft to cloud', '复制草稿到云端')}</Link>
-      </p>
+      <Link className="button primary" to="/create/split">
+        {t('New Split', '新建分账')}
+      </Link>
+      <details className="cloud-card">
+        <summary>{t('Other tools', '其他工具')}</summary>
+        <nav className="creation-nav">
+          <Link to="/create/group-split">{t('Group with split', '成团分账')}</Link>
+          <Link to="/create/deliver">{t('Delivery escrow', '交付托管')}</Link>
+          <Link to="/create/attend">{t('Attendance bond', '报名押金')}</Link>
+          <Link to="/create/milestones">{t('Milestone escrow', '分阶段托管')}</Link>
+          <Link to="/create/rewards">{t('Rewards', '奖励')}</Link>
+        </nav>
+      </details>
       {error ? <p role="alert">{error}</p> : null}
       <ul className="cloud-list">
         {rows.map((row) => (
@@ -231,7 +235,8 @@ export function ModuleDraftsPage() {
           </button>
         </div>
       ) : null}
-      <div className="cloud-card">
+      <details className="cloud-card">
+        <summary>{t('Import a draft', '导入草稿')}</summary>
         <label>
           {t('Import an exported draft', '导入已导出的草稿')}
           <textarea rows={6} value={raw} onChange={(e) => setRaw(e.target.value)} />
@@ -252,7 +257,7 @@ export function ModuleDraftsPage() {
         >
           {t('Import as a new local draft', '导入为新的本地草稿')}
         </button>
-      </div>
+      </details>
     </section>
   );
 }
@@ -274,6 +279,30 @@ function CloudGate({ children }: { children: ReactNode }) {
       </section>
     );
   return children;
+}
+function SplitRuleSummary({ data }: { data: Extract<ModuleData, { tool: 'split' }> }) {
+  const { t } = useApp();
+  return (
+    <div className="split-rule-summary">
+      <h2>{data.title}</h2>
+      {data.description ? <p>{data.description}</p> : null}
+      <ol className="public-recipient-list">
+        {data.recipients.map((row, index) => (
+          <li key={row.address}>
+            <span>{index + 1}</span>
+            <code>{row.address}</code>
+            <strong>{row.bps / 100}%</strong>
+          </li>
+        ))}
+      </ol>
+      <p className="notice public-payment-rule">
+        {t(
+          'Final payment cannot be forcibly refunded. Recipients withdraw their own credit.',
+          '付款后不能强制追回；收款人需各自提款。',
+        )}
+      </p>
+    </div>
+  );
 }
 export function CloudModulesPage() {
   return (
@@ -353,12 +382,18 @@ function CloudModules() {
   }
   return (
     <section className="container cloud-page">
-      <h1>{t('My cloud payment boxes', '我的云端付款 Box')}</h1>
-      <p className="creation-nav">
-        <Link to="/app/module-drafts">{t('Local drafts', '本地草稿')}</Link> ·{' '}
-        <Link to="/app/module-activity">{t('Funds workbench', '资金工作台')}</Link> ·{' '}
-        <Link to="/app/groups">{t('Original Group V1', '原版 Group V1')}</Link>
-      </p>
+      <h1>
+        {selectedDraft?.data.tool === 'split'
+          ? t('Publish Split', '发布分账')
+          : t('My cloud payment boxes', '我的云端付款 Box')}
+      </h1>
+      {!selectedDraft ? (
+        <p className="creation-nav">
+          <Link to="/app/module-drafts">{t('Local drafts', '本地草稿')}</Link> ·{' '}
+          <Link to="/app/module-activity">{t('Funds workbench', '资金工作台')}</Link> ·{' '}
+          <Link to="/app/groups">{t('Original Group V1', '原版 Group V1')}</Link>
+        </p>
+      ) : null}
       {session ? <Header session={session} onLogout={() => setSession(null)} /> : null}
       {selectedId && localLoaded && !selectedDraft ? (
         <p role="alert">
@@ -369,20 +404,14 @@ function CloudModules() {
           <Link to="/app/module-drafts">{t('Local drafts', '本地草稿')}</Link>
         </p>
       ) : null}
+      {selectedDraft && !session && !loading ? <Login onLogin={setSession} /> : null}
       {selectedDraft ? (
         <section className="cloud-card publish-next">
-          <h2>
-            {t('Next: publish ', '下一步：发布“')}
-            {selectedDraft.data.title}
-            {t('', '”')}
-          </h2>
-          <p>
-            {t(
-              'Review these rules. The button copies them to cloud storage and freezes them for publication. Your wallet will confirm the publication separately; no MON is paid here.',
-              '请核对规则。下方按钮会将公开规则复制到云端并冻结；下一页仍需钱包确认发布，此处不会支付 MON。',
-            )}
-          </p>
-          <ModuleRules data={selectedDraft.data} />
+          {selectedDraft.data.tool === 'split' ? (
+            <SplitRuleSummary data={selectedDraft.data} />
+          ) : (
+            <ModuleRules data={selectedDraft.data} />
+          )}
           {session ? (
             <button
               className="button primary"
@@ -391,14 +420,18 @@ function CloudModules() {
               }
               onClick={() => void copyAndPrepare(selectedDraft)}
             >
-              {t('Copy rules and prepare publication', '复制规则并准备发布')}
+              {t('Copy rules and continue', '复制规则并继续发布')}
             </button>
-          ) : (
-            <p>{t('Sign in below to continue.', '请先在下方签名登录，再继续发布。')}</p>
-          )}
+          ) : null}
+          <small>
+            {t(
+              'This copies the public rules to cloud storage and freezes them. No MON is paid yet.',
+              '公开规则将复制到云端并冻结；此步不支付 MON。',
+            )}
+          </small>
         </section>
       ) : null}
-      {session ? (
+      {session && !selectedDraft ? (
         <>
           <ul className="cloud-list">
             {rows.map((b) => (
@@ -449,7 +482,7 @@ function CloudModules() {
             </div>
           ) : null}
         </>
-      ) : loading ? (
+      ) : session || (selectedDraft && !loading) ? null : loading ? (
         <p>{t('Checking session…', '核对登录…')}</p>
       ) : (
         <Login onLogin={setSession} />
@@ -520,7 +553,13 @@ function CloudModule() {
   }
   return (
     <section className="container cloud-page">
-      <h1>{t('Cloud rules and publication', '云端规则与发布')}</h1>
+      <h1>
+        {box?.data.tool === 'split'
+          ? box.state === 'published'
+            ? t('Split published', '分账已发布')
+            : t('Publish Split', '发布分账')
+          : t('Cloud rules and publication', '云端规则与发布')}
+      </h1>
       <Link to="/app/modules">{t('My cloud boxes', '我的云端 Box')}</Link>
       {session ? (
         <Header session={session} onLogout={() => setSession(null)} />
@@ -541,10 +580,24 @@ function CloudModule() {
       ) : null}
       {box && session ? (
         <>
-          <p>
-            {t('Publication state', '发布状态')}：{box.state} · {box.receipt?.state ?? 'draft'}
-          </p>
-          <ModuleRules data={box.data} />
+          {box.data.tool !== 'split' ? (
+            <p>
+              {t('Publication state', '发布状态')}：{box.state} · {box.receipt?.state ?? 'draft'}
+            </p>
+          ) : null}
+          {box.data.tool === 'split' ? (
+            <section className="cloud-card split-publish-rules">
+              <SplitRuleSummary data={box.data} />
+              {box.state !== 'draft' ? (
+                <details>
+                  <summary>{t('Full rules', '完整规则')}</summary>
+                  <ModuleRules data={box.data} />
+                </details>
+              ) : null}
+            </section>
+          ) : (
+            <ModuleRules data={box.data} />
+          )}
           {box.state === 'draft' ? (
             <>
               <ModuleEditor
@@ -574,12 +627,14 @@ function CloudModule() {
               >
                 {t('Freeze and prepare publication', '冻结规则并准备发布')}
               </button>
-              <p>
-                {t(
-                  'Preparation freezes these rules. Signing is a separate wallet action.',
-                  '准备后规则被冻结，钱包签名是单独一步。',
-                )}
-              </p>
+              {box.data.tool !== 'split' ? (
+                <p>
+                  {t(
+                    'Preparation freezes these rules. Signing is a separate wallet action.',
+                    '准备后规则被冻结，钱包签名是单独一步。',
+                  )}
+                </p>
+              ) : null}
             </>
           ) : null}
           {box.data.tool === 'rewards' && box.state !== 'published' ? (
@@ -603,7 +658,8 @@ function CloudModule() {
                 }
                 onCreationChecked={confirm}
               />
-              <div className="cloud-card">
+              <details className="cloud-card">
+                <summary>{t('Recover a publication transaction', '恢复发布交易')}</summary>
                 <label>
                   {t('Publication transaction hash (optional)', '发布交易哈希（选填）')}
                   <input value={hash} onChange={(e) => setHash(e.target.value)} />
@@ -617,36 +673,39 @@ function CloudModule() {
                 >
                   {t('Recover publication', '恢复发布记录')}
                 </button>
-              </div>
+              </details>
             </>
           ) : null}
           {box.state === 'published' ? (
             <Link className="button primary" to={'/box/' + box.publicId}>
               {box.data.tool === 'split'
-                ? t('Next: open payment page', '下一步：打开付款页面')
+                ? t('Open payment page', '打开付款页')
                 : t('Open verified public link', '打开已核验公开链接')}
             </Link>
           ) : null}
-          <button
-            className="button secondary"
-            disabled={busy || state.status !== 'ready'}
-            onClick={() =>
-              void run(async () => {
-                if (state.status !== 'ready') return;
-                const local = await saveDraft(draftKey(state.config.environment), box.data);
-                navigate('/app/module-drafts/' + local.id);
-              })
-            }
-          >
-            {t('Copy rules into a new local draft', '复制规则为新的本地草稿')}
-          </button>
           <details className="cloud-card">
-            <summary>{t('Original publication and recovery data', '原发布与恢复数据')}</summary>
-            <textarea
-              readOnly
-              rows={8}
-              value={JSON.stringify(box.publication ?? { data: box.data }, null, 2)}
-            />
+            <summary>{t('More options and recovery data', '更多操作与恢复数据')}</summary>
+            <button
+              className="button secondary"
+              disabled={busy || state.status !== 'ready'}
+              onClick={() =>
+                void run(async () => {
+                  if (state.status !== 'ready') return;
+                  const local = await saveDraft(draftKey(state.config.environment), box.data);
+                  navigate('/app/module-drafts/' + local.id);
+                })
+              }
+            >
+              {t('Copy rules into a new local draft', '复制规则为新的本地草稿')}
+            </button>
+            <details className="cloud-card">
+              <summary>{t('Original publication and recovery data', '原发布与恢复数据')}</summary>
+              <textarea
+                readOnly
+                rows={8}
+                value={JSON.stringify(box.publication ?? { data: box.data }, null, 2)}
+              />
+            </details>
           </details>
         </>
       ) : null}
@@ -741,7 +800,9 @@ export function PublicModulePage() {
             </details>
           </div>
           <div>
-            <PublicAmount publication={box.publication} snapshot={box.snapshot} />
+            {box.publication.data.tool !== 'split' ? (
+              <PublicAmount publication={box.publication} snapshot={box.snapshot} />
+            ) : null}
             <ModuleFunds
               publication={box.publication}
               paymentsEnabled={box.paymentsEnabled}

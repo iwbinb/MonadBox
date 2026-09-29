@@ -20,18 +20,16 @@ export function ModuleRules({ data }: { data: ModuleData }) {
 }
 function SplitGroupRules({ data }: { data: Extract<ModuleData, { tool: 'split' | 'group' }> }) {
   const { t } = useApp();
-  const [example, setExample] = useState('1');
   let shares: bigint[] | null = null;
-  try {
-    shares = allocateSplit(
-      data.tool === 'group'
-        ? BigInt(data.unitPrice) * BigInt(data.minimum)
-        : parseAmount(example, 18),
-      data.recipients.map((r) => r.bps),
-    );
-  } catch {
-    /* Invalid preview amount has no transaction effect. */
-  }
+  if (data.tool === 'group')
+    try {
+      shares = allocateSplit(
+        BigInt(data.unitPrice) * BigInt(data.minimum),
+        data.recipients.map((r) => r.bps),
+      );
+    } catch {
+      /* Invalid preview amount has no transaction effect. */
+    }
   return (
     <section className="cloud-card" aria-label={t('Frozen rules preview', '固定规则预览')}>
       <h2>{data.title}</h2>
@@ -72,12 +70,7 @@ function SplitGroupRules({ data }: { data: Extract<ModuleData, { tool: 'split' |
             </div>
           ))}
         </dl>
-      ) : (
-        <label>
-          {t('Example payment (MON)', '模拟付款金额（MON）')}
-          <input inputMode="decimal" value={example} onChange={(e) => setExample(e.target.value)} />
-        </label>
-      )}
+      ) : null}
       <h3>{t('Fixed recipients', '固定收款人')}</h3>
       <ol className="module-recipients">
         {data.recipients.map((row, index) => (
@@ -90,12 +83,14 @@ function SplitGroupRules({ data }: { data: Extract<ModuleData, { tool: 'split' |
           </li>
         ))}
       </ol>
-      <p>
-        {t(
-          'Whole token units use largest remainders; ties follow the listed order. Credit is not a wallet transfer.',
-          '按最小单位与最大余数分配，并列时按名单顺序。可领取余额不等于钱包到账。',
-        )}
-      </p>
+      {data.tool === 'group' ? (
+        <p>
+          {t(
+            'Whole token units use largest remainders; ties follow the listed order. Credit is not a wallet transfer.',
+            '按最小单位与最大余数分配，并列时按名单顺序。可领取余额不等于钱包到账。',
+          )}
+        </p>
+      ) : null}
     </section>
   );
 }

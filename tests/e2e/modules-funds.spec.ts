@@ -8,6 +8,14 @@ import type { ModuleBox, ModuleData } from '../../src/shared/modules/model';
 import { moduleCall, moduleAbi } from '../../src/shared/modules/terms';
 import type { SessionInfo } from '../../src/shared/cloud/model';
 async function action(page: Page, name: string) {
+  if (name === 'Withdraw to my wallet') {
+    await expect(page.locator('.funds-panel')).toBeVisible();
+    if (await page.locator('.split-payment-panel').count()) {
+      const withdraw = page.getByText('Withdraw my credit', { exact: true });
+      await expect(withdraw).toBeVisible();
+      await withdraw.click();
+    }
+  }
   await page.getByRole('button', { name: 'Prepare: ' + name, exact: true }).click();
   await page
     .getByRole('checkbox', {
@@ -43,8 +51,9 @@ test('Split browser publication and final payment; Group V2 successful split and
   await page.getByRole('textbox', { name: 'Recipient 1', exact: true }).fill(recipient);
   await page.getByRole('textbox', { name: 'Recipient 2', exact: true }).fill(partner);
   await page.getByRole('button', { name: 'Review rules', exact: true }).click();
-  await expect(page.getByRole('region', { name: 'Frozen rules preview' })).toContainText(
-    '70.00% · 0.7 MON',
+  await expect(page.getByRole('region', { name: 'Frozen rules preview' })).toContainText('70.00%');
+  await expect(page.getByRole('region', { name: 'Frozen rules preview' })).not.toContainText(
+    '0.7 MON',
   );
   let copies = 0;
   page.on('request', (request) => {
@@ -52,27 +61,26 @@ test('Split browser publication and final payment; Group V2 successful split and
   });
   await page.getByRole('button', { name: 'Save and continue to publish', exact: true }).click();
   await expect(page).toHaveURL(/\/app\/modules\?draft=/);
-  await expect(page.getByRole('heading', { name: 'Next: publish ' + title })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Publish Split' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: title })).toBeVisible();
   expect(copies).toBe(0);
   await connect(page);
   await page.getByRole('button', { name: 'Prepare sign-in', exact: true }).click();
   await page.getByRole('button', { name: 'Sign in (no payment)', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Sign out', exact: true })).toBeVisible();
-  await page
-    .getByRole('button', { name: 'Copy rules and prepare publication', exact: true })
-    .click();
+  await page.getByRole('button', { name: 'Copy rules and continue', exact: true }).click();
   await expect(page).toHaveURL(/\/app\/modules\//);
   expect(copies).toBe(1);
   await connect(page);
-  await page.getByRole('button', { name: 'Prepare: Publish fixed rules', exact: true }).click();
+  await page.getByRole('button', { name: 'Review publication', exact: true }).click();
   await page
     .getByRole('checkbox', {
       name: 'I have reviewed this action and its fixed recipients.',
       exact: true,
     })
     .check();
-  await page.getByRole('button', { name: 'Sign this action', exact: true }).click();
-  const publicLink = page.getByRole('link', { name: 'Next: open payment page', exact: true });
+  await page.getByRole('button', { name: 'Confirm publication in wallet', exact: true }).click();
+  const publicLink = page.getByRole('link', { name: 'Open payment page', exact: true });
   await expect(publicLink).toBeVisible({ timeout: 20000 });
   const path = (await publicLink.getAttribute('href'))!;
   const payerContext = await browser.newContext({ viewport: page.viewportSize() ?? undefined });
@@ -97,12 +105,21 @@ test('Split browser publication and final payment; Group V2 successful split and
       .getByRole('textbox', { name: 'Final payment (MON)', exact: true })
       .fill('0.000000000000000101');
 
-    await action(payPage, 'Make final payment');
+    await payPage.getByRole('button', { name: 'Review payment', exact: true }).click();
+    await expect(payPage.getByText('This is a final payment.', { exact: false })).toBeVisible();
+    await payPage
+      .getByRole('checkbox', { name: 'I have reviewed this action and its fixed recipients.' })
+      .check();
+    await payPage.getByRole('button', { name: 'Confirm in wallet', exact: true }).click();
+    await expect(
+      payPage.getByRole('status').filter({ hasText: 'Latest lookup: finalized' }),
+    ).toBeVisible({ timeout: 20000 });
     await receivePage.goto(origin + path);
     await connect(receivePage);
     await expect(receivePage.getByText('Withdrawable credit', { exact: false })).toContainText(
       '0.000000000000000071 MON',
     );
+    await receivePage.getByText('Withdraw my credit', { exact: true }).click();
     await receivePage
       .getByRole('button', { name: 'Prepare: Withdraw to my wallet', exact: true })
       .click();
@@ -137,6 +154,7 @@ test('Split browser publication and final payment; Group V2 successful split and
     await receivePage.getByRole('link', { name: 'View actions', exact: true }).click();
     await connect(receivePage);
     await action(receivePage, 'Withdraw to my wallet');
+    await receivePage.locator('.split-balance-details > summary').click();
     await expect(
       receivePage.getByText('Already transferred to wallet', { exact: false }),
     ).toContainText('0.000000000000000071 MON');

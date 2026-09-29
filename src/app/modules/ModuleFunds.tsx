@@ -211,6 +211,7 @@ export function ModuleFunds({
         ? moduleActions(publication, wallet.actor, snapshot, value)
         : [];
   const unresolved = rows.some((r) => !terminal(r));
+  const isSplitPayment = publication.data.tool === 'split' && !creation;
   const requiresPayment = (action: ModuleAction) =>
     ['approve', 'pay', 'contribute', 'fund', 'register'].includes(action) ||
     (action === 'create' && publication.data.tool === 'rewards');
@@ -231,8 +232,16 @@ export function ModuleFunds({
   }
   return (
     <>
-      <section className="cloud-card funds-panel">
-        <h2>{t('My funds and actions', '我的资金与操作')}</h2>
+      <section
+        className={'cloud-card funds-panel' + (isSplitPayment ? ' split-payment-panel' : '')}
+      >
+        <h2>
+          {isSplitPayment
+            ? t('Pay with MON', '支付 MON')
+            : creation && publication.data.tool === 'split'
+              ? t('Publish with wallet', '钱包发布')
+              : t('My funds and actions', '我的资金与操作')}
+        </h2>
         <WalletChoice
           value={wallet}
           busy={busy}
@@ -280,7 +289,7 @@ export function ModuleFunds({
             </p>
           </div>
         ) : null}
-        {snapshot ? (
+        {snapshot && !isSplitPayment ? (
           <>
             <p>
               {t('Contract state', '合约状态')}：{statusLabel(snapshot.state, t)}
@@ -303,6 +312,26 @@ export function ModuleFunds({
               {t('Read my rights', '读取我的权益')}
             </button>
           </>
+        ) : null}
+        {snapshot &&
+        isSplitPayment &&
+        (BigInt(snapshot.credit) > 0n || BigInt(snapshot.withdrawn) > 0n) ? (
+          <details className="split-balance-details">
+            <summary>
+              {t('My withdrawable credit', '我的可领取余额')}：
+              {formatUnits(BigInt(snapshot.credit), 18)} MON
+            </summary>
+            <p>
+              {t('Contract state', '合约状态')}：{statusLabel(snapshot.state, t)}
+            </p>
+            <p>
+              {t('Already transferred to wallet', '已转入钱包')}：
+              {formatUnits(BigInt(snapshot.withdrawn), 18)} MON
+            </p>
+            <button className="button secondary" disabled={busy} onClick={() => void run(refresh)}>
+              {t('Refresh balance', '刷新余额')}
+            </button>
+          </details>
         ) : null}
         {snapshot &&
         (publication.data.tool === 'deliver' || publication.data.tool === 'milestones') ? (
@@ -520,7 +549,7 @@ export function ModuleFunds({
           </>
         ) : null}
         {!creation && publication.data.tool === 'split' ? (
-          <div>
+          <div className="split-amount-field">
             <label>
               {t('Final payment (MON)', '最终付款金额（MON）')}
               <input
@@ -534,20 +563,16 @@ export function ModuleFunds({
                 }}
               />
             </label>
-            <small>
-              {t(
-                'The amount shown in the rules preview was only an example. Enter the amount for this transaction.',
-                '规则预览中的金额只是示例，请在这里输入本次实际付款金额。',
-              )}
-            </small>
           </div>
         ) : null}
-        <p>
-          {t(
-            'Pay directly in MON. Claimable credit needs a withdrawal to your wallet. Review each transaction before confirming.',
-            '直接使用 MON 付款，可领取款需单独提到钱包。确认前请核对每笔交易。',
-          )}
-        </p>
+        {!isSplitPayment && !creation ? (
+          <p>
+            {t(
+              'Pay directly in MON. Claimable credit needs a withdrawal to your wallet. Review each transaction before confirming.',
+              '直接使用 MON 付款，可领取款需单独提到钱包。确认前请核对每笔交易。',
+            )}
+          </p>
+        ) : null}
         {!paymentsEnabled ? (
           <p className="notice">
             {t(
@@ -565,80 +590,108 @@ export function ModuleFunds({
             <Link to="/app/module-activity">{t('Open workbench', '打开工作台')}</Link>
           </p>
         ) : null}
-        {actions.map((action) => (
-          <button
-            key={action}
-            className={
-              'button action-button ' +
-              ([
-                'pay',
-                'fund',
-                'contribute',
-                'register',
-                'accept',
-                'withdrawFor',
-                'claimFor',
-                'submitDelivery',
-                'create',
-              ].includes(action)
-                ? 'primary'
-                : 'secondary')
-            }
-            disabled={
-              busy ||
-              unresolved ||
-              (!paymentsEnabled && requiresPayment(action)) ||
-              (['submitDelivery', 'dispute', 'challengeNoShow'].includes(action) &&
-                !evidence.trim()) ||
-              (action === 'resolveByAgreement' &&
-                (!options.signatures?.first || !options.signatures.second)) ||
-              (action === 'checkIn' && !options.signatures?.checkIn)
-            }
-            onClick={() =>
-              void run(async () => {
-                setPrepared(null);
-                setAck(false);
-                const version = epoch.current;
-                const intent =
-                  creation && action === creation.action
-                    ? creation!
-                    : await prepareModuleAction(
-                        makeClient(),
-                        publication,
-                        wallet.actor!,
-                        action,
-                        value,
-                        {
-                          ...options,
-                          ...(publication.data.tool === 'milestones' &&
-                          snapshot?.currentStage !== undefined
-                            ? { stageIndex: snapshot.currentStage }
-                            : {}),
-                          ...(publication.data.tool === 'attend'
-                            ? { participant: snapshot?.participant ?? wallet.actor! }
-                            : {}),
-                          ...(evidence.trim()
-                            ? { evidenceHash: keccak256(stringToHex(evidence)) }
-                            : {}),
-                        },
-                      );
-                if (epoch.current === version) setPrepared(intent);
-              })
-            }
-          >
-            {t('Prepare: ', '准备：')}
-            {t(...moduleActionLabels(action, publication.data.tool))}
-          </button>
-        ))}
+        {actions.map((action) => {
+          const button = (
+            <button
+              key={action}
+              className={
+                'button action-button ' +
+                ([
+                  'pay',
+                  'fund',
+                  'contribute',
+                  'register',
+                  'accept',
+                  'withdrawFor',
+                  'claimFor',
+                  'submitDelivery',
+                  'create',
+                ].includes(action)
+                  ? 'primary'
+                  : 'secondary')
+              }
+              disabled={
+                busy ||
+                unresolved ||
+                (!paymentsEnabled && requiresPayment(action)) ||
+                (['submitDelivery', 'dispute', 'challengeNoShow'].includes(action) &&
+                  !evidence.trim()) ||
+                (action === 'resolveByAgreement' &&
+                  (!options.signatures?.first || !options.signatures.second)) ||
+                (action === 'checkIn' && !options.signatures?.checkIn)
+              }
+              onClick={() =>
+                void run(async () => {
+                  setPrepared(null);
+                  setAck(false);
+                  const version = epoch.current;
+                  const intent =
+                    creation && action === creation.action
+                      ? creation!
+                      : await prepareModuleAction(
+                          makeClient(),
+                          publication,
+                          wallet.actor!,
+                          action,
+                          value,
+                          {
+                            ...options,
+                            ...(publication.data.tool === 'milestones' &&
+                            snapshot?.currentStage !== undefined
+                              ? { stageIndex: snapshot.currentStage }
+                              : {}),
+                            ...(publication.data.tool === 'attend'
+                              ? { participant: snapshot?.participant ?? wallet.actor! }
+                              : {}),
+                            ...(evidence.trim()
+                              ? { evidenceHash: keccak256(stringToHex(evidence)) }
+                              : {}),
+                          },
+                        );
+                  if (epoch.current === version) setPrepared(intent);
+                })
+              }
+            >
+              {isSplitPayment && action === 'pay' ? (
+                t('Review payment', '核对付款')
+              ) : creation && publication.data.tool === 'split' && action === 'create' ? (
+                t('Review publication', '核对发布')
+              ) : (
+                <>
+                  {t('Prepare: ', '准备：')}
+                  {t(...moduleActionLabels(action, publication.data.tool))}
+                </>
+              )}
+            </button>
+          );
+          return isSplitPayment && action === 'withdrawFor' ? (
+            <details className="split-withdraw" key={action}>
+              <summary>{t('Withdraw my credit', '提取我的可领取余额')}</summary>
+              {button}
+            </details>
+          ) : (
+            button
+          );
+        })}
         {prepared ? (
           <div className="checkout-review">
             <h3>{t(...moduleActionLabels(prepared.action, publication.data.tool))}</h3>
+            {publication.data.tool === 'split' ? (
+              <details className="verification-note">
+                <summary>{t('Contract and transaction details', '合约与交易详情')}</summary>
+                <p>
+                  Monad Testnet · MON · <code>{prepared.publication.deployment.address}</code>
+                </p>
+                <p>nonce {prepared.nonce}</p>
+              </details>
+            ) : (
+              <p>
+                Monad Testnet · MON · <code>{prepared.publication.deployment.address}</code>
+              </p>
+            )}
             <p>
-              Monad Testnet · MON · <code>{prepared.publication.deployment.address}</code>
-            </p>
-            <p>
-              {t('Signing wallet', '签名钱包')}：<code>{prepared.actor}</code> · nonce{' '}
-              {prepared.nonce}
+              {t('Signing wallet', '签名钱包')}：<code>{prepared.actor}</code>
+              {publication.data.tool !== 'split' ? ` · nonce ${prepared.nonce}` : null}
             </p>
             {publication.data.tool === 'milestones' && prepared.stageIndex !== undefined ? (
               <p>
@@ -656,12 +709,22 @@ export function ModuleFunds({
                 {t('Amount', '金额')}：{formatUnits(BigInt(prepared.amount), 18)} MON
               </p>
             ) : null}
-            <p>
-              {t(
-                'Recipients and rules are shown above and cannot be changed by this action.',
-                '本次操作遵循上方固定收款人和规则。',
-              )}
-            </p>
+            {publication.data.tool !== 'split' ? (
+              <p>
+                {t(
+                  'Recipients and rules are shown above and cannot be changed by this action.',
+                  '本次操作遵循上方固定收款人和规则。',
+                )}
+              </p>
+            ) : null}
+            {isSplitPayment && prepared.action === 'pay' ? (
+              <p className="notice public-payment-rule">
+                {t(
+                  'This is a final payment. You cannot force a refund after signing.',
+                  '这是最终付款；签署后不能强制追回。',
+                )}
+              </p>
+            ) : null}
             <label className="cloud-check">
               <input
                 type="checkbox"
@@ -715,7 +778,11 @@ export function ModuleFunds({
                 })
               }
             >
-              {t('Sign this action', '签署本次操作')}
+              {isSplitPayment && prepared.action === 'pay'
+                ? t('Confirm in wallet', '在钱包中确认付款')
+                : creation && publication.data.tool === 'split'
+                  ? t('Confirm publication in wallet', '在钱包中确认发布')
+                  : t('Sign this action', '签署本次操作')}
             </button>
           </div>
         ) : null}
@@ -723,11 +790,22 @@ export function ModuleFunds({
         {error ? <p role="alert">{error}</p> : null}
       </section>
       {rows.some((r) => r.intent.publication.publicId === publication.publicId) ? (
-        <TransactionHistory
-          rows={rows.filter((r) => r.intent.publication.publicId === publication.publicId)}
-          busy={busy}
-          onRecheck={(row, hash) => void run(() => check(row, hash))}
-        />
+        isSplitPayment && !unresolved ? (
+          <details className="cloud-card split-history">
+            <summary>{t('Transaction history', '交易记录')}</summary>
+            <TransactionHistory
+              rows={rows.filter((r) => r.intent.publication.publicId === publication.publicId)}
+              busy={busy}
+              onRecheck={(row, hash) => void run(() => check(row, hash))}
+            />
+          </details>
+        ) : (
+          <TransactionHistory
+            rows={rows.filter((r) => r.intent.publication.publicId === publication.publicId)}
+            busy={busy}
+            onRecheck={(row, hash) => void run(() => check(row, hash))}
+          />
+        )
       ) : null}
     </>
   );

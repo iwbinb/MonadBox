@@ -41,6 +41,34 @@
 .publish-next > .cloud-card {
   background: #fff;
 }
+.split-rule-summary > h2 {
+  margin-bottom: 8px;
+}
+.split-rule-summary .public-recipient-list {
+  margin: 18px 0;
+}
+.split-publish-rules > details {
+  margin-top: 16px;
+}
+.split-balance-details,
+.split-withdraw {
+  margin-top: 12px;
+  font-size: 14px;
+}
+.split-balance-details > summary,
+.split-withdraw > summary {
+  cursor: pointer;
+}
+.public-module-page .split-payment-panel > .split-amount-field {
+  order: -3;
+}
+.split-payment-panel > .split-amount-field input {
+  margin-top: 8px;
+}
+.split-payment-panel > .split-withdraw,
+.split-payment-panel > .split-balance-details {
+  order: 0;
+}
 @media (max-width: 600px) {
   .module-recipient-row {
     grid-template-columns: minmax(0, 1fr);
