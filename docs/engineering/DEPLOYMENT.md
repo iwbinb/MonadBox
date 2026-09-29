@@ -24,7 +24,7 @@
 
 ## 3. D1 已创建，R2 暂不启用
 
-2026-09-29 用户授权启动 D1 和线上测试 MON 支付，暂不使用 R2。通过 Cloudflare API 创建 Production D1 并执行5份迁移，读回确认 cloud_schema=3、module_schema=2、attachment_schema=1、environment_guard正确且外键检查无错误。配置已绑定该库并启用云端草稿；合约发布和付款仍需真实部署登记。
+2026-09-29 用户授权启动 D1 和线上测试 MON 支付，暂不使用 R2。通过 Cloudflare API 创建 Production D1 并执行5份迁移，读回确认 cloud_schema=3、module_schema=2、attachment_schema=1、environment_guard正确且外键检查无错误。配置已绑定该库并启用云端草稿；真实部署已逐笔核验并登记，配置已启用测试网发布和付款。
 
 | 资源 | 名称 / 值 | 用途 |
 | --- | --- | --- |
@@ -65,7 +65,7 @@ Monad 按交易设置的 Gas 上限收费，页面提供预计费用，最终由
 
 ## 5. 分两步启用
 
-本轮启用 `CLOUD_ENABLED` 与 `MODULES_ENABLED`。用户已授权线上测试 MON 支付；完成用户钱包签署的真实合约部署并核验登记后，启用 `GROUP_PUBLISH_ENABLED`、`MODULE_PUBLISH_ENABLED`、`NETWORK_WRITES_ENABLED`，随后用小额测试 MON 进行真实钱包验收。缺少真实合约配置时不能打开付款开关。
+已启用 `CLOUD_ENABLED` 与 `MODULES_ENABLED`。2026-09-29收到用户登记JSON后，独立核验七个合约及原部署交易，登记到Production配置并启用 `GROUP_PUBLISH_ENABLED`、`MODULE_PUBLISH_ENABLED`、`NETWORK_WRITES_ENABLED`。地址、交易及核验区块见[付款启用记录](../archive/MON_PAYMENT_ACTIVATION.md)。下一步由用户钱包签署小额测试MON业务交易，验证发布、付款与领取/退款。
 
 当前保持 `ATTACHMENTS_ENABLED=false`，无需 R2；以后另行启用私有桶时再打开附件功能。始终保持 `MAINNET_ENABLED=false`、`TESTNET_LAB_ENABLED=false`、`STORAGE_ENABLED=false`、`BACKGROUND_ENABLED=false`；旧 ASSET_ALLOWLIST/CONTRACT_REGISTRY 保持空值。
 

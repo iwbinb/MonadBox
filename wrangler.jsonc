@@ -30,18 +30,19 @@
     "STORAGE_NAMESPACE": "monadbox-production",
     "STORAGE_ENABLED": "false",
     "BACKGROUND_ENABLED": "false",
-    "NETWORK_WRITES_ENABLED": "false",
+    "NETWORK_WRITES_ENABLED": "true",
     "MAINNET_ENABLED": "false",
     "ASSET_ALLOWLIST": "[]",
     "CONTRACT_REGISTRY": "[]",
     "TESTNET_LAB_ENABLED": "false",
     "CLOUD_ENABLED": "true",
     "ATTACHMENTS_ENABLED": "false",
-    "GROUP_PUBLISH_ENABLED": "false",
-    "GROUP_DEPLOYMENT": "null",
+    "GROUP_PUBLISH_ENABLED": "true",
+    "GROUP_DEPLOYMENT": "{\"chainId\":10143,\"version\":1,\"address\":\"0x015881d56f553d2ee52dbed6f237844c8fcfac42\",\"asset\":\"0x0000000000000000000000000000000000000000\",\"intakeAdmin\":\"0x2f8994025fEd7E527479ac38071F69fA7d9Bdb14\",\"runtimeHash\":\"0x26b3a1a435c202d155ab649b14170f466417600508043a82cc62672f833a4d44\"}",
     "APP_ORIGIN": "https://monadbox.iwbinb.workers.dev",
     "MODULES_ENABLED": "true",
-    "MODULE_PUBLISH_ENABLED": "false",
-    "MODULE_DEPLOYMENTS": "[]"
+    "MODULE_PUBLISH_ENABLED": "true",
+    "MODULE_DEPLOYMENTS": "[{\"current\":true,\"deployment\":{\"chainId\":10143,\"version\":1,\"address\":\"0x7c4705bfd2030e0b3f85f7ec1bc622cc0fbc6b67\",\"asset\":\"0x0000000000000000000000000000000000000000\",\"intakeAdmin\":\"0x2f8994025fEd7E527479ac38071F69fA7d9Bdb14\",\"runtimeHash\":\"0xb339656b68f52bbfc43fb494b0662a766997cd9075248aab72dc1664c1f6117b\",\"tool\":\"split\"}},{\"current\":true,\"deployment\":{\"chainId\":10143,\"version\":2,\"address\":\"0xe1a18de584cf2920f69f4b0634b351104a9c266a\",\"asset\":\"0x0000000000000000000000000000000000000000\",\"intakeAdmin\":\"0x2f8994025fEd7E527479ac38071F69fA7d9Bdb14\",\"runtimeHash\":\"0xbf19dad92a54d559af10eead099713a6de61c30d3a70e7a3aa62cc322ad95a45\",\"tool\":\"group\"}},{\"current\":true,\"deployment\":{\"chainId\":10143,\"version\":1,\"address\":\"0x0788bdf95504f2b7e34ba401a341b76dba029025\",\"asset\":\"0x0000000000000000000000000000000000000000\",\"intakeAdmin\":\"0x2f8994025fEd7E527479ac38071F69fA7d9Bdb14\",\"runtimeHash\":\"0x68f69df67f87b18a6abd51a5ee1d46035bbf69edacdb66c4c0ec94b6142213ea\",\"tool\":\"deliver\"}},{\"current\":true,\"deployment\":{\"chainId\":10143,\"version\":1,\"address\":\"0x002310bbc7a700dc9e1cccc28b9d9253c2404c86\",\"asset\":\"0x0000000000000000000000000000000000000000\",\"intakeAdmin\":\"0x2f8994025fEd7E527479ac38071F69fA7d9Bdb14\",\"runtimeHash\":\"0xc92e9d7ea015512d3ac1669977dd3a6b0cde13968563eb02cc3ae4ea8f80b928\",\"tool\":\"attend\"}},{\"current\":true,\"deployment\":{\"chainId\":10143,\"version\":1,\"address\":\"0xa8dc1049a5924506100fadc8629000e4417580c5\",\"asset\":\"0x0000000000000000000000000000000000000000\",\"intakeAdmin\":\"0x2f8994025fEd7E527479ac38071F69fA7d9Bdb14\",\"runtimeHash\":\"0xf84f9c187304781462e796ae358bc2a82262d9e4f634a39bd5b2e0d13d28c670\",\"tool\":\"milestones\"}},{\"current\":true,\"deployment\":{\"chainId\":10143,\"version\":1,\"address\":\"0x4ab83d4959ca433eaf284aa08f8a395702a2b212\",\"asset\":\"0x0000000000000000000000000000000000000000\",\"intakeAdmin\":\"0x2f8994025fEd7E527479ac38071F69fA7d9Bdb14\",\"runtimeHash\":\"0x775da4586f5bddafd9205dac8730f5b17cf330340a3a737d84f663d9b6f9e25c\",\"tool\":\"rewards\"}}]",
+    "GROUP_PREVIOUS_DEPLOYMENTS": "[]"
   }
 }

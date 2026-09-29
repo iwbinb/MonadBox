@@ -20,9 +20,9 @@
 - [x] 创建 monadbox-production（APAC），执行0001–0005迁移、登记迁移记录，核验环境及3份schema版本。
 - [x] Production配置绑定DB，启用CLOUD/MODULES与精确origin；关闭附件，Deliver/Milestones保留私下交换文件及链上摘要路径。
 - 本次main构建、Production绑定、云端健康与登录入口的实际核对结果记于artifacts/d1-activation.json；资源与迁移证据见[D1接入](../archive/D1_ACTIVATION.md)。
-- 用户反馈已签署7个合约部署，但导出核验返回通用错误；真实交易与登记配置尚待取得并独立核验。
+- [x] 收到用户导出的登记JSON；七份合约代码、管理员、原生资产、暂停状态和nonce 0–6的原始部署交易均已在公开测试网独立核验。
 - [x] 修复登记导出：逐个核验、显示进度与失败合约、45秒超时、复制/下载JSON、切换钱包中止旧结果；本地7次实际Anvil部署和限流后重试导出回归通过。
-- [ ] 取得真实部署登记JSON，独立核验后启用发布/付款，无需重复请求授权。
+- [x] main配置登记七个合约并开启测试网发布/付款；合约证据与验收边界见[付款启用](../archive/MON_PAYMENT_ACTIVATION.md)。远端部署结果以该提交Cloudflare构建及绑定读回为准。
 - [ ] 三钱包、手机与小额测试MON真实流程验收；未取得真实证据前不得标完成。
 
 以下M0–M7表为改造前历史工程基线，不能作为本轮MON与新界面验收证据。

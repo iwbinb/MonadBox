@@ -15,7 +15,7 @@ describe('deployment guards (no publishing)', () => {
     ['unknown', 'main'],
     ['production', ''],
   ])('rejects %s on %s', (mode, branch) => expect(() => assertBranch(mode, branch)).toThrow());
-  it('accepts the read-only one-Worker configuration', () =>
+  it('accepts the reviewed Production configuration', () =>
     expect(() => validateConfig(config, pkg)).not.toThrow());
   it('rejects a wrong Worker name', () =>
     expect(() => validateConfig({ ...config, name: 'monadbox-prod' }, pkg)).toThrow());

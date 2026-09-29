@@ -24,7 +24,7 @@
 
 **默认Monad Testnet10143；主网写入、升级和真实资金操作需单独授权，当前禁止。** 构建/CI/Git/Cloudflare不自动广播、approve或部署合约。所有测试脚本只能写固定loopback Anvil，不能提供任意公开RPC写入覆盖参数。
 
-用户签名仅在浏览器明确确认后发起；不收集、保存或提交助记词、私钥、原始签名、cookie、生产token。SIWE登录不是资金批准；M1-B createGroup只创建实例，不能顺带付款。Group合约尚未登记经过真实验收的公开部署，不能填本地地址作为公开配置。
+用户签名仅在浏览器明确确认后发起；不收集、保存或提交助记词、私钥、原始签名、cookie、生产token。SIWE登录不是资金批准；M1-B createGroup只创建实例，不能顺带付款。七份MON公开合约已逐笔核验并登记，证据见docs/archive/MON_PAYMENT_ACTIVATION.md；不能用本地地址替换公开配置，真实业务付款验收仍单独记录。
 
 M0CProbe仅是限额技术探针，原地址原子退款不代替Group pull-credit规则。没有真实证据的验收项保持待完成，Mock同chainId/token仍是本地。
 
@@ -32,7 +32,7 @@ M0CProbe仅是限额技术探针，原地址原子退款不代替Group pull-cred
 
 - 一个monadbox Worker，main部署到Production；仅Monad测试网。会话、origin和数据绑定仍要核验。
 - M1-B的CLOUD仅依赖DB；需要cloud schema3、module schema2和environment_guard。不要为了D1云端强制打开旧STORAGE的R2/Queue依赖。
-- 2026-09-29 用户已授权启用线上测试 MON 支付并创建 D1；暂不使用 R2。D1 已创建并执行0001–0005迁移，CLOUD_ENABLED/MODULES_ENABLED=true；真实合约登记前发布与付款开关保持false。收到用户钱包部署的配置并核验后可继续启用测试网发布/付款，无需重复索取授权。
+- 2026-09-29 用户已授权启用线上测试 MON 支付并创建 D1；暂不使用 R2。D1 已创建并执行0001–0005迁移，CLOUD_ENABLED/MODULES_ENABLED=true；用户七份MON合约及原部署交易已在测试网独立核验，main配置已启用发布与付款。钱包签名和业务到账验收仍需真实证据，无需重复索取配置启用授权。
 - MAINNET、ATTACHMENTS、旧STORAGE和BACKGROUND保持false。Production的旧实验室入口关闭，历史探针仅保留本地测试。
 - 真实资源创建/迁移/ID登记由用户配置或另行授权；不随main自动应用远端迁移。预览不能消费Queues或自动运行Cron。
 - 所有云端写操作验证origin、浏览器会话、CSRF、owner和revision；登录挑战单次消费，存签名文本规则而非签名原文。
