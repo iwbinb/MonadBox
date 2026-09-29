@@ -1,11 +1,12 @@
 import { expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import type { Address } from 'viem';
-import { client, wallet, mine } from './funds-browser';
+import { client, wallet, mine, connect } from './funds-browser';
 import { moduleCall } from '../../src/shared/modules/terms';
 import type { ModuleBox, ModuleData } from '../../src/shared/modules/model';
 export async function login(page: Page) {
-  await page.getByRole('button', { name: 'Connect and prepare sign-in', exact: true }).click();
+  await connect(page);
+  await page.getByRole('button', { name: 'Prepare sign-in', exact: true }).click();
   await page.getByRole('button', { name: 'Sign in (no payment)', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Sign out', exact: true })).toBeVisible();
 }
@@ -50,7 +51,7 @@ export async function publish(page: Page, data: ModuleData, actor: Address) {
   }, data);
   const intent = prepared.publication!,
     call = moduleCall(intent),
-    hash = await wallet.sendTransaction({ account: actor, ...call, value: 0n });
+    hash = await wallet.sendTransaction({ account: actor, ...call });
   await client.waitForTransactionReceipt({ hash });
   await mine();
   await page.evaluate(

@@ -11,7 +11,7 @@ import {
 import type { GroupActionIntent } from '../../shared/group/actions';
 import { hashSchema } from '../../shared/cloud/model';
 import { same } from '../../shared/cloud/chain';
-import { makeClient } from '../../shared/lab/network';
+import { makeClient } from '../../shared/network';
 import { errorCode, requireWallet } from '../../shared/lab/wallet';
 import type { InjectedProvider } from '../../shared/lab/wallet';
 import { requireResolvedTransactions } from '../shared/transaction-storage';
@@ -34,7 +34,7 @@ export const actionRecordSchema = z.strictObject({
 export type ActionRecord = z.infer<typeof actionRecordSchema>;
 const terminal = ['rejected', 'finalized', 'reverted', 'replaced'];
 export function actionKey(environment: string, actor: Address) {
-  return `monadbox.actions.v1:${environment}:10143:${actor.toLowerCase()}`;
+  return `monadbox.actions.mon-v2:${environment}:10143:${actor.toLowerCase()}`;
 }
 export function readActions(storage: Pick<Storage, 'getItem'>, key: string): ActionRecord[] {
   const raw = storage.getItem(key);
@@ -98,8 +98,11 @@ export async function sendGroupAction(
       !availableActions(i.group, i.actor, s).includes(i.action)
     )
       throw Error('ACTION_CHANGED');
-    const gas = await client.estimateGas({ account: i.actor, ...call, value: 0n });
-    if ((await client.getBalance({ address: i.actor })) < gas * (await client.getGasPrice()) * 2n)
+    const gas = await client.estimateGas({ account: i.actor, ...call });
+    if (
+      (await client.getBalance({ address: i.actor })) <
+      call.value + gas * (await client.getGasPrice()) * 2n
+    )
       throw Error('INSUFFICIENT_GAS');
     await requireWallet(provider, i.actor);
     saveAction(localStorage, key, { intent: i, state: 'signing' });
@@ -111,7 +114,7 @@ export async function sendGroupAction(
             {
               from: i.actor,
               ...call,
-              value: '0x0',
+              value: toHex(call.value),
               chainId: toHex(10143),
               nonce: toHex(i.nonce),
               gas: toHex(gas + gas / 5n),

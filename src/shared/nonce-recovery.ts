@@ -1,5 +1,5 @@
 import type { Address, Hex } from 'viem';
-import type { ChainClient } from './lab/network';
+import type { ChainClient } from './network';
 
 /** Locate the block that consumed an EOA nonce with at most 66 historical nonce reads.
  * Archive/RPC failures remain unknown; callers still verify the complete transaction and finality.

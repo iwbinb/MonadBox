@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { recoverNonce } from '../../src/shared/nonce-recovery';
-import type { ChainClient } from '../../src/shared/lab/network';
+import type { ChainClient } from '../../src/shared/network';
 import type { Address, Hex } from 'viem';
 const actor = '0x1111111111111111111111111111111111111111' as Address,
   hash = ('0x' + 'ab'.repeat(32)) as Hex;

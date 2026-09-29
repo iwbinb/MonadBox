@@ -211,7 +211,7 @@ contract GroupEscrowV1Test {
         vm.expectRevert(Group.WrongChain.selector);join(alice);
     }
     function testBadConstructorRejected() public {
-        vm.expectRevert(Group.InvalidTerms.selector);new Group(address(0),address(this));
+        vm.expectRevert(Group.InvalidTerms.selector);new Group(address(0x1234),address(this));
         vm.expectRevert(Group.InvalidTerms.selector);new Group(address(token),address(0));
     }
     function testReentrancyCannotJoinOrWithdrawTwice() public {

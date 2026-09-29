@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { isAddress, getAddress } from 'viem';
 import { parseAmount, formatAmount } from '../amount';
 
-export const GROUP_ASSET = '0xa9012a055bd4e0eDfF8Ce09f960291C09D5322dC' as const;
+export const GROUP_ASSET = '0x0000000000000000000000000000000000000000' as const;
 export const GROUP_CHAIN = 10143 as const;
 const MAX_UINT256 = (1n << 256n) - 1n;
 const time = z.number().int().min(1).max(4_102_444_799);
@@ -71,7 +71,7 @@ export function newGroupFields(now = Date.now()): GroupFields {
   return {
     title: '',
     description: '',
-    amount: '30',
+    amount: '0.1',
     minimum: '3',
     capacity: '20',
     beneficiary: '',
@@ -84,7 +84,7 @@ export function fieldsFromData(d: GroupData): GroupFields {
   return {
     title: d.title,
     description: d.description,
-    amount: formatAmount(BigInt(d.unitPrice), 6),
+    amount: formatAmount(BigInt(d.unitPrice), 18),
     minimum: String(d.minimum),
     capacity: String(d.capacity),
     beneficiary: d.beneficiary,
@@ -107,12 +107,12 @@ export function validateGroupFields(
     issue('description', 'Use no more than 2,000 characters.', '说明最多 2,000 个字符。');
   let price = 0n;
   try {
-    price = parseAmount(f.amount, 6);
+    price = parseAmount(f.amount, 18);
   } catch {
     issue(
       'amount',
-      'Enter a positive amount with at most 6 decimals; no exponent notation.',
-      '请输入正数，最多 6 位小数，不支持科学记数法。',
+      'Enter a positive amount with at most 18 decimals; no exponent notation.',
+      '请输入正数，最多 18 位小数，不支持科学记数法。',
     );
   }
   const integer = (key: 'minimum' | 'capacity') => {
@@ -191,7 +191,7 @@ const recordsSchema = z
   .refine((v) => new Set(v.map((r) => r.id)).size === v.length);
 const exportSchema = z.strictObject({
   format: z.literal('monadbox.group-draft'),
-  version: z.literal(1),
+  version: z.literal(2),
   chainId: z.literal(GROUP_CHAIN),
   asset: z.literal(GROUP_ASSET),
   data: groupDataSchema,
@@ -206,7 +206,7 @@ export class DraftError extends Error {
 export function draftKey(environment: string): string {
   if (!['local', 'test', 'preview', 'production'].includes(environment))
     throw new DraftError('UNAVAILABLE');
-  return `monadbox.group-drafts.v1:${environment}:10143`;
+  return `monadbox.group-drafts.mon-v2:${environment}:10143`;
 }
 export function readDrafts(store: Store, key: string): GroupDraft[] {
   let raw: string | null;
@@ -268,7 +268,7 @@ export function exportDraft(data: GroupData): string {
   return JSON.stringify(
     exportSchema.parse({
       format: 'monadbox.group-draft',
-      version: 1,
+      version: 2,
       chainId: GROUP_CHAIN,
       asset: GROUP_ASSET,
       data,

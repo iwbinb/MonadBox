@@ -6,7 +6,7 @@ import { moduleIntentSchema } from '../../shared/modules/model';
 import type { ModuleSignatures, ModuleIntent } from '../../shared/modules/model';
 import { moduleCall } from '../../shared/modules/terms';
 import { confirmModuleAction, verifyModule } from '../../shared/modules/chain';
-import { makeClient } from '../../shared/lab/network';
+import { makeClient } from '../../shared/network';
 import { requireWallet } from '../../shared/lab/wallet';
 import type { InjectedProvider } from '../../shared/lab/wallet';
 import { requireResolvedTransactions } from '../shared/transaction-storage';
@@ -27,7 +27,7 @@ export const transactionRecordSchema = z.strictObject({
 });
 export type TransactionRecord = z.infer<typeof transactionRecordSchema>;
 export const journalKey = (environment: string, actor: string) =>
-  `monadbox.module-actions.v1:${environment}:10143:${actor.toLowerCase()}`;
+  `monadbox.module-actions.mon-v2:${environment}:10143:${actor.toLowerCase()}`;
 export const terminal = (row: TransactionRecord) =>
   ['rejected', 'finalized', 'reverted', 'replaced'].includes(row.state);
 type StoragePort = Pick<Storage, 'getItem' | 'setItem'>;
@@ -96,12 +96,12 @@ export async function sendModuleAction(
       (!i.calldataHash || keccak256(call.data) !== i.calldataHash)
     )
       throw Error('ACTION_CHANGED');
-    const gas = await client.estimateGas({ account: i.actor, ...call, value: 0n });
+    const gas = await client.estimateGas({ account: i.actor, ...call });
     const [balance, price] = await Promise.all([
       client.getBalance({ address: i.actor }),
       client.getGasPrice(),
     ]);
-    if (balance < gas * price * 2n) throw Error('INSUFFICIENT_GAS');
+    if (balance < call.value + gas * price * 2n) throw Error('INSUFFICIENT_GAS');
     await requireWallet(provider, i.actor);
     saveRecord(localStorage, key, { intent: i, state: 'signing' });
     let hash: Hex | undefined;
@@ -114,7 +114,7 @@ export async function sendModuleAction(
               from: i.actor,
               to: call.to,
               data: call.data,
-              value: '0x0',
+              value: toHex(call.value),
               chainId: toHex(10143),
               nonce: toHex(i.nonce),
               gas: toHex(gas + gas / 5n),

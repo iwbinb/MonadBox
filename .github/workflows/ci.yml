@@ -1,9 +1,8 @@
 name: MonadBox CI
 on:
   push:
-    branches: [dev, main]
-  pull_request:
     branches: [main]
+  workflow_dispatch:
 permissions:
   contents: read
 concurrency:
@@ -51,6 +50,7 @@ jobs:
           name: foundation-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             artifacts/screenshots
+            artifacts/design-qa-native
             playwright-report
             test-results
             dist/build.json

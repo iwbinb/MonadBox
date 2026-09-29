@@ -1,3 +1,4 @@
+import { IconUser, IconPlus, IconLink } from '@tabler/icons-react';
 import { Link, useParams } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { STAGE } from '../shared/config';
@@ -8,33 +9,90 @@ import { Arrow, ToolCard, ToolIcon, Unavailable } from './components';
 export function HomePage() {
   const { t } = useApp();
   return (
-    <div className="container">
+    <div className="container home-page">
       <section className="hero">
-        <h1>
-          {t('One link.', '一个链接，')}
-          <br />
-          <span>{t('Clear rules.', '按约定支付。')}</span>
-        </h1>
         <div className="hero-copy">
+          <span className="eyebrow">
+            {t('Payments made for working together', '为合作而生的支付工具')}
+          </span>
+          <h1>
+            {t('One link.', '一个链接，')}
+            <br />
+            <span>{t('Keep your promises.', '让合作按约定进行。')}</span>
+          </h1>
           <p>
             {t(
-              'A stablecoin payment toolkit for creators, communities and small teams. Collect together, return funds and share the proceeds.',
-              '面向创作者、社区和小团队的稳定币支付工具箱。把收款、退款和分账放在同一套规则里。',
+              'Collect, split, deliver and reward. All in one place.',
+              '收款、分账、交付与奖励，在同一处完成。',
             )}
           </p>
-          <a className="button primary" href="#tools">
-            {t('Find your tool', '选择适合的工具')}
-            <Arrow />
-          </a>
+          <div className="hero-actions">
+            <a className="button primary" href="#tools">
+              {t('Create your first Box', '创建第一个 Box')}
+              <Arrow />
+            </a>
+            <a className="text-link" href="#how">
+              {t('See how it works', '查看如何使用')}
+            </a>
+          </div>
           <span className="muted small">
-            {t('Explore the foundation. No wallet required.', '先了解工具，无需连接钱包。')}
+            {t('Create first. Connect your wallet when you publish.', '先创建，再连接钱包发布。')}
           </span>
+        </div>
+        <div className="hero-visual">
+          <img
+            src="/images/cooperation-box.png"
+            alt=""
+            fetchPriority="high"
+            width="1391"
+            height="1131"
+          />
+          <div className="hero-example">
+            <div className="example-head">
+              <span className="tool-icon">
+                <ToolIcon id="group" />
+              </span>
+              <div>
+                <strong>{t('Weekend creator meetup', '周末创作小聚')}</strong>
+                <p>Group · {t('Collect together', '成团收款')}</p>
+              </div>
+              <span className="status-label">{t('Example', '示例')}</span>
+            </div>
+            <div className="example-amount">
+              <strong>
+                0.1 MON <small>/ {t('person', '份')}</small>
+              </strong>
+              <span>2 / 3 {t('joined', '份')}</span>
+            </div>
+            <progress value="2" max="3" aria-label={t('Example group progress', '示例成团进度')} />
+            <p className="muted small">
+              {t('Refund available if the group does not form', '未成团可退款')}
+            </p>
+            <div className="example-bottom">
+              <span className="avatar-stack">
+                <i>
+                  <IconUser size={17} />
+                </i>
+                <i>
+                  <IconUser size={17} />
+                </i>
+                <i>
+                  <IconPlus size={17} />
+                </i>
+              </span>
+              <span className="text-link">
+                {t('One shared agreement', '同一个约定')} <IconLink size={15} />
+              </span>
+            </div>
+          </div>
         </div>
       </section>
       <section className="tools-section" id="tools" aria-labelledby="tools-title">
         <div className="section-heading">
-          <h2 id="tools-title">{t('Six tools. One workspace.', '六个工具，一个工作台。')}</h2>
-          <span>{t('Built in stages, starting with Group', '分阶段开放，从成团收款开始')}</span>
+          <div>
+            <h2 id="tools-title">{t('Choose how you work together', '选择你的合作方式')}</h2>
+            <p className="muted">{t('Start with a clear agreement.', '从一个明确的约定开始。')}</p>
+          </div>
         </div>
         <div className="tools-grid">
           {tools.map((tool) => (
@@ -42,49 +100,33 @@ export function HomePage() {
           ))}
         </div>
       </section>
-      <section className="how-it-works" aria-labelledby="flow-title">
-        <h2 id="flow-title">{t('Know the rules before you pay.', '付款之前，先看清规则。')}</h2>
+      <section className="how-it-works" id="how" aria-label={t('How it works', '如何使用')}>
         <ol>
           {[
             [
-              t('Set the terms', '约定规则'),
-              t(
-                'Choose the amount, participants and exit conditions.',
-                '明确金额、参与方与退出条件。',
-              ),
+              t('Set the rules', '约定规则'),
+              t('Choose a tool, amount and participants.', '选择工具，设置金额、参与人和规则。'),
             ],
             [
-              t('Share a link', '分享链接'),
-              t('Let everyone review the same payment terms.', '让每个人查看同一份付款约定。'),
+              t('Share your link', '分享链接'),
+              t('Send your Box to your partners or community.', '把链接发给你的成员或社区。'),
             ],
             [
-              t('Track what happens', '核对进展'),
-              t(
-                'Keep payment, refund and settlement states distinct.',
-                '清楚区分付款、退款资格和实际到账。',
-              ),
+              t('Follow the progress', '查看进展'),
+              t('Track payments, refunds and settlement.', '在同一处跟踪收款、退款和结算状态。'),
             ],
-          ].map(([title, body], index) => (
-            <li key={index}>
-              <span className="step-number">0{index + 1}</span>
-              <h3>{title}</h3>
-              <p>{body}</p>
+          ].map(([title, body], i) => (
+            <li key={title}>
+              <span className="step-number">{i + 1}</span>
+              <div>
+                <h3>{title}</h3>
+                <p>{body}</p>
+              </div>
+              {i < 2 ? <Arrow /> : null}
             </li>
           ))}
         </ol>
       </section>
-      <div className="notice">
-        <p>
-          {t(
-            'Group, Split and Deliver drafts are available in this browser. Publishing and business payments depend on the capabilities enabled in this environment.',
-            '本浏览器支持成团、分账与交付托管草稿；发布和业务付款以当前环境已开放能力为准。',
-          )}
-        </p>
-        <Link to="/status">
-          {t('View current capabilities', '查看当前能力')}
-          <Arrow />
-        </Link>
-      </div>
     </div>
   );
 }
@@ -106,7 +148,7 @@ export function ToolPage() {
           <h1>{locale === 'en' ? tool.name : tool.label.zh}</h1>
           <p className="lead">{tool.description[locale]}</p>
           <p className="muted">{tool.scenario[locale]}</p>
-          <h2>{t('The planned flow', '计划中的使用流程')}</h2>
+          <h2>{t('How it works', '使用流程')}</h2>
           <ol className="detail-steps">
             {tool.steps.map((step, index) => (
               <li key={index}>
@@ -156,8 +198,8 @@ export function ToolPage() {
           )}
           <p className="small muted">
             {t(
-              'No business signatures or transfers on this tool page. Testnet wallet actions are separate in the lab.',
-              '此工具页不请求业务签名或转账；测试网钱包操作在独立实验室进行。',
+              'Create and review your rules first. Publish and pay with MON through MetaMask, Keplr or OKX.',
+              '先创建并核对规则，再使用 MetaMask、Keplr 或 OKX 发布和支付 MON。',
             )}
           </p>
           {tool.id === 'group' ? (
@@ -199,8 +241,8 @@ export function RefundsPage() {
       <div className="notice">
         <p>
           {t(
-            'A claimable credit is not money already in your wallet. Network fees are separate. Business payments remain disabled; Group drafts do not accept funds.',
-            '“可领取款”不等于钱包已经到账，网络费用另行承担。六工具业务付款仍关闭，成团草稿不收款。',
+            'Claimable credit requires a withdrawal to your wallet. Payments and network fees use Monad Testnet MON.',
+            '可领取款需要提款后才会转入钱包。付款与网络费用均使用 Monad 测试网 MON。',
           )}
         </p>
       </div>
@@ -289,7 +331,9 @@ export function StatusPage() {
         </div>
         <div>
           <dt>{t('Deployed business contracts', '已部署业务合约')}</dt>
-          <dd>{t('Public deployment acceptance pending', '公开部署验收待完成')}</dd>
+          <dd>
+            <Link to="/setup">{t('Deployment setup and verification', '部署准备与核验')}</Link>
+          </dd>
         </div>
         <div>
           <dt>{t('Remote storage', '远程存储')}</dt>

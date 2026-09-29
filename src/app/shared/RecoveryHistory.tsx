@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import type { Hex } from 'viem';
 import { useApp } from '../context';
 import { hashSchema } from '../../shared/cloud/model';
-import { explorerTransaction } from '../../shared/lab/network';
+import { explorerTransaction } from '../../shared/network';
 import { statusLabel } from './status';
 export function RecoveryHistory<Row>({
   rows,

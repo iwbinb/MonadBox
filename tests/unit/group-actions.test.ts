@@ -3,8 +3,8 @@ import { encodeAbiParameters, encodeEventTopics, erc20Abi, keccak256, toHex } fr
 import type { Abi, Address } from 'viem';
 import { groupArtifact } from '../../src/shared/group/generated/group';
 import { groupTerms, groupTermsHash, groupId } from '../../src/shared/group/terms';
-import { TOKEN } from '../../src/shared/lab/network';
-import type { ChainClient } from '../../src/shared/lab/network';
+import { TOKEN } from '../../src/shared/network';
+import type { ChainClient } from '../../src/shared/network';
 import type { PublishIntent } from '../../src/shared/cloud/model';
 import { groupAbi } from '../../src/shared/cloud/chain';
 import {
@@ -129,7 +129,7 @@ function fake(action: GroupAction = 'contribute') {
     nonce: 7,
     to: call.to,
     input: call.data,
-    value: 0n,
+    value: call.value,
     blockHash: B,
     type: 'eip1559' as string | undefined,
     authorizationList: undefined as unknown[] | undefined,
@@ -158,6 +158,7 @@ function fake(action: GroupAction = 'contribute') {
   };
   const c = {
     getChainId: vi.fn(async () => 10143),
+    getBalance: vi.fn(async () => 100000000000000000000n),
     getCode: vi.fn(async ({ address }: { address: Address }) =>
       address === M ? groupArtifact.runtime : address === TOKEN ? '0x01' : '0x',
     ),
@@ -174,18 +175,28 @@ function fake(action: GroupAction = 'contribute') {
   return { i, c, client: c as unknown as ChainClient, tx, receipt, block, fields };
 }
 describe('Group funds evidence', () => {
-  it.each(groupActions)(
+  it('rejects token approval for native MON', () =>
+    expect(() => actionCall(intent('approve'))).toThrow('ACTION_UNAVAILABLE'));
+  it('rejects a receipt with missing native principal', async () => {
+    const f = fake();
+    f.tx.value = 0n;
+    expect((await confirmAction(f.client, f.i, H)).state).toBe('replaced');
+  });
+  it.each(groupActions.filter((a) => a !== 'approve'))(
     '%s requires its own exact finalized transaction and event',
     async (action) => {
       const f = fake(action);
       expect((await confirmAction(f.client, f.i, H)).state).toBe('finalized');
     },
   );
-  it.each(groupActions)('%s receipt success without matching event is rejected', async (action) => {
-    const f = fake(action);
-    f.receipt.logs = [];
-    await expect(confirmAction(f.client, f.i, H)).rejects.toThrow('TRANSACTION_MISMATCH');
-  });
+  it.each(groupActions.filter((a) => a !== 'approve'))(
+    '%s receipt success without matching event is rejected',
+    async (action) => {
+      const f = fake(action);
+      f.receipt.logs = [];
+      await expect(confirmAction(f.client, f.i, H)).rejects.toThrow('TRANSACTION_MISMATCH');
+    },
+  );
   it.each(['eip7702', 'eip4844', 'future', undefined])(
     'rejects unsupported transaction %s',
     async (type) => {
@@ -284,8 +295,8 @@ describe('Group legal actions and time boundaries', () => {
     paused: false,
     storedState: 1,
   };
-  it('approval and contribution are separate and an address cannot rejoin', () => {
-    expect(availableActions(group, M, base)).toEqual(['approve']);
+  it('native contribution needs no approval and an address cannot rejoin', () => {
+    expect(availableActions(group, M, base)).toEqual(['contribute']);
     expect(availableActions(group, M, { ...base, allowance: '100000' })).toEqual(['contribute']);
     expect(availableActions(group, M, { ...base, position: 2 })).toEqual([]);
   });

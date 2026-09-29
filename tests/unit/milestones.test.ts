@@ -26,8 +26,8 @@ import {
 } from '../../src/shared/modules/agreement';
 import { confirmModuleAction, moduleActions } from '../../src/shared/modules/chain';
 import type { ModuleSnapshot } from '../../src/shared/modules/chain';
-import { TOKEN } from '../../src/shared/lab/network';
-import type { ChainClient } from '../../src/shared/lab/network';
+import { TOKEN } from '../../src/shared/network';
+import type { ChainClient } from '../../src/shared/network';
 const buyer = '0x1111111111111111111111111111111111111111',
   seller = '0x2222222222222222222222222222222222222222',
   M = '0x3333333333333333333333333333333333333333',
@@ -168,9 +168,9 @@ describe('Milestones frozen plan and stage binding', () => {
       expect(() => validateAgreement(p, s, { ...agreement, ...patch })).toThrow();
     expect(() => validateAgreement(p, { ...s, state: 'RESOLVED' }, agreement)).toThrow();
   });
-  it('uses whole-plan allowance for funding and never restarts terminated plans', () => {
+  it('uses whole-plan native balance for funding and never restarts terminated plans', () => {
     const unfunded = { ...s, state: 'AWAITING_FUNDS', timestamp: 9000, allowance: '100' };
-    expect(moduleActions(p, buyer, unfunded)).toContain('approve');
+    expect(moduleActions(p, buyer, unfunded)).toContain('fund');
     expect(moduleActions(p, buyer, { ...unfunded, allowance: '101' })).toContain('fund');
     for (const state of ['TERMINATED', 'COMPLETED', 'RESOLVED'])
       expect(moduleActions(p, seller, { ...s, state, credit: '31' })).toEqual(['withdrawFor']);
@@ -220,6 +220,7 @@ function fake() {
   };
   const c = {
     getChainId: vi.fn(async () => 10143),
+    getBalance: vi.fn(async () => 100000000000000000000n),
     getCode: vi.fn(async () => definitions.milestones.artifact.runtime),
     getTransaction: vi.fn(async () => ({
       from: buyer,

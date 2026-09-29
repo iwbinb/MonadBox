@@ -59,7 +59,9 @@ const modules: ModuleChain = {
       action,
       nonce: publication.data.tool === 'rewards' && action === 'create' ? 9 : 7,
       startBlock: publication.data.tool === 'rewards' && action === 'create' ? '200' : '100',
-      ...(action === 'approve' ? { amount: approvalAmount({ publication }) } : {}),
+      ...(publication.data.tool === 'rewards' && action === 'create'
+        ? { amount: approvalAmount({ publication }) }
+        : {}),
       expiresAt: Math.floor(Date.now() / 1000) + 600,
     });
   },
@@ -408,6 +410,7 @@ beforeAll(async () => {
     '0002_cloud_groups.sql',
     '0003_modules.sql',
     '0004_delivery_files.sql',
+    '0005_native_mon.sql',
   ])
     for (const sql of (await readFile('migrations/' + file, 'utf8'))
       .replace(/^--.*$/gm, '')
@@ -1010,18 +1013,18 @@ describe('versioned module drafts and publication with real isolated D1', () => 
   });
   it('does not enable modules against an incorrect schema', async () => {
     enable();
-    await db.prepare('UPDATE module_schema SET version=2').run();
+    await db.prepare('UPDATE module_schema SET version=99').run();
     try {
       const b = new Browser();
       await b.login();
       expect((await b.req('/modules')).status).toBe(503);
     } finally {
-      await db.prepare('UPDATE module_schema SET version=1').run();
+      await db.prepare('UPDATE module_schema SET version=2').run();
     }
   });
 });
 
-describe('Rewards two-step atomic-funded publication', () => {
+describe('Rewards native MON atomic-funded publication', () => {
   async function setup() {
     env.MODULES_ENABLED = 'true';
     env.MODULE_PUBLISH_ENABLED = 'true';
@@ -1053,57 +1056,32 @@ describe('Rewards two-step atomic-funded publication', () => {
     const confirm = () => b.req(path + '/confirm', 'POST', { hash });
     const first = await prepare();
     expect(first.status, await first.clone().text()).toBe(200);
-    const approval = (await first.json()).data as ModuleBox;
-    return { b, data, row, path, prepare, read, confirm, approval };
+    const prepared = (await first.json()).data as ModuleBox;
+    return { b, data, row, path, prepare, read, confirm, prepared };
   }
-  it('keeps approval private, freezes rules and uses a fresh creation nonce while retaining the proof', async () => {
+  it('freezes one native funding intent and publishes only after its final receipt', async () => {
     const x = await setup();
-    expect(x.approval.publication?.action).toBe('approve');
-    expect(x.approval.publication?.amount).toBe('101');
+    expect(x.prepared.publication?.action).toBe('create');
+    expect(x.prepared.publication?.amount).toBe('101');
+    expect(x.prepared.publication?.fundingApproval).toBeUndefined();
     outcome = { state: 'unknown', hash };
     await x.confirm();
-    expect((await (await x.prepare()).json()).data.publication).toEqual(x.approval.publication);
+    expect((await (await x.prepare()).json()).data.publication).toEqual(x.prepared.publication);
     expect((await x.b.req(x.path, 'PATCH', { revision: 1, data: x.data })).status).toBe(409);
-    outcome = { state: 'finalized', hash, block: '105', blockHash: hash };
-    await x.confirm();
-    expect((await x.read()).state).toBe('prepared');
     expect((await x.b.req('/public/modules/' + x.row.publicId)).status).toBe(404);
-    const response = await x.prepare();
-    expect(response.status, await response.clone().text()).toBe(200);
-    const next = (await response.json()).data as ModuleBox;
-    expect(next.publication!.action).toBe('create');
-    expect(next.publication!.nonce).toBe(9);
-    expect(next.publication!.publication).toEqual(x.approval.publication!.publication);
-    expect(next.publication!.fundingApproval).toMatchObject({
-      id: x.approval.publication!.id,
-      nonce: 7,
-      hash,
-      block: '105',
-      blockHash: hash,
-    });
-    expect(next.receipt).toEqual({ state: 'prepared' });
-    outcome = { state: 'unknown' };
-    await x.confirm();
-    expect((await (await x.prepare()).json()).data.publication).toEqual(next.publication);
     outcome = { state: 'finalized', hash, block: '205', blockHash: hash };
     await x.confirm();
     expect((await x.read()).state).toBe('published');
     expect((await x.b.req('/public/modules/' + x.row.publicId)).status).toBe(200);
   });
-  it('requires fresh canonical approval and capability checks without discarding original evidence', async () => {
+  it('keeps the original intent and receipt when canonical confirmation is unavailable', async () => {
     const x = await setup();
-    outcome = { state: 'finalized', hash, block: '105', blockHash: hash };
+    outcome = { state: 'finalized', hash, block: '205', blockHash: hash };
     await x.confirm();
-    const approved = await x.read();
+    const published = await x.read();
     outcome = { state: 'unknown' };
-    expect((await x.prepare()).status).toBe(503);
-    expect(await x.read()).toEqual(approved);
-    outcome = { state: 'finalized', hash, block: '105', blockHash: hash };
-    env.NETWORK_WRITES_ENABLED = 'false';
-    expect((await x.prepare()).status).toBe(503);
-    expect(await x.read()).toEqual(approved);
-    env.NETWORK_WRITES_ENABLED = 'true';
-    expect((await x.b.req(x.path + '/prepare', 'POST', { revision: 2 })).status).toBe(409);
+    expect((await x.confirm()).status).toBe(503);
+    expect(await x.read()).toEqual(published);
     expect(
       (await x.b.req(x.path + '/prepare', 'POST', { revision: 1 }, { 'X-CSRF-Token': 'bad' }))
         .status,
@@ -1111,34 +1089,30 @@ describe('Rewards two-step atomic-funded publication', () => {
     const outsider = new Browser();
     await outsider.login(bob);
     expect((await outsider.req(x.path + '/prepare', 'POST', { revision: 1 })).status).toBe(404);
-    const original = modules.prepare.bind(modules);
-    vi.spyOn(modules, 'prepare').mockImplementation(async (...args) => ({
-      ...(await original(...args)),
-      nonce: 7,
-    }));
-    expect((await x.prepare()).status).toBe(503);
-    expect(await x.read()).toEqual(approved);
   });
-  it('concurrent second-step prepares retain one intent and reject corrupted proof linkage', async () => {
+  it('concurrent prepares keep one intent and reject any legacy approval action', async () => {
     const x = await setup();
-    outcome = { state: 'finalized', hash, block: '105', blockHash: hash };
-    await x.confirm();
     const responses = await Promise.all([x.prepare(), x.prepare()]);
     expect(responses.map((r) => r.status)).toEqual([200, 200]);
     const [one, two] = await Promise.all(
       responses.map(async (r) => (await r.json()).data as ModuleBox),
     );
     expect(one!.publication).toEqual(two!.publication);
-    const intent = one!.publication!;
-    for (const patch of [{ nonce: intent.nonce }, { id: intent.id }, { block: '201' }]) {
-      await db
-        .prepare('UPDATE module_boxes SET intent_json=? WHERE id=?')
-        .bind(
-          JSON.stringify({ ...intent, fundingApproval: { ...intent.fundingApproval, ...patch } }),
-          x.row.id,
-        )
-        .run();
-      expect((await x.b.req(x.path)).status).toBe(503);
-    }
+    await db
+      .prepare('UPDATE module_boxes SET intent_json=? WHERE id=?')
+      .bind(JSON.stringify({ ...one!.publication, action: 'approve' }), x.row.id)
+      .run();
+    expect((await x.b.req(x.path)).status).toBe(503);
+  });
+  it('retains legacy drafts without exposing them as MON drafts', async () => {
+    const x = await setup();
+    await db.prepare("UPDATE module_boxes SET currency='legacy' WHERE id=?").bind(x.row.id).run();
+    expect((await x.b.req(x.path)).status).toBe(404);
+    expect(
+      (await (await x.b.req('/modules')).json()).data.some((r: ModuleBox) => r.id === x.row.id),
+    ).toBe(false);
+    expect(
+      await db.prepare('SELECT id FROM module_boxes WHERE id=?').bind(x.row.id).first(),
+    ).not.toBeNull();
   });
 });

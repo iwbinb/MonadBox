@@ -3,9 +3,8 @@ import { readFileSync } from 'node:fs';
 import type { Address, Hex } from 'viem';
 import { origin, client, wallet, inject, mine, warp, connect } from '../fixtures/funds-browser';
 import { action, login, publish } from '../fixtures/modules-browser';
-import { TOKEN } from '../../src/shared/lab/network';
 import { localDateInput } from '../../src/shared/group/draft';
-import { attendanceDates } from '../../src/app/modules/AttendanceEditor';
+import { attendanceDates } from '../../src/shared/modules/attendance-fields';
 import { moduleAbi, checkInTerms } from '../../src/shared/modules/terms';
 import { checkInHash } from '../../src/shared/modules/checkin';
 import type {
@@ -30,20 +29,6 @@ test('Attend signed check-in recovery, independent appeal, no-show deduction, ex
     Address,
     Address,
   ];
-  const tokenAbi = JSON.parse(
-    readFileSync('contracts/out/MockToken.sol/MockToken.json', 'utf8'),
-  ).abi;
-  for (const actor of [attendee, absent])
-    await client.waitForTransactionReceipt({
-      hash: await wallet.writeContract({
-        account: organizer,
-        address: TOKEN,
-        abi: tokenAbi,
-        functionName: 'mint',
-        args: [actor, 1000000n],
-      }),
-    });
-  await mine();
   const guest = await browser.newContext({ viewport: page.viewportSize() ?? undefined }),
     participant = await guest.newPage();
   participant.setDefaultTimeout(20000);
@@ -64,8 +49,8 @@ test('Attend signed check-in recovery, independent appeal, no-show deduction, ex
       .getByRole('textbox', { name: 'Title', exact: true })
       .fill('LOCAL Attend ' + info.project.name);
     await page
-      .getByRole('textbox', { name: 'Deposit per person (AUSD)', exact: true })
-      .fill('0.000101');
+      .getByRole('textbox', { name: 'Deposit per person (MON)', exact: true })
+      .fill('0.000000000000000101');
     await page.getByRole('spinbutton', { name: 'Capacity', exact: true }).fill('3');
     await page.getByRole('textbox', { name: 'Fixed check-in signer', exact: true }).fill(organizer);
     await page.getByRole('textbox', { name: 'Penalty beneficiary', exact: true }).fill(beneficiary);
@@ -87,7 +72,7 @@ test('Attend signed check-in recovery, independent appeal, no-show deduction, ex
     await login(page);
     await page.getByRole('button', { name: 'Copy to cloud', exact: true }).click();
     await page.getByRole('button', { name: 'Freeze and prepare publication', exact: true }).click();
-    await page.getByRole('button', { name: 'Connect funds wallet', exact: true }).click();
+    await connect(page);
     await action(page, 'Publish fixed rules');
     await expect(
       page.getByRole('link', { name: 'Open verified public link', exact: true }),
@@ -115,18 +100,10 @@ test('Attend signed check-in recovery, independent appeal, no-show deduction, ex
       await client.waitForTransactionReceipt({
         hash: await wallet.writeContract({
           account: absent,
-          address: TOKEN,
-          abi: tokenAbi,
-          functionName: 'approve',
-          args: [pub.deployment.address, 101n],
-        }),
-      });
-      await client.waitForTransactionReceipt({
-        hash: await wallet.writeContract({
-          account: absent,
           address: pub.deployment.address,
           abi: moduleAbi('attend'),
           functionName: 'register',
+          value: 101n,
           args: [pub.chainBoxId],
         }),
       });
@@ -153,7 +130,7 @@ test('Attend signed check-in recovery, independent appeal, no-show deduction, ex
       return pub;
     }
     await go(p);
-    await action(participant, 'Approve exact amount');
+
     await action(participant, 'Register with deposit');
     await warp(dates.checkinStart);
     await inspect();
@@ -212,7 +189,7 @@ test('Attend signed check-in recovery, independent appeal, no-show deduction, ex
     expect(await credit(p, attendee)).toBe(101n);
     await action(participant, 'Withdraw to my wallet');
     p = await next('LOCAL independent appeal');
-    await action(participant, 'Approve exact amount');
+
     await action(participant, 'Register with deposit');
     await registerOther(p);
     if (p.data.tool !== 'attend') throw Error();
@@ -241,7 +218,7 @@ test('Attend signed check-in recovery, independent appeal, no-show deduction, ex
     await read();
     await action(participant, 'Withdraw to my wallet');
     p = await next('LOCAL attendee and organizer agreement');
-    await action(participant, 'Approve exact amount');
+
     await action(participant, 'Register with deposit');
     if (p.data.tool !== 'attend') throw Error();
     await warp(p.data.checkinDeadline);
@@ -251,8 +228,8 @@ test('Attend signed check-in recovery, independent appeal, no-show deduction, ex
       .fill('Agree a partial refund');
     await action(participant, 'Appeal missing check-in');
     await participant
-      .getByRole('textbox', { name: 'Refund to participant (AUSD)', exact: true })
-      .fill('0.000081');
+      .getByRole('textbox', { name: 'Refund to participant (MON)', exact: true })
+      .fill('0.000000000000000081');
     await participant
       .getByRole('button', { name: 'Review allocation proposal', exact: true })
       .click();
@@ -289,7 +266,7 @@ test('Attend signed check-in recovery, independent appeal, no-show deduction, ex
     expect(await credit(p, organizer)).toBe(0n);
     await action(participant, 'Withdraw to my wallet');
     p = await next('LOCAL individual dispute timeout');
-    await action(participant, 'Approve exact amount');
+
     await action(participant, 'Register with deposit');
     if (p.data.tool !== 'attend') throw Error();
     await warp(p.data.checkinDeadline);
@@ -309,7 +286,7 @@ test('Attend signed check-in recovery, independent appeal, no-show deduction, ex
     await action(participant, 'Refund after dispute timeout');
     await action(participant, 'Withdraw to my wallet');
     p = await next('LOCAL voluntary exit');
-    await action(participant, 'Approve exact amount');
+
     await action(participant, 'Register with deposit');
     await action(participant, 'Exit to refundable credit');
     await action(participant, 'Withdraw to my wallet');
@@ -317,7 +294,7 @@ test('Attend signed check-in recovery, independent appeal, no-show deduction, ex
       participant.getByRole('button', { name: 'Prepare: Register with deposit', exact: true }),
     ).toHaveCount(0);
     p = await next('LOCAL canceled activity');
-    await action(participant, 'Approve exact amount');
+
     await action(participant, 'Register with deposit');
     await action(page, 'Cancel event');
     await read();

@@ -1,4 +1,9 @@
 import { test, expect } from '@playwright/test';
+test.beforeEach(async ({ context }) => {
+  await context.addInitScript(() => {
+    if (!localStorage.getItem('monadbox.locale')) localStorage.setItem('monadbox.locale', 'en');
+  });
+});
 import type { Page } from '@playwright/test';
 const a = '0x1111111111111111111111111111111111111111',
   b = '0x2222222222222222222222222222222222222222';
@@ -30,9 +35,9 @@ test('split validation explains duplicate addresses and exact percentage totals'
   await page.getByRole('button', { name: 'Save reviewed draft', exact: true }).click();
   await expect(page).toHaveURL(/\/app\/module-drafts\//);
   await page.goto('/app');
-  await expect(page.locator('.workspace-grid article')).toContainText('Shared local split');
-  await expect(page.locator('.workspace-grid article')).toContainText('Local draft');
-  await expect(page.locator('.workspace-grid article')).not.toContainText('AUSD');
+  await expect(page.locator('.workspace-table tbody tr')).toContainText('Shared local split');
+  await expect(page.locator('.workspace-table tbody tr')).toContainText('Local draft');
+  await expect(page.locator('.workspace-table tbody tr')).not.toContainText('AUSD');
 });
 test('quota failure retains reviewed rules for export without claiming save', async ({ page }) => {
   await page.addInitScript(() => {
@@ -61,10 +66,11 @@ test('workspace rejects another origin without sending a request there', async (
     return route.abort();
   });
   await page.goto('/app');
+  await page.locator('summary').filter({ hasText: 'Find a Box' }).click();
   await page
-    .getByRole('textbox', { name: 'Restore from an original public link', exact: true })
+    .getByRole('textbox', { name: 'Original public link', exact: true })
     .fill('https://example.invalid/box/11111111-1111-4111-8111-111111111111');
-  await page.getByRole('button', { name: 'Verify and open link', exact: true }).click();
+  await page.getByRole('button', { name: 'Verify and open', exact: true }).click();
   await expect(page.getByRole('alert')).toContainText('this environment');
   expect(requests).toBe(0);
 });
@@ -73,9 +79,7 @@ test('Chinese workspace supports narrow screens and enlarged text', async ({ pag
   await page.getByRole('button', { name: 'Switch to Chinese', exact: true }).click();
   await page.setViewportSize({ width: 360, height: 800 });
   await page.getByRole('button', { name: '可领取', exact: true }).click();
-  await expect(
-    page.getByRole('heading', { name: '暂无符合条件的记录', exact: true }),
-  ).toBeVisible();
+  await expect(page.getByRole('heading', { name: '这里还没有 Box', exact: true })).toBeVisible();
   await page.evaluate(() => {
     const elements = [
       ...document.querySelectorAll<HTMLElement>('h1,h2,p,a,button,label,input,span'),

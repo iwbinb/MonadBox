@@ -61,6 +61,7 @@ contract GroupEscrowV1 is ReentrancyGuard {
     error AlreadyProcessed();
     error NothingToWithdraw();
     error TransferAmountMismatch();
+    error NativeTransferFailed();
     error IntakePaused();
 
     event BoxCreated(bytes32 indexed boxId, address indexed creator, address indexed asset,
@@ -76,7 +77,7 @@ contract GroupEscrowV1 is ReentrancyGuard {
 
     constructor(address asset_, address intakeAdmin_) {
         if (block.chainid != CHAIN_ID) revert WrongChain();
-        if (asset_.code.length == 0 || intakeAdmin_ == address(0)) revert InvalidTerms();
+        if ((asset_ != address(0) && asset_.code.length == 0) || intakeAdmin_ == address(0)) revert InvalidTerms();
         asset = IERC20(asset_);
         intakeAdmin = intakeAdmin_;
     }
@@ -120,7 +121,7 @@ contract GroupEscrowV1 is ReentrancyGuard {
         return g.state;
     }
 
-    function contribute(bytes32 id) external intakeOpen nonReentrant {
+    function contribute(bytes32 id) external payable intakeOpen nonReentrant {
         Group storage g = _group(id);
         if (g.state != State.OPEN) revert InvalidState();
         if (block.timestamp < g.terms.startsAt) revert WindowNotStarted();
@@ -133,9 +134,14 @@ contract GroupEscrowV1 is ReentrancyGuard {
         g.locked += amount;
         totalLocked += amount;
         totalDeposited += amount;
-        uint256 beforeBalance = asset.balanceOf(address(this));
-        asset.safeTransferFrom(msg.sender, address(this), amount);
-        if (asset.balanceOf(address(this)) != beforeBalance + amount) revert TransferAmountMismatch();
+        if (address(asset) == address(0)) {
+            if (msg.value != amount) revert TransferAmountMismatch();
+        } else {
+            if (msg.value != 0) revert TransferAmountMismatch();
+            uint256 beforeBalance = asset.balanceOf(address(this));
+            asset.safeTransferFrom(msg.sender, address(this), amount);
+            if (asset.balanceOf(address(this)) != beforeBalance + amount) revert TransferAmountMismatch();
+        }
         emit Funded(id, msg.sender, amount);
     }
 
@@ -194,11 +200,16 @@ contract GroupEscrowV1 is ReentrancyGuard {
         totalCredits -= amount;
         totalWithdrawn += amount;
         withdrawnForBox[id][beneficiary] += amount;
-        uint256 beforeBalance = asset.balanceOf(address(this));
-        uint256 beforeRecipient = asset.balanceOf(beneficiary);
-        asset.safeTransfer(beneficiary, amount);
-        if (asset.balanceOf(address(this)) != beforeBalance - amount
-            || asset.balanceOf(beneficiary) != beforeRecipient + amount) revert TransferAmountMismatch();
+        if (address(asset) == address(0)) {
+            (bool sent,) = payable(beneficiary).call{value: amount}("");
+            if (!sent) revert NativeTransferFailed();
+        } else {
+            uint256 beforeBalance = asset.balanceOf(address(this));
+            uint256 beforeRecipient = asset.balanceOf(beneficiary);
+            asset.safeTransfer(beneficiary, amount);
+            if (asset.balanceOf(address(this)) != beforeBalance - amount
+                || asset.balanceOf(beneficiary) != beforeRecipient + amount) revert TransferAmountMismatch();
+        }
         emit Withdrawal(id, beneficiary, amount);
     }
 

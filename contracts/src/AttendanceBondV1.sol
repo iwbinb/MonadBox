@@ -40,7 +40,7 @@ contract AttendanceBondV1 is AgreementCredit {
     }
     function getEvent(bytes32 id) external view returns(EventData memory){return _event(id);}
     function getAttendance(bytes32 id,address participant) external view returns(Attendance memory){_event(id);return _attendees[id][participant];}
-    function register(bytes32 id) external intakeOpen nonReentrant {
+    function register(bytes32 id) external payable intakeOpen nonReentrant {
         EventData storage e=_event(id);if(e.cancelled)revert InvalidState();if(block.timestamp>=e.terms.registrationDeadline)revert WindowClosed();
         Attendance storage a=_attendees[id][msg.sender];if(a.state!=Position.NONE)revert AlreadyProcessed();if(e.activeCount>=e.terms.capacity)revert InvalidState();
         a.state=Position.REGISTERED;++e.activeCount;_deposit(id,msg.sender,e.terms.deposit);_changed(id,msg.sender,"register");

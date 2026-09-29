@@ -1,4 +1,9 @@
 import { test, expect } from '@playwright/test';
+test.beforeEach(async ({ context }) => {
+  await context.addInitScript(() => {
+    if (!localStorage.getItem('monadbox.locale')) localStorage.setItem('monadbox.locale', 'en');
+  });
+});
 import type { Page } from '@playwright/test';
 const beneficiary = '0x0000000000000000000000000000000000000011';
 async function captureGroupPage(page: Page, name: string) {
@@ -56,7 +61,7 @@ test('Group wizard validates fields, previews exact rules and saves without requ
   );
   await page.getByLabel('Group title', { exact: true }).fill('Weekend builders workshop');
   await page.getByRole('button', { name: 'Continue', exact: true }).click();
-  await page.getByLabel('Amount per participant', { exact: true }).fill('0.0000001');
+  await page.getByLabel('Amount per participant', { exact: true }).fill('0.0000000000000000001');
   await page.getByRole('button', { name: 'Continue', exact: true }).click();
   await expect(page.getByLabel('Amount per participant', { exact: true })).toHaveAttribute(
     'aria-invalid',
@@ -65,8 +70,8 @@ test('Group wizard validates fields, previews exact rules and saves without requ
   await page.getByLabel('Amount per participant', { exact: true }).fill('30');
   await captureGroupPage(page, 'group-builder');
   await finish(page);
-  await expect(page.getByText('90 test AUSD', { exact: true })).toBeVisible();
-  await expect(page.getByText('600 test AUSD', { exact: true })).toBeVisible();
+  await expect(page.getByText('90 test MON', { exact: true })).toBeVisible();
+  await expect(page.getByText('600 test MON', { exact: true })).toBeVisible();
   await expect(
     page.getByRole('button', { name: 'On-chain publishing not enabled' }),
   ).toBeDisabled();
@@ -121,11 +126,13 @@ test('invalid JSON import never changes saved drafts', async ({ page }) => {
 });
 test('corrupt local data is retained instead of silently reset', async ({ page }) => {
   await page.goto('/');
-  await page.evaluate(() => localStorage.setItem('monadbox.group-drafts.v1:local:10143', 'broken'));
+  await page.evaluate(() =>
+    localStorage.setItem('monadbox.group-drafts.mon-v2:local:10143', 'broken'),
+  );
   await page.goto('/app/group-drafts');
   await expect(page.getByRole('alert')).toContainText('not been erased');
   expect(
-    await page.evaluate(() => localStorage.getItem('monadbox.group-drafts.v1:local:10143')),
+    await page.evaluate(() => localStorage.getItem('monadbox.group-drafts.mon-v2:local:10143')),
   ).toBe('broken');
 });
 test('storage write failure preserves the form and offers export, not success', async ({
@@ -192,7 +199,7 @@ test('Chinese form labels, review and mobile enlarged text remain usable', async
   await page.goto('/create/group');
   await page.getByLabel('活动标题', { exact: true }).fill('周末开发者工作坊');
   await page.getByRole('button', { name: '下一步', exact: true }).click();
-  await expect(page.getByLabel('每人金额', { exact: true })).toHaveValue('30');
+  await expect(page.getByLabel('每人金额', { exact: true })).toHaveValue('0.1');
   await page.setViewportSize({ width: 360, height: 800 });
   await page.evaluate(() => {
     const elements = [

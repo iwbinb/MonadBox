@@ -1,10 +1,16 @@
 import { test, expect } from '@playwright/test';
+test.beforeEach(async ({ context }) => {
+  await context.addInitScript(() => {
+    if (!localStorage.getItem('monadbox.locale')) localStorage.setItem('monadbox.locale', 'en');
+  });
+});
+import { connect } from '../fixtures/funds-browser';
 import { readFileSync } from 'node:fs';
 import type { Address } from 'viem';
 import type { CloudBox } from '../../src/shared/cloud/model';
 const origin = 'http://127.0.0.1:18889';
 const endpoint = 'http://127.0.0.1:18745';
-const TOKEN = '0xa9012a055bd4e0eDfF8Ce09f960291C09D5322dC';
+const TOKEN = '0x0000000000000000000000000000000000000000';
 test('disabled remote cloud has no implicit login or fake cloud records', async ({ page }) => {
   await page.goto('/app/groups');
   await expect(page.getByRole('heading', { name: 'Cloud groups', exact: true })).toBeVisible();
@@ -72,6 +78,7 @@ test('SIWE -> D1 draft -> wallet-signed LOCAL publication -> fresh anonymous pub
       const w = window as W;
       let connected = false;
       w.ethereum = {
+        isMetaMask: true,
         request: async ({ method, params = [] }: { method: string; params?: unknown[] }) => {
           if (method === 'eth_accounts') return connected ? [account] : [];
           if (method === 'eth_requestAccounts') {
@@ -93,10 +100,11 @@ test('SIWE -> D1 draft -> wallet-signed LOCAL publication -> fresh anonymous pub
     { account },
   );
   await page.goto(origin + '/app/groups');
-  await expect(page.getByRole('button', { name: 'Connect and prepare sign-in' })).toBeVisible();
+  await connect(page);
+  await expect(page.getByRole('button', { name: 'Prepare sign-in' })).toBeVisible();
   expect(signCount).toBe(0);
   expect(txCount).toBe(0);
-  await page.getByRole('button', { name: 'Connect and prepare sign-in' }).click();
+  await page.getByRole('button', { name: 'Prepare sign-in' }).click();
   await expect(page.locator('.cloud-message')).toContainText('does not authorize payments');
   await page.evaluate(() => {
     (window as Window & { __rejectCloud: boolean }).__rejectCloud = true;
@@ -126,7 +134,7 @@ test('SIWE -> D1 draft -> wallet-signed LOCAL publication -> fresh anonymous pub
     buffer: Buffer.from(
       JSON.stringify({
         format: 'monadbox.group-draft',
-        version: 1,
+        version: 2,
         chainId: 10143,
         asset: TOKEN,
         data,
@@ -153,6 +161,7 @@ test('SIWE -> D1 draft -> wallet-signed LOCAL publication -> fresh anonymous pub
     viewport: page.viewportSize() ?? { width: 1280, height: 720 },
     baseURL: origin,
   });
+  await visitor.addInitScript(() => localStorage.setItem('monadbox.locale', 'en'));
   const anonymous = await visitor.newPage();
   await anonymous.goto(publicPath);
   await expect(
@@ -182,7 +191,9 @@ test('SIWE -> D1 draft -> wallet-signed LOCAL publication -> fresh anonymous pub
   await expect(
     anonymous.getByRole('button', { name: 'Payments are not enabled yet' }),
   ).toBeDisabled();
-  await expect(anonymous.getByText('<script>evil()</script>', { exact: false })).toBeVisible();
+  await expect(
+    anonymous.locator('.public-group-title').getByText('<script>evil()</script>', { exact: false }),
+  ).toBeVisible();
   await anonymous.getByRole('button', { name: 'Refresh chain state' }).click();
   await expect(
     anonymous.getByRole('heading', { name: title + ' edited', exact: true }),
@@ -196,7 +207,7 @@ test('SIWE -> D1 draft -> wallet-signed LOCAL publication -> fresh anonymous pub
     fullPage: true,
   });
   await page.getByRole('button', { name: 'Sign out', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Connect and prepare sign-in' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Prepare sign-in' })).toBeVisible();
   expect((await page.request.get(origin + '/api/v1/groups')).status()).toBe(401);
   await visitor.close();
 });

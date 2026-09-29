@@ -11,7 +11,7 @@ const revision = typeof __BUILD_SHA__ === 'undefined' ? 'local' : __BUILD_SHA__;
 export function createApp(chain?: CloudChain, modules?: ModuleChain) {
   const app = new Hono<{ Bindings: Env; Variables: { requestId: string } }>();
   const csp =
-    "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https://testnet-rpc.monad.xyz; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'";
+    "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self' https://testnet-rpc.monad.xyz; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'";
   app.use('*', async (c, next) => {
     c.set('requestId', crypto.randomUUID());
     await next();

@@ -19,7 +19,7 @@ describe('fail-closed configuration', () => {
     chainId: 10143,
     version: 1,
     address: '0x1111111111111111111111111111111111111111',
-    asset: '0xa9012a055bd4e0eDfF8Ce09f960291C09D5322dC',
+    asset: '0x0000000000000000000000000000000000000000',
     intakeAdmin: '0x2222222222222222222222222222222222222222',
     runtimeHash: '0x' + 'ab'.repeat(32),
   });

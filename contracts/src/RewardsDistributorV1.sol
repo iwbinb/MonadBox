@@ -11,7 +11,7 @@ contract RewardsDistributorV1 is PullCredit {
     event RewardClaimed(bytes32 indexed boxId,address indexed recipient,uint256 amount);
     event ExpiredReclaimed(bytes32 indexed boxId,address indexed creator,uint256 amount);
     constructor(address token,address admin) PullCredit(token,admin) {}
-    function createAndFundBatch(Terms calldata t,bytes32 salt) external intakeOpen nonReentrant returns(bytes32 id) {
+    function createAndFundBatch(Terms calldata t,bytes32 salt) external payable intakeOpen nonReentrant returns(bytes32 id) {
         uint256 count=t.recipients.length;
         if(count==0||count>100||count!=t.amounts.length||t.claimStart>=t.claimDeadline||t.claimDeadline<=block.timestamp||t.metadataHash==0)revert InvalidTerms();
         id=boxIdFor(msg.sender,salt);if(_batches[id].creator!=address(0))revert AlreadyProcessed();

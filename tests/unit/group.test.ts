@@ -39,14 +39,14 @@ const key = draftKey('test');
 describe('Group input and exact money', () => {
   it('normalizes to integer units and round-trips dates', () => {
     const d = data();
-    expect(d.unitPrice).toBe('30000000');
+    expect(d.unitPrice).toBe('100000000000000000');
     expect(fieldsFromData(d)).toEqual(base());
   });
   it.each([
     '0',
     '-1',
     '1e6',
-    '0.0000001',
+    '0.0000000000000000001',
     '1,000',
     'Infinity',
     'NaN',
@@ -57,8 +57,10 @@ describe('Group input and exact money', () => {
   ])('rejects ambiguous amount %s', (amount) =>
     expect(validateGroupFields({ ...base(), amount }, NOW).errors.amount).toBeDefined(),
   );
-  it('accepts one smallest unit and exact 6 decimals', () =>
-    expect(validateGroupFields({ ...base(), amount: '0.000001' }, NOW).data?.unitPrice).toBe('1'));
+  it('accepts one smallest unit and exact 18 decimals', () =>
+    expect(
+      validateGroupFields({ ...base(), amount: '0.000000000000000001' }, NOW).data?.unitPrice,
+    ).toBe('1'));
   it.each([
     ['minimum', '1'],
     ['minimum', '2.1'],
@@ -206,7 +208,7 @@ describe('Local draft persistence is not an order or proof of payment', () => {
   });
   it.each([
     { chainId: 143 },
-    { version: 2 },
+    { version: 1 },
     { asset: ADDRESS },
     { privateKey: 'not-accepted' },
     { format: 'other' },
@@ -236,7 +238,7 @@ describe('Fixed encoding domain', () => {
     expect(groupTermsHash(MODULE, ADDRESS, SALT, data())).not.toBe(
       groupTermsHash(MODULE, ADDRESS, SALT, { ...data(), title: 'Changed' }),
     );
-    expect(groupTerms(data()).unitPrice).toBe(30000000n);
+    expect(groupTerms(data()).unitPrice).toBe(100000000000000000n);
   });
   it('box identity is separated by module and creator', () => {
     expect(groupId(MODULE, ADDRESS, SALT)).not.toBe(groupId(ADDRESS, MODULE, SALT));

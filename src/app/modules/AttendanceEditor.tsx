@@ -1,3 +1,4 @@
+import { EditorAside } from './EditorAside';
 import { useState } from 'react';
 import { formatUnits } from 'viem';
 import { useApp } from '../context';
@@ -7,14 +8,7 @@ import { attendanceSchema } from '../../shared/modules/model';
 import type { ModuleData } from '../../shared/modules/model';
 import { exportModule } from './drafts';
 type Attendance = Extract<ModuleData, { tool: 'attend' }>;
-export const attendanceDates = [
-  ['registrationDeadline', 'Registration / exit deadline', '报名 / 退出截止'],
-  ['eventStart', 'Event starts', '活动开始'],
-  ['eventEnd', 'Event ends', '活动结束'],
-  ['checkinStart', 'Check-in opens', '签到开始'],
-  ['checkinDeadline', 'Check-in deadline', '签到截止'],
-  ['challengeDeadline', 'Appeal deadline', '申诉截止'],
-] as const;
+import { attendanceDates } from '../../shared/modules/attendance-fields';
 export function AttendanceRules({ data: d }: { data: Attendance }) {
   const { t } = useApp(),
     penalty = (BigInt(d.deposit) * BigInt(d.noShowPenaltyBps)) / 10000n;
@@ -22,13 +16,13 @@ export function AttendanceRules({ data: d }: { data: Attendance }) {
     <section className="cloud-card" aria-label={t('Frozen rules preview', '固定规则预览')}>
       <h2>{d.title}</h2>
       <p>{d.description}</p>
-      <p>Monad Testnet · 10143 · AUSD</p>
+      <p>Monad Testnet · 10143 · MON</p>
       <p>
-        {t('Deposit per person', '每人押金')}：{formatUnits(BigInt(d.deposit), 6)} AUSD ·{' '}
+        {t('Deposit per person', '每人押金')}：{formatUnits(BigInt(d.deposit), 18)} MON ·{' '}
         {t('Capacity', '人数上限')}：{d.capacity}
       </p>
       <p className="notice">
-        {t('Worst no-show deduction', '缺席最坏扣款')}：{formatUnits(penalty, 6)} AUSD（
+        {t('Worst no-show deduction', '缺席最坏扣款')}：{formatUnits(penalty, 18)} MON（
         {(d.noShowPenaltyBps / 100).toFixed(2)}%）。
         {t(
           'Check-in relies on the fixed signer’s statement. Submit the signed proof on-chain before the check-in deadline, or appeal within the stated appeal window. Silence can result in the fixed deduction.',
@@ -77,7 +71,7 @@ export function AttendanceEditor({
     start = Math.floor(Date.now() / 60000) * 60 + 86400;
   const [title, setTitle] = useState(initial?.title ?? ''),
     [description, setDescription] = useState(initial?.description ?? ''),
-    [deposit, setDeposit] = useState(initial ? formatUnits(BigInt(initial.deposit), 6) : '1'),
+    [deposit, setDeposit] = useState(initial ? formatUnits(BigInt(initial.deposit), 18) : '1'),
     [capacity, setCapacity] = useState(String(initial?.capacity ?? 20)),
     [penalty, setPenalty] = useState(String((initial?.noShowPenaltyBps ?? 2500) / 100)),
     [signer, setSigner] = useState(initial?.checkinSigner ?? ''),
@@ -99,7 +93,7 @@ export function AttendanceEditor({
     [preview, setPreview] = useState<Attendance | null>(null),
     [error, setError] = useState('');
   return (
-    <>
+    <div className="module-editor-layout">
       <form
         className="cloud-card"
         onChange={() => setPreview(null)}
@@ -110,7 +104,7 @@ export function AttendanceEditor({
               tool: 'attend',
               title,
               description,
-              deposit: parseAmount(deposit, 6).toString(),
+              deposit: parseAmount(deposit, 18).toString(),
               capacity: Number(capacity),
               noShowPenaltyBps: Number(parseAmount(penalty, 2)),
               checkinSigner: signer,
@@ -147,7 +141,7 @@ export function AttendanceEditor({
           />
         </label>
         <label>
-          {t('Deposit per person (AUSD)', '每人押金（AUSD）')}
+          {t('Deposit per person (MON)', '每人押金（MON）')}
           <input
             inputMode="decimal"
             required
@@ -218,6 +212,18 @@ export function AttendanceEditor({
         </button>
         {error ? <p role="alert">{error}</p> : null}
       </form>
+      {!preview ? (
+        <EditorAside
+          tool="attend"
+          amount={deposit || '—'}
+          label={t('Deposit per person', '每人保证金')}
+          rows={[
+            { label: t('Capacity', '人数上限'), value: capacity },
+            { label: t('No-show deduction', '缺席扣款比例'), value: penalty + '%' },
+            { label: t('Check-in signer', '签到方'), value: signer },
+          ]}
+        />
+      ) : null}
       {preview ? (
         <>
           <AttendanceRules data={preview} />
@@ -237,6 +243,6 @@ export function AttendanceEditor({
           </button>
         </>
       ) : null}
-    </>
+    </div>
   );
 }

@@ -1,4 +1,9 @@
 import { test, expect } from '@playwright/test';
+test.beforeEach(async ({ context }) => {
+  await context.addInitScript(() => {
+    if (!localStorage.getItem('monadbox.locale')) localStorage.setItem('monadbox.locale', 'en');
+  });
+});
 import { spawn } from 'node:child_process';
 import { readFileSync, mkdirSync } from 'node:fs';
 import { encodeFunctionData, parseAbi } from 'viem';
@@ -10,7 +15,9 @@ test('lab has no implicit signing and supports missing-wallet, language and mobi
   await page.goto('/lab');
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Testnet payment lab');
   await expect(page.getByText('No injected wallet detected.', { exact: false })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Connect wallet', exact: true })).toBeDisabled();
+  await expect(
+    page.locator('main').getByRole('button', { name: 'Connect wallet', exact: true }),
+  ).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Prepare probe deployment' })).toBeDisabled();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   mkdirSync('artifacts/screenshots', { recursive: true });
@@ -142,7 +149,7 @@ test('local wallet fixture: reject, deploy, exact approve, fund, refresh, refund
       { account },
     );
     await page.goto('/lab');
-    await page.getByRole('button', { name: 'Connect wallet', exact: true }).click();
+    await page.locator('main').getByRole('button', { name: 'Connect wallet', exact: true }).click();
     await expect(page.getByText('Wrong network', { exact: false })).toBeVisible();
     await page.getByRole('checkbox').check();
     await expect(page.getByRole('button', { name: 'Prepare probe deployment' })).toBeDisabled();
@@ -168,7 +175,7 @@ test('local wallet fixture: reject, deploy, exact approve, fund, refresh, refund
     await action('Prepare exact approval', 'approve');
     await action('Prepare test payment', 'fund');
     await page.reload();
-    await page.getByRole('button', { name: 'Connect wallet', exact: true }).click();
+    await page.locator('main').getByRole('button', { name: 'Connect wallet', exact: true }).click();
     await page.getByRole('button', { name: 'Switch to testnet' }).click();
     await page.getByRole('checkbox').check();
     await page.getByRole('button', { name: 'Verify bytecode', exact: true }).click();

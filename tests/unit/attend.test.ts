@@ -23,7 +23,7 @@ import { moduleActions, confirmModuleAction } from '../../src/shared/modules/cha
 import type { ModuleSnapshot } from '../../src/shared/modules/chain';
 import { validateCheckIn, checkInTypedData, checkInHash } from '../../src/shared/modules/checkin';
 import { agreementContext, validateAgreement } from '../../src/shared/modules/agreement';
-import { TOKEN } from '../../src/shared/lab/network';
+import { TOKEN } from '../../src/shared/network';
 const [organizer, attendee, beneficiary] = [11, 12, 13].map((v) =>
   privateKeyToAccount(toHex(v, { size: 32 })),
 ) as [
@@ -174,8 +174,8 @@ describe('Attend rules, permissions and proof binding', () => {
   });
   it('does not expose registration or personal appeals for an inspected third party', () => {
     const open = { ...s, timestamp: 9999, position: 0 };
-    expect(moduleActions(p, attendee.address, open)).toContain('approve');
-    expect(moduleActions(p, organizer.address, open)).not.toContain('approve');
+    expect(moduleActions(p, attendee.address, open)).toContain('register');
+    expect(moduleActions(p, organizer.address, open)).not.toContain('register');
     expect(moduleActions(p, attendee.address, { ...open, timestamp: 10000 })).not.toContain(
       'approve',
     );
@@ -269,6 +269,7 @@ it('recovers a finalized check-in without storing its signature and rejects chan
   };
   const c = {
     getChainId: vi.fn(async () => 10143),
+    getBalance: vi.fn(async () => 100000000000000000000n),
     getCode: vi.fn(async () => definitions.attend.artifact.runtime),
     getTransaction: vi.fn(async () => tx),
     getTransactionReceipt: vi.fn(async () => ({
@@ -294,7 +295,7 @@ it('recovers a finalized check-in without storing its signature and rejects chan
       if (functionName === 'intakePaused') return false;
       return 0n;
     }),
-  } as unknown as import('../../src/shared/lab/network').ChainClient;
+  } as unknown as import('../../src/shared/network').ChainClient;
   expect((await confirmModuleAction(c, i, H)).state).toBe('finalized');
   expect((await confirmModuleAction(c, { ...i, checkIn: { ...proof, nonce: '1' } }, H)).state).toBe(
     'replaced',

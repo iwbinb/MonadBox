@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { addressSchema, hashSchema } from '../cloud/model';
+import { assetSchema, addressSchema, hashSchema } from '../cloud/model';
 export const MAX_UINT256 = (1n << 256n) - 1n;
 export const amountSchema = z
   .string()
@@ -184,7 +184,7 @@ export const moduleDeploymentSchema = z
     chainId: z.literal(10143),
     version: z.number().int(),
     address: addressSchema,
-    asset: addressSchema,
+    asset: assetSchema,
     intakeAdmin: addressSchema,
     runtimeHash: hashSchema,
   })
@@ -248,7 +248,7 @@ export const agreementSchema = z
     boxId: hashSchema,
     orderId: hashSchema,
     termsHash: hashSchema,
-    asset: addressSchema,
+    asset: assetSchema,
     remaining: amountSchema,
     buyer: addressSchema,
     seller: addressSchema,

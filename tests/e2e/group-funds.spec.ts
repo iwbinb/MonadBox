@@ -1,10 +1,8 @@
 import { test, expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
-import { erc20Abi, encodeFunctionData } from 'viem';
 import type { Address } from 'viem';
 import { calldata, groupAbi } from '../../src/shared/cloud/chain';
-import { TOKEN } from '../../src/shared/lab/network';
 import { origin, client, wallet, mine, warp, inject, connect } from '../fixtures/funds-browser';
 import type { CloudBox, PublishIntent, SessionInfo } from '../../src/shared/cloud/model';
 async function action(page: Page, name: string) {
@@ -88,17 +86,6 @@ test('Group complete funds flows and lost-response recovery on isolated LOCAL ch
     });
     expect(result.ok()).toBe(true);
   }
-  const mock = JSON.parse(readFileSync('contracts/out/MockToken.sol/MockToken.json', 'utf8'));
-  for (const actor of [alice, bob]) {
-    const hash = await wallet.writeContract({
-      account: creator,
-      address: TOKEN,
-      abi: mock.abi,
-      functionName: 'mint',
-      args: [actor, 1000000n],
-    });
-    await client.waitForTransactionReceipt({ hash });
-  }
   await warp(now);
   await inject(page, alice);
   const [success, failed, cancelled, exit] = intents as [
@@ -113,14 +100,14 @@ test('Group complete funds flows and lost-response recovery on isolated LOCAL ch
   }
   await open(exit);
   // Explicit rejection does not transfer, and loss of the return value does not trigger a resend.
-  await page.getByRole('button', { name: 'Prepare: Approve exact amount', exact: true }).click();
+  await page.getByRole('button', { name: 'Prepare: Pay and join', exact: true }).click();
   await page.getByRole('checkbox').check();
   await page.evaluate(() => {
     (window as Window & { __fundsReject: boolean }).__fundsReject = true;
   });
   await page.getByRole('button', { name: 'Sign this action', exact: true }).click();
   await expect(page.getByRole('alert')).toContainText('Signature rejected');
-  await action(page, 'Approve exact amount');
+
   await page.getByRole('button', { name: 'Prepare: Pay and join', exact: true }).click();
   await page.getByRole('checkbox').check();
   await page.evaluate(() => {
@@ -133,6 +120,7 @@ test('Group complete funds flows and lost-response recovery on isolated LOCAL ch
   await page
     .locator('.cloud-list li')
     .filter({ hasText: 'Pay and join' })
+    .filter({ hasText: 'Outcome unknown' })
     .getByRole('button', { name: 'Recheck transaction' })
     .click();
   await expect(
@@ -143,28 +131,20 @@ test('Group complete funds flows and lost-response recovery on isolated LOCAL ch
   await expect(page.getByRole('button', { name: 'Prepare: Pay and join' })).toHaveCount(0);
   for (const i of [success, failed, cancelled]) {
     await open(i);
-    await action(page, 'Approve exact amount');
+
     await action(page, 'Pay and join');
   }
   // Another payer uses the same exact ABI on the local chain.
   for (const i of [success]) {
-    for (const [to, data] of [
-      [
-        TOKEN,
-        encodeFunctionData({
-          abi: erc20Abi,
-          functionName: 'approve',
-          args: [i.deployment.address, 100000n],
-        }),
-      ],
-      [
-        i.deployment.address,
-        encodeFunctionData({ abi: groupAbi, functionName: 'contribute', args: [i.chainBoxId] }),
-      ],
-    ] as const) {
-      const hash = await wallet.sendTransaction({ account: bob, to, data, value: 0n });
-      await client.waitForTransactionReceipt({ hash });
-    }
+    const hash = await wallet.writeContract({
+      account: bob,
+      address: i.deployment.address,
+      abi: groupAbi,
+      functionName: 'contribute',
+      args: [i.chainBoxId],
+      value: BigInt(i.data.unitPrice),
+    });
+    await client.waitForTransactionReceipt({ hash });
   }
   const cancelledHash = await wallet.writeContract({
     account: creator,
@@ -198,7 +178,7 @@ test('Group complete funds flows and lost-response recovery on isolated LOCAL ch
   await recipient.goto(origin + '/b/' + success.publicId);
   await connect(recipient);
   await expect(recipient.getByText('Withdrawable credit', { exact: false })).toContainText(
-    '0.2 AUSD',
+    '0.0000000000002 MON',
   );
   await action(recipient, 'Withdraw to my wallet');
   expect(
@@ -211,7 +191,7 @@ test('Group complete funds flows and lost-response recovery on isolated LOCAL ch
   ).toBe(0n);
   await expect(
     recipient.getByText('Already transferred to wallet', { exact: false }),
-  ).toContainText('0.2 AUSD');
+  ).toContainText('0.0000000000002 MON');
   expect(await recipient.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
     true,
   );
@@ -221,6 +201,6 @@ test('Group complete funds flows and lost-response recovery on isolated LOCAL ch
   });
   await fresh.close();
   await page.goto(origin + '/app/group-activity');
-  await page.getByRole('button', { name: 'Connect funds wallet' }).click();
+  await connect(page);
   await expect(page.locator('.cloud-list')).toContainText('LOCAL funds success');
 });

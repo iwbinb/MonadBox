@@ -1,10 +1,15 @@
 import { test, expect } from '@playwright/test';
+test.beforeEach(async ({ context }) => {
+  await context.addInitScript(() => {
+    if (!localStorage.getItem('monadbox.locale')) localStorage.setItem('monadbox.locale', 'en');
+  });
+});
 test('home shows all six tools without fake balances or payment buttons', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (err) => errors.push(err.message));
   await page.goto('/');
   await expect(page.locator('.tool-card')).toHaveCount(6);
-  await expect(page.getByText('Payments disabled', { exact: false }).first()).toBeVisible();
+  await expect(page.locator('.hero-example')).toContainText('Example');
   await expect(page.locator('h1')).toContainText('One link.');
   expect(errors).toEqual([]);
   await page.screenshot({
@@ -28,14 +33,14 @@ test('Chinese preference persists across refresh and navigation', async ({ page 
   await expect(page.locator('html')).toHaveAttribute('lang', 'zh-CN');
   await page.reload();
   await page.locator('.tool-card').first().click();
-  await expect(page.locator('h1')).toHaveText('成团收款');
+  await expect(page.getByLabel('活动标题', { exact: true })).toBeVisible();
 });
 test('workspace filters explain unverified rights without invented balances', async ({ page }) => {
   await page.goto('/app');
   await page.getByRole('button', { name: 'To claim', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'No matching records' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'No Boxes here yet' })).toBeVisible();
   await expect(
-    page.getByText('Connect your funds wallet and check rights to find claimable credit.', {
+    page.getByText('Connect and refresh to verify amounts', {
       exact: true,
     }),
   ).toBeVisible();
@@ -74,7 +79,7 @@ test('configuration failure offers retry and never enables payments', async ({ p
   await expect(page.getByRole('alert')).toHaveCount(0);
   await page.goto('/tools/split');
   await page.getByRole('link', { name: 'Prepare a split draft', exact: true }).click();
-  await expect(page.getByText('Local draft only.', { exact: false })).toBeVisible();
+  await expect(page.getByRole('textbox', { name: 'Title', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Sign this action', exact: true })).toHaveCount(0);
 });
 test('no horizontal overflow at mobile width and enlarged text', async ({ page }) => {

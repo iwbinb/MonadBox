@@ -20,7 +20,7 @@ export function CloudSummary({
         <div>
           <dt>{t('Each participant', '每人金额')}</dt>
           <dd>
-            {formatAmount(BigInt(data.unitPrice), 6)} {t('test AUSD', '测试 AUSD')}
+            {formatAmount(BigInt(data.unitPrice), 18)} {t('test MON', '测试 MON')}
           </dd>
         </div>
         <div>
@@ -32,15 +32,15 @@ export function CloudSummary({
         <div>
           <dt>{t('Target amount', '成团目标金额')}</dt>
           <dd>
-            {formatAmount(BigInt(data.unitPrice) * BigInt(data.minimum), 6)}{' '}
-            {t('test AUSD', '测试 AUSD')}
+            {formatAmount(BigInt(data.unitPrice) * BigInt(data.minimum), 18)}{' '}
+            {t('test MON', '测试 MON')}
           </dd>
         </div>
         <div>
           <dt>{t('Maximum collection', '最大收款金额')}</dt>
           <dd>
-            {formatAmount(BigInt(data.unitPrice) * BigInt(data.capacity), 6)}{' '}
-            {t('test AUSD', '测试 AUSD')}
+            {formatAmount(BigInt(data.unitPrice) * BigInt(data.capacity), 18)}{' '}
+            {t('test MON', '测试 MON')}
           </dd>
         </div>
         <div>
@@ -73,8 +73,8 @@ export function CloudSummary({
         <p>
           {published
             ? t(
-                'Published rules are verified, not real-world delivery. Funding UI is still disabled.',
-                '已核验发布规则，不代表现实交付已完成；付款界面仍关闭。',
+                'Publication verification confirms these rules, not real-world delivery.',
+                '已核验发布规则，不代表现实交付已完成。',
               )
             : t(
                 'A cloud record is not an on-chain publication or collected money.',

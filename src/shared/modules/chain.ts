@@ -1,7 +1,7 @@
 import { decodeEventLog, decodeFunctionData, erc20Abi, keccak256, stringToHex } from 'viem';
 import type { Address, Hex } from 'viem';
-import { inspectNetwork, makeClient, TOKEN } from '../lab/network';
-import type { ChainClient } from '../lab/network';
+import { inspectNetwork, makeClient, TOKEN } from '../network';
+import type { ChainClient } from '../network';
 import { recoverNonce } from '../nonce-recovery';
 import { same } from '../cloud/chain';
 import type { ReceiptResult } from '../cloud/chain';
@@ -124,20 +124,8 @@ export async function moduleSnapshot(
       read('withdrawnForBox', [id, actor]),
       read('intakePaused'),
       p.data.tool === 'group' ? read('positions', [id, actor]) : 0,
-      client.readContract({
-        address: TOKEN,
-        abi: erc20Abi,
-        functionName: 'allowance',
-        args: [actor, address],
-        blockNumber,
-      }),
-      client.readContract({
-        address: TOKEN,
-        abi: erc20Abi,
-        functionName: 'balanceOf',
-        args: [actor],
-        blockNumber,
-      }),
+      Promise.resolve(0n),
+      client.getBalance({ address: actor, blockNumber }),
     ]);
   const r = record as {
     creator: Address;
@@ -333,7 +321,7 @@ export function moduleActions(
   if (BigInt(s.credit) > 0n) actions.push('withdrawFor');
   if (p.data.tool === 'split') {
     if (!s.paused && amount && BigInt(amount) > 0n && BigInt(s.balance) >= BigInt(amount))
-      actions.push(BigInt(s.allowance) < BigInt(amount) ? 'approve' : 'pay');
+      actions.push('pay');
     return actions;
   }
   const d = p.data;
@@ -367,7 +355,7 @@ export function moduleActions(
       s.activeCount < d.capacity &&
       BigInt(s.balance) >= BigInt(d.deposit)
     )
-      actions.push(BigInt(s.allowance) < BigInt(d.deposit) ? 'approve' : 'register');
+      actions.push('register');
     if (owns && s.position === 1 && now < d.registrationDeadline) actions.push('leave');
     if (!s.cancelled && s.position === 1) {
       if (now >= d.checkinStart && now < d.checkinDeadline) actions.push('checkIn');
@@ -391,7 +379,7 @@ export function moduleActions(
       fullAmount = approvalAmount({ publication: p })!;
     if (s.state === 'AWAITING_FUNDS') {
       if (!s.paused && buyer && now < d.fundBy && BigInt(s.balance) >= BigInt(fullAmount))
-        actions.push(BigInt(s.allowance) < BigInt(fullAmount) ? 'approve' : 'fund');
+        actions.push('fund');
       if (buyer || seller || now >= d.fundBy) actions.push('cancelOffer');
     }
     if (s.state === 'FUNDED') {
@@ -415,7 +403,7 @@ export function moduleActions(
     s.position === 0 &&
     BigInt(s.balance) >= BigInt(d.unitPrice)
   )
-    actions.push(BigInt(s.allowance) < BigInt(d.unitPrice) ? 'approve' : 'contribute');
+    actions.push('contribute');
   if (s.position === 1 && s.storedState === 1 && s.timestamp < d.fundingDeadline)
     actions.push('leave');
   if (s.storedState === 1 && s.timestamp >= d.fundingDeadline) actions.push('finalize');
@@ -451,31 +439,8 @@ export async function prepareModuleAction(
   ]);
   if (code && code !== '0x') throw Error('EOA_REQUIRED');
   let currentStage = 0;
-  const rewardApproval = p.data.tool === 'rewards' && action === 'approve';
-  if (rewardApproval) {
-    if (!same(actor, p.creator)) throw Error('WRONG_ACCOUNT');
-    const [paused, balance] = await Promise.all([
-      client.readContract({
-        address: p.deployment.address,
-        abi: moduleAbi('rewards'),
-        functionName: 'intakePaused',
-      }),
-      client.readContract({
-        address: TOKEN,
-        abi: erc20Abi,
-        functionName: 'balanceOf',
-        args: [actor],
-      }),
-    ]);
-    if (
-      paused ||
-      p.data.tool !== 'rewards' ||
-      Number(block.timestamp) >= p.data.claimDeadline ||
-      balance < BigInt(approvalAmount({ publication: p })!)
-    )
-      throw Error('ACTION_UNAVAILABLE');
-  }
-  if (action !== 'create' && !rewardApproval) {
+  if (action === 'approve') throw Error('ACTION_UNAVAILABLE');
+  if (action !== 'create') {
     const snapshot = await moduleSnapshot(client, p, actor, options.participant);
     currentStage = snapshot.currentStage ?? 0;
     if (
@@ -492,8 +457,7 @@ export async function prepareModuleAction(
   const paymentAmount =
     p.data.tool === 'split'
       ? amount
-      : action === 'approve' ||
-          action === 'fund' ||
+      : action === 'fund' ||
           action === 'contribute' ||
           action === 'register' ||
           (p.data.tool === 'rewards' && action === 'create')
@@ -523,7 +487,7 @@ export async function prepareModuleAction(
   });
   const call = moduleCall(i, options.signatures);
   if (['resolveByAgreement', 'checkIn'].includes(action)) i.calldataHash = keccak256(call.data);
-  await client.estimateGas({ account: actor, ...call, value: 0n });
+  await client.estimateGas({ account: actor, ...call });
   return i;
 }
 function eventMatches(
@@ -688,7 +652,7 @@ export async function confirmModuleAction(
   } catch {
     return { ...evidence, state: 'replaced' };
   }
-  if (!tx.to || !same(tx.to, call.to) || !same(tx.input, call.data) || tx.value !== 0n)
+  if (!tx.to || !same(tx.to, call.to) || !same(tx.input, call.data) || tx.value !== call.value)
     return { ...evidence, state: 'replaced' };
   if (!receipt.logs.some((log) => eventMatches(i, log))) throw Error('TRANSACTION_MISMATCH');
   if (i.action !== 'approve') await moduleSnapshot(client, i.publication, i.actor, i.participant);

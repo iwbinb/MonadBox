@@ -1,3 +1,4 @@
+import { EditorAside } from './EditorAside';
 import { useState } from 'react';
 import { formatUnits } from 'viem';
 import { useApp } from '../context';
@@ -13,7 +14,7 @@ export function DeliveryRules({ data: d }: { data: Delivery }) {
     <section className="cloud-card" aria-label={t('Frozen rules preview', '固定规则预览')}>
       <h2>{d.title}</h2>
       <p>{d.description}</p>
-      <p>Monad Testnet · 10143 · AUSD</p>
+      <p>Monad Testnet · 10143 · MON</p>
       <dl className="module-facts">
         <dt>{t('Buyer', '客户')}</dt>
         <dd>
@@ -24,7 +25,7 @@ export function DeliveryRules({ data: d }: { data: Delivery }) {
           <code>{d.seller}</code>
         </dd>
         <dt>{t('Full prepayment', '全额预付')}</dt>
-        <dd>{formatUnits(BigInt(d.amount), 6)} AUSD</dd>
+        <dd>{formatUnits(BigInt(d.amount), 18)} MON</dd>
         <dt>{t('Fund before', '付款截止')}</dt>
         <dd>
           {new Date(d.fundBy * 1000).toLocaleString()} · {new Date(d.fundBy * 1000).toISOString()}
@@ -63,7 +64,7 @@ export function DeliveryEditor({
     [description, setDescription] = useState(initial?.description ?? ''),
     [buyer, setBuyer] = useState(initial?.buyer ?? ''),
     [seller, setSeller] = useState(initial?.seller ?? ''),
-    [amount, setAmount] = useState(initial ? formatUnits(BigInt(initial.amount), 6) : '1'),
+    [amount, setAmount] = useState(initial ? formatUnits(BigInt(initial.amount), 18) : '1'),
     [fundBy, setFundBy] = useState(
       localDateInput(initial?.fundBy ?? Math.floor(Date.now() / 60000) * 60 + 86400),
     ),
@@ -73,7 +74,7 @@ export function DeliveryEditor({
     [preview, setPreview] = useState<Delivery | null>(null),
     [error, setError] = useState('');
   return (
-    <>
+    <div className="module-editor-layout">
       <form
         className="cloud-card"
         onChange={() => setPreview(null)}
@@ -86,7 +87,7 @@ export function DeliveryEditor({
               description,
               buyer,
               seller,
-              amount: parseAmount(amount, 6).toString(),
+              amount: parseAmount(amount, 18).toString(),
               fundBy: parseLocalDate(fundBy),
               workDuration: Number(work) * 3600,
               reviewDuration: Number(review) * 3600,
@@ -133,7 +134,7 @@ export function DeliveryEditor({
           <input required value={seller} onChange={(e) => setSeller(e.target.value)} />
         </label>
         <label>
-          {t('Full prepayment (AUSD)', '全额预付（AUSD）')}
+          {t('Full prepayment (MON)', '全额预付（MON）')}
           <input
             required
             inputMode="decimal"
@@ -191,6 +192,18 @@ export function DeliveryEditor({
         </button>
         {error ? <p role="alert">{error}</p> : null}
       </form>
+      {!preview ? (
+        <EditorAside
+          tool="deliver"
+          amount={amount || '—'}
+          rows={[
+            { label: t('Buyer', '客户'), value: buyer },
+            { label: t('Seller', '服务者'), value: seller },
+            { label: t('Delivery period', '交付期限'), value: work + ' ' + t('hours', '小时') },
+            { label: t('Review period', '验收期限'), value: review + ' ' + t('hours', '小时') },
+          ]}
+        />
+      ) : null}
       {preview ? (
         <>
           <DeliveryRules data={preview} />
@@ -210,6 +223,6 @@ export function DeliveryEditor({
           </button>
         </>
       ) : null}
-    </>
+    </div>
   );
 }

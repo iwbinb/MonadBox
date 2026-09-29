@@ -12,10 +12,10 @@ import {
 } from '../../shared/modules/agreement';
 import type { Agreement, ModulePublication } from '../../shared/modules/model';
 import type { ModuleActionOptions, ModuleSnapshot } from '../../shared/modules/chain';
-import { makeClient } from '../../shared/lab/network';
+import { makeClient } from '../../shared/network';
 import { moduleSnapshot } from '../../shared/modules/chain';
-import { requireWallet } from '../../shared/lab/wallet';
-import type { InjectedProvider } from '../../shared/lab/wallet';
+import { requireWallet } from '../../shared/wallet';
+import type { InjectedProvider } from '../../shared/wallet';
 export function AgreementPanel({
   publication: p,
   snapshot: s,
@@ -31,7 +31,7 @@ export function AgreementPanel({
 }) {
   const { t } = useApp(),
     c = agreementContext(p, s);
-  const [buyerAmount, setBuyerAmount] = useState(formatUnits(BigInt(c.remaining), 6)),
+  const [buyerAmount, setBuyerAmount] = useState(formatUnits(BigInt(c.remaining), 18)),
     [deadline, setDeadline] = useState(
       localDateInput(Math.min(s.disputeDue!, s.timestamp + 86400)),
     ),
@@ -79,12 +79,12 @@ export function AgreementPanel({
         )}
       </p>
       <p>
-        {t('All remaining funds', '全部剩余款')}：{formatUnits(BigInt(c.remaining), 6)} AUSD
+        {t('All remaining funds', '全部剩余款')}：{formatUnits(BigInt(c.remaining), 18)} MON
       </p>
       <label>
         {attendance
-          ? t('Refund to participant (AUSD)', '退参加者（AUSD）')
-          : t('Refund to buyer (AUSD)', '退客户（AUSD）')}
+          ? t('Refund to participant (MON)', '退参加者（MON）')
+          : t('Refund to buyer (MON)', '退客户（MON）')}
         <input
           inputMode="decimal"
           value={buyerAmount}
@@ -110,7 +110,7 @@ export function AgreementPanel({
         disabled={busy}
         onClick={() =>
           void run(async () => {
-            const b = parseAmount(buyerAmount, 6),
+            const b = parseAmount(buyerAmount, 18),
               a = validateAgreement(p, s, {
                 schemaVersion: 1,
                 boxId: p.chainBoxId,
@@ -166,14 +166,14 @@ export function AgreementPanel({
             <code>{agreementHash(p, proposal)}</code>
           </p>
           <p>
-            {firstRole} {t('receives', '收取')} {formatUnits(BigInt(proposal.buyerAmount), 6)} AUSD
+            {firstRole} {t('receives', '收取')} {formatUnits(BigInt(proposal.buyerAmount), 18)} MON
             · <code>{proposal.buyer}</code>
           </p>
           <p>
             {attendance
               ? t('Penalty beneficiary receives', '罚款受益人收取')
               : t('Seller receives', '服务者收取')}{' '}
-            {formatUnits(BigInt(proposal.sellerAmount), 6)} AUSD · <code>{proposal.seller}</code>
+            {formatUnits(BigInt(proposal.sellerAmount), 18)} MON · <code>{proposal.seller}</code>
           </p>
           <p>
             {t('Expires', '到期')}：{new Date(proposal.deadline * 1000).toLocaleString()} · nonce{' '}

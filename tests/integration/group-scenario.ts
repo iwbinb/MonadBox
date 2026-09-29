@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
-import { createPublicClient, createWalletClient, defineChain, http, erc20Abi, toHex } from 'viem';
+import { createPublicClient, createWalletClient, defineChain, http, toHex } from 'viem';
 import type { Address, Abi, Hex } from 'viem';
 import { groupId, groupTerms, groupTermsHash } from '../../src/shared/group/terms';
 import type { GroupData } from '../../src/shared/group/draft';
@@ -40,24 +40,26 @@ const artifact = JSON.parse(readFileSync('artifacts/group/GroupEscrowV1.json', '
   abi: Abi;
   bytecode: Hex;
 };
-const tokenArtifact = JSON.parse(
-  readFileSync('contracts/out/MockToken.sol/MockToken.json', 'utf8'),
-) as { abi: Abi; bytecode: { object: Hex } };
 const hashes: Hex[] = [];
 async function receipt(hash: Hex) {
   hashes.push(hash);
   const r = await client.waitForTransactionReceipt({ hash, pollingInterval: 20, timeout: 10000 });
   assert.equal(r.status, 'success');
+  const tx = await client.getTransaction({ hash });
+  // Monad charges the transaction gas limit, including on this Monad-mode local chain.
+  // https://docs.monad.xyz/developer-essentials/gas-pricing
+  spentGas.set(tx.from, (spentGas.get(tx.from) ?? 0n) + tx.gas * r.effectiveGasPrice);
   return r;
 }
-const tokenDeploy = await receipt(
-  await wallet.deployContract({
-    account: creator,
-    abi: tokenArtifact.abi,
-    bytecode: tokenArtifact.bytecode.object,
-  }),
+const asset = '0x0000000000000000000000000000000000000000';
+const baseline = new Map(
+  await Promise.all(
+    [alice, bob, carol, beneficiary].map(
+      async (a) => [a, await client.getBalance({ address: a })] as const,
+    ),
+  ),
 );
-const asset = tokenDeploy.contractAddress!;
+const spentGas = new Map<Address, bigint>();
 const groupDeploy = await receipt(
   await wallet.deployContract({
     account: creator,
@@ -69,7 +71,14 @@ const groupDeploy = await receipt(
 const module = groupDeploy.contractAddress!;
 async function write(functionName: string, args: readonly unknown[], account: Address = creator) {
   return receipt(
-    await wallet.writeContract({ account, address: module, abi: artifact.abi, functionName, args }),
+    await wallet.writeContract({
+      account,
+      address: module,
+      abi: artifact.abi,
+      functionName,
+      args,
+      value: functionName === 'contribute' ? 100000n : 0n,
+    }),
   );
 }
 async function read(functionName: string, args: readonly unknown[] = []) {
@@ -95,26 +104,6 @@ for (let i = 0; i < 3; i++) {
   ids.push(id);
   const record = (await read('getGroup', [id])) as { termsHash: Hex };
   assert.equal(record.termsHash, groupTermsHash(module, creator, salt, data, asset));
-}
-for (const account of [alice, bob, carol]) {
-  await receipt(
-    await wallet.writeContract({
-      account: creator,
-      address: asset,
-      abi: tokenArtifact.abi,
-      functionName: 'mint',
-      args: [account, 1_000_000n],
-    }),
-  );
-  await receipt(
-    await wallet.writeContract({
-      account,
-      address: asset,
-      abi: erc20Abi,
-      functionName: 'approve',
-      args: [module, 200_000n],
-    }),
-  );
 }
 await rpc('evm_setNextBlockTimestamp', [data.startsAt]);
 await rpc('evm_mine');
@@ -158,32 +147,21 @@ await rpc('evm_setNextBlockTimestamp', [data.settleNotBefore]);
 await rpc('evm_mine');
 await write('settle', [ids[0]!], carol);
 assert.equal(await read('creditOf', [beneficiary]), 200_000n);
-assert.equal(
-  await client.readContract({
-    address: asset,
-    abi: erc20Abi,
-    functionName: 'balanceOf',
-    args: [beneficiary],
-  }),
-  0n,
-);
+assert.equal(await client.getBalance({ address: beneficiary }), baseline.get(beneficiary));
 await write('withdrawFor', [ids[0]!, beneficiary], alice);
-for (const [account, balance] of [
-  [alice, 900_000n],
-  [bob, 900_000n],
-  [carol, 1_000_000n],
-  [beneficiary, 200_000n],
-  [module, 0n],
-] as const)
+for (const [account, delta] of [
+  [alice, -100000n],
+  [bob, -100000n],
+  [carol, 0n],
+  [beneficiary, 200000n],
+] as const) {
   assert.equal(
-    await client.readContract({
-      address: asset,
-      abi: erc20Abi,
-      functionName: 'balanceOf',
-      args: [account],
-    }),
-    balance,
+    await client.getBalance({ address: account }),
+    baseline.get(account)! + delta - (spentGas.get(account) ?? 0n),
+    `Account ${account}, gas ${spentGas.get(account)}`,
   );
+}
+assert.equal(await client.getBalance({ address: module }), 0n);
 assert.equal(await read('totalDeposited'), 500_000n);
 assert.equal(await read('totalWithdrawn'), 500_000n);
 assert.equal(await read('totalLocked'), 0n);
@@ -191,6 +169,8 @@ assert.equal(await read('totalCredits'), 0n);
 mkdirSync('artifacts', { recursive: true });
 const report = {
   mode: 'local-anvil-only',
+  asset: 'native MON',
+  walletBalancesIncludeGas: true,
   chainId: 10143,
   notPublicNetwork: true,
   scenarios: [

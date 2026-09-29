@@ -1,6 +1,6 @@
 # 工程交付与演示包
 
-本交付覆盖六工具完整本地流程；公众发布验收见[总计划](../planning/DEVELOPMENT_PLAN.md)。源码长期保留在dev，供[PR #7](https://github.com/iwbinb/MonadBox/pull/7)审阅，不自动合并。
+本交付覆盖六工具完整本地流程；公众发布验收见[总计划](../planning/DEVELOPMENT_PLAN.md)。当前源码直接提交 main，由 Cloudflare 发布至唯一 Production 网站。当前币种为原生测试 MON，钱包为 MetaMask、Keplr、OKX。
 
 ## 1. 可复现构建
 
@@ -31,7 +31,7 @@ pnpm deploy:dry-run
 | 性能 | `artifacts/performance-{desktop,mobile}.json`；Chromium、80ms网络延迟、4Mbps下载、4倍CPU减速，LCP<=2.5秒、CLS<=0.1；视口模拟不代表真实设备或线上用户分布 |
 | 金额与Gas | `artifacts/rewards-gas-*.json`；100人真实本地交易，创建/领取/回收明确调用及预算 |
 | 操作截图 | `artifacts/screenshots/`；六工具桌面/手机实际流程与恢复 |
-| 功能录像 | `artifacts/demo/rewards-*-LOCAL.webm`；创建者与recipient两端，永久LOCAL/Anvil/MockToken标识 |
+| 功能录像 | `artifacts/demo/rewards-*-LOCAL.webm`；创建者与recipient两端，永久LOCAL/Anvil/MON标识 |
 | 源码与回归 | CI中的`source.tar`、Playwright报告、失败trace；以该run检出的SHA为准 |
 
 上述生成产物不进Git，在本地或对应CI artifact读取。CI保留7天，需要长期保存时从最终成功run导出。录像是自动化真实操作证据，可暂停核对；演讲录制可沿用下述脚本。
@@ -40,23 +40,23 @@ pnpm deploy:dry-run
 
 | 工具 | 创建与正常路径 | 异常退出与恢复 | 操作说明 |
 | --- | --- | --- | --- |
-| Group V1 | 固定金额/人数/受益人→授权加入→截止成功→结算credit→提款 | 提前退出、未成团、取消、unknown恢复 | [Group](GROUP.md) |
+| Group V1 | 固定金额/人数/受益人→MON 付款加入→截止成功→结算credit→提款 | 提前退出、未成团、取消、unknown恢复 | [Group](GROUP.md) |
 | Split | 固定2–20收款人及比例→最终付款→最大余数分配→各自提款 | 错nonce/重复/转账失败拒绝；付款后不单方追回 | [支付模块](MODULES.md) |
 | Group V2 | 成团成功→冻结70/30等方案原子分账 | 未成团仅退原参与者；V1旧地址继续读取和退出 | [支付模块](MODULES.md) |
 | Deliver | 全额预付→双方文件→一次交付→接受或沉默释放→提款 | 未交付、主动退款、双签争议与争议超时 | [Deliver](DELIVER.md) |
 | Attend | 押金报名→固定认证方临时签名→签到全退→提款 | 截止前退出、个人申诉、缺席扣款、取消及超时 | [Attend](ATTEND.md) |
 | Milestones | 2–10阶段全额预存→当前阶段文件/交付→逐段释放 | 已释放不追回；争议/超时一次处理全部剩余款 | [Milestones](MILESTONES.md) |
-| Rewards | CSV→排序/公开预览→准确授权→另签全额入金发布→领取/提款 | 丢失发布响应后恢复；到期回收不能收走已claim的credit | [Rewards](REWARDS.md) |
+| Rewards | CSV→排序/公开预览→单笔 MON 全额入金发布→领取/提款 | 丢失发布响应后恢复；到期回收不能收走已claim的credit | [Rewards](REWARDS.md) |
 
 ## 3. 建议演示讲稿（约5分钟）
 
 1. 首页展示六工具与测试网边界，切中文，再进入工作台。说明草稿在浏览器，云端复制明确触发；没有虚构用户、余额或TVL。
 2. 用Group演示“未成团可退”和“成功credit仍需提款”。Split补充固定比例、最终付款；GroupV2组合成功分配、失败不提前分账。
 3. Deliver展示固定双方、私密附件、验收期限；用Milestones显示当前阶段、已释放与全部剩余款，强调正式争议终止余下计划。Attend说明固定签到方的信任和个人申诉窗口。
-4. 播放Rewards创建者/recipient录像：100地址总额199最小单位→授权尚未发布→发布转入全部199→响应丢失/刷新恢复→领取31但未提款→到期回收168→原31依然可以提款。所有交易为本地测试。
+4. 播放Rewards创建者/recipient录像：100地址总额199最小单位→核对名单与总额→发布转入全部199→响应丢失/刷新恢复→领取31但未提款→到期回收168→原31依然可以提款。所有交易为本地测试。
 5. 结束于实际测试报告、源码/锁定版本、隐私说明和待验收清单。切勿将本地合约地址或交易链接当作真实部署。
 
-若要手动复现本地资金场景，先完成合约编译测试，再运行`MONADBOX_LOCAL_FUNDS_TEST=1 node scripts/cloud-test-server.mjs`。此fixture用于自动化，不提供公众钱包部署；真实钱包演示需另走部署登记和官方测试资产验收。
+若要手动复现本地资金场景，先完成合约编译测试，再运行`MONADBOX_LOCAL_FUNDS_TEST=1 node scripts/cloud-test-server.mjs`。此fixture用于自动化，不提供公众钱包部署；真实钱包演示需另走部署登记和原生测试 MON 验收。
 
 ## 4. 故障与退出操作单
 
@@ -72,7 +72,7 @@ pnpm deploy:dry-run
 | 外部事项 | 需要的真实证据 |
 | --- | --- |
 | 资源与部署 | 用户配置/授权独立D1/R2、顺序迁移和environment marker；公开测试网合约部署、固定管理员/资产、runtime、源码验证及旧版登记 |
-| 资金与设备 | 官方测试AUSD行为和最大名单Gas，桌面/手机真实EOA、签名/拒签/账户切换/恢复；Safari等实际版本 |
+| 资金与设备 | 原生测试 MON 到账和最大名单 Gas，桌面/手机真实EOA、签名/拒签/账户切换/恢复；Safari等实际版本 |
 | 用户与安全 | 3–5位潜在创建者访谈、至少5位外部使用者记录，独立合约与运营安全复核；模拟地址不能冒充用户 |
 | 数据与服务 | 私密支持渠道、实际基础设施日志期限、附件物理保留/删除策略及运营方政策复核；目前90天是API访问截止，不是物理删除承诺 |
 | 赛事 | 完整官方规则、截止时区、地区/团队资格、跨项目复用与赞助奖项条件；详见来源记录。未提交、未注册或代为接受条款 |
@@ -84,4 +84,4 @@ pnpm deploy:dry-run
 
 MonadBox是一套按固定规则收款、退款与分账的六工具站点，面向社区组织者、创作者和小团队。一个共享工作台把成团、分账、交付托管、活动押金、阶段款和名单奖励的正常完成与异常退出放在一起。资金归属由版本化合约和整数规则决定，网站负责清晰预览、签名前核验与交易恢复。
 
-本轮新增工作涵盖全部业务合约、双语界面、云端发布、权限、私密交付、签名协议和本地全流程验证。当前证据为本地/CI工程验证，真实Monad部署与用户试用待验；没有上线用户、TVL或独立审计声明。源代码见PR及其固定提交；复用及许可证状态见[来源记录](../planning/SOURCES_AND_PROVENANCE.md)。
+本轮新增工作涵盖全部业务合约、双语界面、云端发布、权限、私密交付、签名协议和本地全流程验证。当前证据为本地/CI工程验证，真实Monad部署与用户试用待验；没有上线用户、TVL或独立审计声明。源代码见 main 的固定提交；复用及许可证状态见[来源记录](../planning/SOURCES_AND_PROVENANCE.md)。

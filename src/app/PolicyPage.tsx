@@ -42,8 +42,8 @@ export default function PolicyPage({ kind }: { kind: 'privacy' | 'terms' }) {
         [
           'Test assets and explicit actions',
           '测试资产与明确操作',
-          'This version targets Monad Testnet. Public business payments remain disabled until deployment and wallet acceptance checks are completed. Never enter a seed phrase or private key. Sign-in, token approval, payment, credit assignment and withdrawal are separate actions; read each wallet request.',
-          '此版本面向Monad测试网。完成部署与钱包验收前，公众业务付款保持关闭。不要输入助记词或私钥。登录、代币授权、付款、权益归属和提款是不同动作，请逐笔阅读钱包请求。',
+          'This version targets Monad Testnet. Public business payments remain disabled until deployment and wallet acceptance checks are completed. Never enter a seed phrase or private key. Sign-in, MON payment, credit assignment and withdrawal are separate actions; read each wallet request.',
+          '此版本面向Monad测试网。完成部署与钱包验收前，公众业务付款保持关闭。不要输入助记词或私钥。登录、MON 付款、权益归属和提款是不同动作，请逐笔阅读钱包请求。',
         ],
         [
           'Fixed rules and exit rights',
@@ -54,8 +54,8 @@ export default function PolicyPage({ kind }: { kind: 'privacy' | 'terms' }) {
         [
           'Funds, fees and recovery',
           '资金、费用与恢复',
-          'Credit belongs to its fixed recipient but reaches the wallet only after withdrawal. Network gas is separate. Unknown transactions must be recovered before a new send. If an approved publication is abandoned, check remaining token allowance in your wallet. The platform does not arbitrate disputes or redirect funds.',
-          'credit归固定受益人，提款后才实际到钱包；网络Gas另计。交易结果未知时先恢复记录，再考虑新交易。放弃已授权的发布时，请在钱包核查剩余额度。平台不裁决争议，也不能任意更换收款人。',
+          'Credit belongs to its fixed recipient but reaches the wallet only after withdrawal. Network gas is separate. Unknown transactions must be recovered before a new send. The platform does not arbitrate disputes or redirect funds.',
+          'credit归固定受益人，提款后才实际到钱包；网络Gas另计。交易结果未知时先恢复记录，再考虑新交易。平台不裁决争议，也不能任意更换收款人。',
         ],
         [
           'Verification limits',

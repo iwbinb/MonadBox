@@ -1,3 +1,4 @@
+import { SplitAside } from './EditorAside';
 import { RewardsEditor, RewardsRules } from './RewardsEditor';
 import { MilestoneEditor, MilestoneRules } from './MilestoneEditor';
 import { AttendanceEditor, AttendanceRules } from './AttendanceEditor';
@@ -25,7 +26,7 @@ function SplitGroupRules({ data }: { data: Extract<ModuleData, { tool: 'split' |
     shares = allocateSplit(
       data.tool === 'group'
         ? BigInt(data.unitPrice) * BigInt(data.minimum)
-        : parseAmount(example, 6),
+        : parseAmount(example, 18),
       data.recipients.map((r) => r.bps),
     );
   } catch {
@@ -35,7 +36,7 @@ function SplitGroupRules({ data }: { data: Extract<ModuleData, { tool: 'split' |
     <section className="cloud-card" aria-label={t('Frozen rules preview', '固定规则预览')}>
       <h2>{data.title}</h2>
       <p>{data.description}</p>
-      <p>Monad Testnet · 10143 · {t('Test AUSD (6 decimals)', '测试 AUSD（6位小数）')}</p>
+      <p>Monad Testnet · 10143 · {t('Test MON (18 decimals)', '测试 MON（18位小数）')}</p>
       <p className="notice">
         {data.tool === 'split'
           ? t(
@@ -50,7 +51,7 @@ function SplitGroupRules({ data }: { data: Extract<ModuleData, { tool: 'split' |
       {data.tool === 'group' ? (
         <dl className="module-facts">
           <dt>{t('Each participant', '每人付款')}</dt>
-          <dd>{formatUnits(BigInt(data.unitPrice), 6)} AUSD</dd>
+          <dd>{formatUnits(BigInt(data.unitPrice), 18)} MON</dd>
           <dt>{t('Target / capacity', '目标 / 上限')}</dt>
           <dd>
             {data.minimum} / {data.capacity}
@@ -73,7 +74,7 @@ function SplitGroupRules({ data }: { data: Extract<ModuleData, { tool: 'split' |
         </dl>
       ) : (
         <label>
-          {t('Example payment (AUSD)', '模拟付款金额（AUSD）')}
+          {t('Example payment (MON)', '模拟付款金额（MON）')}
           <input inputMode="decimal" value={example} onChange={(e) => setExample(e.target.value)} />
         </label>
       )}
@@ -84,7 +85,7 @@ function SplitGroupRules({ data }: { data: Extract<ModuleData, { tool: 'split' |
             <code>{row.address}</code>
             <span>
               {(row.bps / 100).toFixed(2)}%
-              {shares ? ` · ${formatUnits(shares[index]!, 6)} AUSD` : ''}
+              {shares ? ` · ${formatUnits(shares[index]!, 18)} MON` : ''}
             </span>
           </li>
         ))}
@@ -171,7 +172,7 @@ function SplitGroupEditor({
       { address: '', percent: '30' },
     ],
   );
-  const [amount, setAmount] = useState(g ? formatUnits(BigInt(g.unitPrice), 6) : '1');
+  const [amount, setAmount] = useState(g ? formatUnits(BigInt(g.unitPrice), 18) : '1');
   const [minimum, setMinimum] = useState(String(g?.minimum ?? 2)),
     [capacity, setCapacity] = useState(String(g?.capacity ?? 20));
   const [startsAt, setStartsAt] = useState(localDateInput(g?.startsAt ?? time + 3600)),
@@ -210,11 +211,11 @@ function SplitGroupEditor({
       issues.recipients = t('Shares must add up to exactly 100%.', '比例合计必须恰好为100%。');
     if (tool === 'group') {
       try {
-        if (parseAmount(amount, 6) === 0n) throw Error();
+        if (parseAmount(amount, 18) === 0n) throw Error();
       } catch {
         issues.amount = t(
-          'Use a positive AUSD amount with at most six decimals.',
-          '请输入正数 AUSD 金额，最多六位小数。',
+          'Use a positive MON amount with at most 18 decimals.',
+          '请输入正数 MON 金额，最多18位小数。',
         );
       }
       const start = parseLocalDate(startsAt),
@@ -254,7 +255,7 @@ function SplitGroupEditor({
         })),
         ...(tool === 'group'
           ? {
-              unitPrice: parseAmount(amount, 6).toString(),
+              unitPrice: parseAmount(amount, 18).toString(),
               minimum: Number(minimum),
               capacity: Number(capacity),
               startsAt: parseLocalDate(startsAt),
@@ -276,7 +277,7 @@ function SplitGroupEditor({
     }
   }
   return (
-    <>
+    <div className={`module-editor-layout ${tool}-editor`}>
       <form
         className="cloud-card"
         onChange={() => setPreview(null)}
@@ -381,7 +382,7 @@ function SplitGroupEditor({
           <fieldset>
             <legend>{t('Collection rules', '成团规则')}</legend>
             <label>
-              {t('Price per person (AUSD)', '每人金额（AUSD）')}
+              {t('Price per person (MON)', '每人金额（MON）')}
               <input
                 value={amount}
                 inputMode="decimal"
@@ -443,6 +444,7 @@ function SplitGroupEditor({
         </button>
         {error ? <p role="alert">{error}</p> : null}
       </form>
+      {!preview ? <SplitAside tool={tool} amount={amount} recipients={recipients} /> : null}
       {preview ? (
         <>
           <ModuleRules data={preview} />
@@ -462,6 +464,6 @@ function SplitGroupEditor({
           </button>
         </>
       ) : null}
-    </>
+    </div>
   );
 }

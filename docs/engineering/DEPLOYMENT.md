@@ -1,66 +1,84 @@
-# Cloudflare 发布：一个 Worker + dev Preview
+# main → Production：Monad 测试网 MON
 
-当前工程配置说明。用户在Cloudflare控制台连接GitHub，不向开发者提供管理Token或钱包密钥。原M0-A两个Worker方案不再执行。
+## 1. 唯一发布流程
 
-## 1. 控制台
-
-| 字段 | 值 |
+| 项目 | 配置 |
 | --- | --- |
-| Repository | iwbinb/MonadBox |
-| Project name | monadbox |
-| Production branch | main |
-| Build command | pnpm build |
-| Deploy command | pnpm run deploy |
-| Preview command | pnpm run deploy:preview |
-| Root directory | 仓库根目录 |
-| Node version | 22.16.0（.node-version） |
-| Preview Builds | 开启，仅dev |
+| 仓库 / Worker | iwbinb/MonadBox / monadbox |
+| 分支 | main |
+| 构建 | pnpm build |
+| 发布 | pnpm run deploy |
+| 网站 | https://monadbox.iwbinb.workers.dev |
+| Node / pnpm | 22.16.0 / 10.11.1 |
+| 网络 / 币种 | Monad Testnet，10143，原生 MON，18 位小数 |
 
-保留deploy中的`run`，避免误调用pnpm自身同名命令。脚本调用已锁Wrangler4.135.0并校验production/main、preview/dev；Preview调用`wrangler preview --name dev`，不是旧的versions upload。pnpm10.11.1与lockfile用于可重复安装，不删除lock。
+2026-09-29 已删除非 main 分支的 Preview 构建触发器，Cloudflare 仅保留 main 的 Production 触发器。网站 Production 与区块链主网无关。构建只生成网站、ABI 和字节码；部署脚本只发布网站。数据库迁移和合约交易均为独立操作。
 
-沿用已建立的Worker与Git部署流程；历史构建和发布证据见[验收归档](../archive/README.md)。每次发布核对实际构建SHA，不能将旧记录当作当前发布结果。
+## 2. 已完成的上线准备
 
-## 2. 能力开关
+- 七个业务合约接受原生 MON，精确核验交易 value；退款和领取均回到固定收款人。
+- 全站统一 MetaMask、Keplr、OKX；签名前复核账户、网络、序号与本金及 Gas 余额。
+- `/setup` 为项目部署入口：准备 → 核对 → 钱包确认 → 核验原交易 → 导出登记配置。
+- 部署返回丢失后，根据原账户和 nonce 恢复，禁止自动重发。核验原始交易、确认区块、代码、资产、管理员和签名域后才输出地址及 runtimeHash。
+- 0005 迁移将旧记录保留为 legacy；新记录标记 MON。旧 6 位金额不转换为 18 位 MON。
 
-顶层vars为production；previews.vars完整声明preview，不依赖隐式继承。两个环境chainId均10143，主网始终关闭。
+## 3. 待启用资源清单
 
-- `TESTNET_LAB_ENABLED=true`：允许/lab展示测试网钱包操作，每笔由用户明确签名；默认缺字段时false。
-- `NETWORK_WRITES_ENABLED=false`：六工具业务写入关闭；与独立实验室开关不同。
-- `MAINNET_ENABLED=false`、空业务ASSET_ALLOWLIST/CONTRACT_REGISTRY：不开放真实业务资金或主网。
-- `CLOUD_ENABLED=false`、`GROUP_PUBLISH_ENABLED=false`、`GROUP_DEPLOYMENT=null`：云端和Group发布未放行；按[Group说明](GROUP.md#7-d1-配置)启用时仅需D1，不依赖R2/Queues。
-- `STORAGE_ENABLED=false`、`BACKGROUND_ENABLED=false`：历史通用存储/后台原语未启用，不能为D1-only云端强制打开。
+2026-09-28 通过 Cloudflare API 核验：monadbox 的云端与业务付款开关关闭，没有 D1 绑定；同名 D1 查询没有现存数据库。以下清单用于实际启用，不使用本地测试地址或占位 ID。
 
-`/api/v1/health`返回构建revision、stage、testnetLab及cloudGroups就绪状态；stage以当前构建配置为准，默认payments为disabled。网站production≠Monadmainnet。用户浏览器签名的实验交易与网站部署是两件事。
+| 资源 | 名称 / 值 | 用途 |
+| --- | --- | --- |
+| D1 | monadbox-production | 登录会话、公开规则、草稿、交易索引、私密附件元数据 |
+| D1 binding | DB | 唯一 Production 数据库，ID由创建结果填入 |
+| 私有 R2 | monadbox-private-files-production | Deliver / Milestones 的双方附件 |
+| R2 binding | FILES | 桶保持私有，无公开域名 |
+| Origin | https://monadbox.iwbinb.workers.dev | 精确同源校验 |
+| Namespace | monadbox-production | 数据库和附件环境核验 |
 
-## 3. 构建不做什么
+资源创建和远端迁移遵守仓库 AGENTS 的授权边界。无需 Queue 或 Cron。
 
-build生成前端、Worker以及供浏览器核对的Group和探针ABI/bytecode，**不连接钱包、不迁移数据库、不broadcast或升级合约**。deploy脚本只发布网站/API。GitHub常驻CI只读仓库，只对固定127.0.0.1 Anvil执行合约测试交易；无用户/Cloudflare生产secret。
+### D1 顺序
 
-构建revision来自WORKERS_CI_COMMIT_SHA或GITHUB_SHA；branch来自WORKERS_CI_BRANCH。缺失配置/错误branch禁止误发布。Worker名称必须与控制台一致。/api错误返回JSON，不让SPA吞掉API404。
+1. 新库按顺序应用 migrations/0001 至 0005；已有库仅应用尚未执行的迁移。
+2. 写入 `environment_guard` 的唯一行 `(id=1, namespace='monadbox-production')`。若已有不同 namespace，停止并核对资源，不能覆盖。
+3. 核验 `cloud_schema=3`、`module_schema=2`、`attachment_schema=1`。
+4. 将实际 database_id 写入 wrangler.jsonc 的 DB 绑定。
 
-## 4. 本地与未来资源
+### R2 顺序
 
-wrangler.local.jsonc仅用于本地模拟，D1假ID不能用作真实绑定。db:migrate:local只操作本地资源。实验室不依赖数据库/附件/后台；云端只需D1，私密附件通过独立ATTACHMENTS_ENABLED开关按需求启用私有R2，见[Deliver](DELIVER.md)。
+1. 创建私有桶并绑定 FILES。
+2. 写入对象 `.monadbox-environment`，正文 `monadbox-production`，自定义元数据 `namespace=monadbox-production`。
+3. 核验桶名与 marker 后启用 ATTACHMENTS_ENABLED。它独立于旧 STORAGE_ENABLED，不要求打开旧存储或后台功能。
 
-真实D1须production/Preview独立ID和精确origin。Group云端需要0001、0002迁移；新工具另需0003，私密附件另需0004。按启用范围顺序迁移，已有库只应用缺失版本，并设置各自environment_guard。schema2/marker检查通过再启用CLOUD；GROUP_PUBLISH还需实际测试网部署登记。创建资源与远端迁移需用户配置或另行授权，默认不执行。
+## 4. 用户钱包部署
 
-两个namespace不代表同一数据库被安全隔离；资源ID必须独立并核验environment_guard。secret不能加VITE_前缀暴露到浏览器。链上部署/用户私钥永不写Cloudflare变量。
+1. 打开 `/setup`，连接持有测试 MON 的 MetaMask、Keplr 或 OKX。
+2. 核对管理员地址；该地址只控制新收款开关，不能更换收款人或提走他人余额。
+3. 对 Group V1、Split、Group V2、Deliver、Attend、Milestones、Rewards，分别准备和确认部署。
+4. 每笔点击“核验部署”。结果未知时继续核验原交易，不重新发送。
+5. 七笔均核验完成后点击“核验并导出登记配置”。由真实交易得到 GROUP_DEPLOYMENT 和 MODULE_DEPLOYMENTS。
+6. 将导出值登记到 Production。所有 asset 值为原生币标识 `0x0000000000000000000000000000000000000000`，合约 address 必须是实际部署地址。
 
-Worker Previews不能消费Queues或自动执行Cron；本地Miniflare测试不代替远端触发。远端后台方案需另外审阅，不强制现在创建第二个完整网站Worker。破坏性迁移须备份和独立确认，不随main提交自动执行。
+Monad 按交易设置的 Gas 上限收费，页面提供预计费用，最终由钱包确认。[官方 Gas 说明](https://docs.monad.xyz/developer-essentials/gas-pricing)。不要提供私钥、助记词或原始签名。
 
-## 5. 验收与回滚
+## 5. 分两步启用
 
-CI检查安装/格式/lint/types/build/unit/runtime/Foundry/Anvil/E2E/dry-run；Cloudflare实际发布状态另看check-run。记录devPreview及main正式URL、buildID、revision与能力变量；构建成功不是完整页面/签名兼容验收。
+数据库就绪后可启用 `CLOUD_ENABLED` 与 `MODULES_ENABLED`。完成原生 MON 合约登记后，启用 `GROUP_PUBLISH_ENABLED`、`MODULE_PUBLISH_ENABLED`。完成真实钱包小额流程检查后再启用 `NETWORK_WRITES_ENABLED`。
 
-探针实际钱包验收在/lab完成，见[操作说明](TESTNET_LAB.md)。Group综合验收见[总计划M1-D](../planning/DEVELOPMENT_PLAN.md#5-m1-d真实综合验收可后置穿插)。无真实hash前不标C-T03通过。主网门禁独立，不能为了结束阶段自动打开。
+私有桶就绪后启用 `ATTACHMENTS_ENABLED`。始终保持 `MAINNET_ENABLED=false`、`TESTNET_LAB_ENABLED=false`、`STORAGE_ENABLED=false`、`BACKGROUND_ENABLED=false`；旧 ASSET_ALLOWLIST/CONTRACT_REGISTRY 保持空值。
 
-回滚网站不能回滚数据库或链上交易；已有探针款仍按原合约可退。更换构建会影响精确runtime匹配，应保留原源码/版本和退出方式，不静默令旧款无入口。
+运行配置检查、构建、部署预检，再通过 main 发布。核对 `/api/v1/health` 与 `/api/v1/config` 的 revision、环境、链、合约和开关。
 
-## 6. 官方依据
+## 6. 线上验收
 
-- https://developers.cloudflare.com/workers/previews/get-started/
-- https://developers.cloudflare.com/workers/previews/configuration/
-- https://developers.cloudflare.com/workers/previews/resources/
-- https://developers.cloudflare.com/workers/ci-cd/builds/configuration/
+- 三种真实钱包分别连接、拒绝请求、换账号、换网络、刷新和重新进入。
+- 创建、登录、发布、分享；另一浏览器能打开同一规则。
+- 每种工具完成一笔小额 MON 正常流程和一笔适用的退款/取消流程；记录真实交易链接和到账。
+- Deliver / Milestones 附件仅双方可读取，匿名访问被拒绝。
+- 手机检查连接、付款确认、等待、恢复与领取。
 
-公共文档和dry-run不替代账户内运行验收；当前具体证据在阶段验收与PR中。
+本地 Anvil、模拟钱包、数据库和浏览器回归属于工程验证。真实钱包、公开部署与线上到账单独验收。
+
+## 7. 回滚
+
+网站回滚不能撤销链上交易。保留原合约配置与源码，保证已付款 Box 的退款、领取和恢复入口；先停新收款，再处理已有权益。0005 只增加币种区分，不删除旧记录，也不能把 legacy 数据改标为 MON。

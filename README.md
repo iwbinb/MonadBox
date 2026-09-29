@@ -2,7 +2,7 @@
 
 **一个链接，按约定完成收款、退款与分账。**
 
-面向个人、创作者、社区和小团队的稳定币支付工具集合站：Group、Split、Deliver、Attend、Milestones、Rewards。
+面向个人、创作者、社区和小团队的Monad 测试网原生 MON 支付工具站：Group、Split、Deliver、Attend、Milestones、Rewards。
 
 ## 从这里开始
 
@@ -11,7 +11,7 @@
 - [交付与演示包](docs/engineering/DELIVERY_PACKAGE.md)：复现步骤、功能演示、验收矩阵和外部待办。
 - [开发约定](AGENTS.md)：执行范围、Git、资金与验证规则。
 
-六工具已实现本地草稿、SIWE登录、D1云端规则、冻结发布、正常结算/异常退出、credit提款及交易恢复，Deliver与Milestones另支持双方私密附件。支持中英文与手机视口。工程证据与外部验收分开：真实资源、公开合约、钱包/设备、用户试用及独立审阅后置，公众业务和主网默认关闭。
+六工具已实现本地草稿、SIWE登录、D1云端规则、冻结发布、正常结算/异常退出、credit提款及交易恢复，Deliver与Milestones另支持双方私密附件。按已选设计稿统一首页、六工具、工作台、钱包与付款页面，支持中英文与手机视口。钱包支持 MetaMask、Keplr、OKX；MON 使用18位精度，直接支付，无代币授权步骤。工程证据与外部验收分开：真实资源、公开合约、钱包/设备、用户试用及独立审阅后置，公众业务和主网默认关闭。
 
 ## 工程地图
 
@@ -50,6 +50,6 @@ pnpm dev
 
 ## 网站与链上边界
 
-[正式站](https://monadbox.iwbinb.workers.dev/) 使用一个 `monadbox` Worker：main 正式发布、dev Worker Previews，配置见[部署说明](docs/engineering/DEPLOYMENT.md)。网站 Production 不等于 Monad Mainnet。
+[正式站](https://monadbox.iwbinb.workers.dev/) 使用一个 `monadbox` Worker：main 直接发布至 Production，不使用 Preview，配置见[部署说明](docs/engineering/DEPLOYMENT.md)。网站 Production 不等于 Monad Mainnet。
 
 服务器不保管钱包密钥；用户显式签名每笔操作。D1 不是资金权威；Group 成团不证明现实交付，credit 不等于钱包已到账。真实测试后置不阻塞编码，公开资金及主网放行另行验收。

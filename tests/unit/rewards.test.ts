@@ -15,7 +15,7 @@ import {
 import { moduleActions } from '../../src/shared/modules/chain';
 import type { ModuleSnapshot } from '../../src/shared/modules/chain';
 import { parseRewardList } from '../../src/shared/modules/rewards';
-import { TOKEN } from '../../src/shared/lab/network';
+import { TOKEN } from '../../src/shared/network';
 const a = '0x1111111111111111111111111111111111111111',
   b = '0x2222222222222222222222222222222222222222',
   m = '0x3333333333333333333333333333333333333333',
@@ -84,10 +84,10 @@ const s: ModuleSnapshot = {
 };
 describe('Rewards exact list and claim boundaries', () => {
   it('parses CSV or tab header and sorts wallets without detaching amounts', () => {
-    expect(parseRewardList(`address,amount\n${b},0.000070\n${a},0.000031`)).toEqual(
-      data.recipients,
-    );
-    expect(parseRewardList(`address\tamount_ausd\r\n${a}\t0.000031`)).toEqual(
+    expect(
+      parseRewardList(`address,amount\n${b},0.000000000000000070\n${a},0.000000000000000031`),
+    ).toEqual(data.recipients);
+    expect(parseRewardList(`address\tamount_mon\r\n${a}\t0.000000000000000031`)).toEqual(
       data.recipients.slice(0, 1),
     );
   });
@@ -98,7 +98,7 @@ describe('Rewards exact list and claim boundaries', () => {
       `${a},1,name`,
       `${a},0`,
       `${a},1e6`,
-      `${a},0.0000001`,
+      `${a},0.0000000000000000001`,
       'x'.repeat(20001),
       Array(101).fill(`${a},1`).join('\n'),
     ])
@@ -111,13 +111,18 @@ describe('Rewards exact list and claim boundaries', () => {
   it('supports 100 wallets and the full integer range but rejects aggregate overflow', () => {
     expect(
       parseRewardList(
-        Array.from({ length: 100 }, (_, n) => `${toHex(n + 1, { size: 20 })},0.000001`).join('\n'),
+        Array.from(
+          { length: 100 },
+          (_, n) => `${toHex(n + 1, { size: 20 })},0.000000000000000001`,
+        ).join('\n'),
       ),
     ).toHaveLength(100);
-    expect(parseRewardList(`${a},${formatUnits(MAX_UINT256, 6)}`)[0]!.amount).toBe(
+    expect(parseRewardList(`${a},${formatUnits(MAX_UINT256, 18)}`)[0]!.amount).toBe(
       MAX_UINT256.toString(),
     );
-    expect(() => parseRewardList(`${a},${formatUnits(MAX_UINT256, 6)}\n${b},0.000001`)).toThrow();
+    expect(() =>
+      parseRewardList(`${a},${formatUnits(MAX_UINT256, 18)}\n${b},0.000000000000000001`),
+    ).toThrow();
   });
   it('validates sorted unique fixed rules and strictly ordered windows', () => {
     for (const patch of [

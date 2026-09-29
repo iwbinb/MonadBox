@@ -265,190 +265,244 @@ function Workspace({
     navigate(url.pathname);
   }
   const selected = rows.filter((r) => inView(r, view));
+  const chainRows = rows.filter((r) => r.known);
+  const amountsReady =
+    !!wallet.actor && !listing && chainRows.every((r) => r.credit !== undefined && !r.error);
+  const total = (field: 'credit' | 'locked') =>
+    amountsReady
+      ? formatUnits(
+          chainRows.reduce((sum, r) => sum + BigInt(r[field] ?? '0'), 0n),
+          18,
+        )
+      : '—';
+  const pendingCount = rows.filter((r) => r.pending).length;
   return (
     <section className="container cloud-page workspace-page">
       <div className="page-heading">
         <div>
           <h1>{t('My boxes', '我的 Box')}</h1>
           <p>
-            {t('Drafts, payments and the next step for your funds.', '草稿、付款与资金下一步。')}
+            {t('Your agreements, payments and next steps.', '每一份约定，每一笔进展，都在这里。')}
           </p>
         </div>
         <Link className="button primary" to="/#tools">
-          {t('Create a box', '创建 Box')}
+          {t('Create Box', '创建 Box')}
         </Link>
       </div>
-      <div className="workspace-start">
-        <div className="cloud-card">
-          <h2>{t('Your funds', '我的资金')}</h2>
-          <WalletChoice
-            value={wallet}
-            busy={busy}
-            connect={() =>
-              void run(async () => {
-                await wallet.connect();
-              })
-            }
-          />
-          <button
-            className="button secondary"
-            disabled={busy || listing || !wallet.actor}
-            onClick={() => void run(verify)}
-          >
-            {t('Check chain rights', '核验链上权益')}
-          </button>
-          {progress ? (
-            <p role="status">
-              {t('Checked', '已核验')} {progress}
-            </p>
-          ) : null}
-          <p className="small muted">
-            {t(
-              'Connect to load this browser’s records. Check rights to read current claimable credit; unchecked or failed reads never display zero.',
-              '连接后加载本浏览器记录。核验权益后显示当前可领取款；未核验或查询失败不会显示为零。',
-            )}
-          </p>
+      <WalletChoice
+        value={wallet}
+        busy={busy}
+        connect={() =>
+          void run(async () => {
+            await wallet.connect();
+          })
+        }
+      />
+      <div className="workspace-summary">
+        <div>
+          <span>{t('My claimable funds', '我的可领取款')}</span>
+          <strong>
+            {total('credit')} <small>MON</small>
+          </strong>
+          <p>{t('Withdraw to receive funds in your wallet', '提取后转入你的钱包')}</p>
         </div>
-        <div className="cloud-card">
-          <h2>{t('Saved in the cloud', '云端保存')}</h2>
+        <div>
+          <span>{t('Funds held in tracked Boxes', '已记录 Box 的保留款')}</span>
+          <strong>
+            {total('locked')} <small>MON</small>
+          </strong>
+          <p>{t('Includes funds held for all participants', '包含这些 Box 全部参与者的保留款')}</p>
+        </div>
+        <div>
+          <span>{t('Needs attention', '待处理')}</span>
+          <strong>
+            {pendingCount} <small>{t('Boxes', '项')}</small>
+          </strong>
+          <button className="text-link" onClick={() => setView('pending')}>
+            {t('View next steps', '查看下一步')}
+          </button>
+        </div>
+      </div>
+      <div className="workspace-toolbar">
+        <button
+          className="button secondary"
+          disabled={busy || listing || !wallet.actor}
+          onClick={() => void run(verify)}
+        >
+          {busy ? t('Checking…', '核验中…') : t('Refresh balances', '刷新资金状态')}
+        </button>
+        <span className="muted small" role="status">
+          {(progress ? `${t('Checked', '已核验')} ${progress}` : '') ||
+            (amountsReady
+              ? t('Amounts from verified chain records', '金额来自已核验链上记录')
+              : t('Connect and refresh to verify amounts', '连接钱包并刷新后显示已核验金额'))}
+        </span>
+      </div>
+      {pendingCount > 0 ? (
+        <div className="notice attention-strip">
+          <span>
+            {t(
+              'Some Boxes need your attention. Review their current state before acting.',
+              '有 Box 等待你处理，请查看当前状态后继续。',
+            )}
+          </span>
+          <button className="text-link" onClick={() => setView('pending')}>
+            {t('View', '查看')}
+          </button>
+        </div>
+      ) : null}
+      {error ? <p role="alert">{error}</p> : null}
+      <div className="workspace-table-panel">
+        <div className="tabs" aria-label={t('Box views', 'Box视图')}>
+          {(
+            [
+              ['created', t('Created by me', '我创建的')],
+              ['joined', t('Joined by me', '我参与的')],
+              ['pending', t('Needs attention', '待处理')],
+              ['claim', t('To claim', '可领取')],
+              ['history', t('History', '历史')],
+            ] as const
+          ).map(([key, label]) => (
+            <button key={key} aria-pressed={view === key} onClick={() => setView(key)}>
+              {label}
+            </button>
+          ))}
+        </div>
+        {selected.length ? (
+          <div className="workspace-table-scroll">
+            <table className="workspace-table">
+              <thead>
+                <tr>
+                  <th>Box</th>
+                  <th>{t('Status', '状态')}</th>
+                  <th>{t('My claimable funds', '我的可领取款')}</th>
+                  <th>{t('Next step', '下一步')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {selected.map((row) => (
+                  <tr key={row.id}>
+                    <td>
+                      <Link to={row.href}>
+                        <strong>{row.title}</strong>
+                      </Link>
+                      <p className="small muted">
+                        {row.tool} ·{' '}
+                        {row.source === 'local'
+                          ? t('Local draft', '本地草稿')
+                          : row.source === 'cloud'
+                            ? t('Saved draft', '已保存草稿')
+                            : t('On-chain', '链上 Box')}
+                      </p>
+                    </td>
+                    <td>
+                      <span className="status-label">{statusLabel(row.state, t)}</span>
+                      {row.error ? <p className="field-error small">{row.error}</p> : null}
+                    </td>
+                    <td>
+                      {row.credit !== undefined
+                        ? `${formatUnits(BigInt(row.credit), 18)} MON`
+                        : '—'}
+                      {row.withdrawn !== undefined && BigInt(row.withdrawn) > 0n ? (
+                        <p className="small muted">
+                          {t('Transferred', '已转入钱包')} {formatUnits(BigInt(row.withdrawn), 18)}{' '}
+                          MON
+                        </p>
+                      ) : null}
+                      {row.block ? (
+                        <p className="small muted">
+                          {t('Block', '区块')} {row.block}
+                        </p>
+                      ) : null}
+                    </td>
+                    <td>
+                      <Link className="text-link" to={row.href}>
+                        {row.known
+                          ? t('View actions', '查看操作')
+                          : t('Continue editing', '继续编辑')}
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="workspace-empty">
+            <h2>{t('No Boxes here yet', '这里还没有 Box')}</h2>
+            <p>
+              {t(
+                'Create your first Box, or open a shared link to join.',
+                '创建你的第一个 Box，或打开分享链接参与合作。',
+              )}
+            </p>
+            <Link className="text-link" to="/#tools">
+              {t('Explore the six tools', '浏览六个工具')}
+            </Link>
+          </div>
+        )}
+      </div>
+      <div className="workspace-secondary">
+        <details className="cloud-card">
+          <summary>{t('Cloud drafts and account', '云端草稿与账号')}</summary>
           {cloud ? (
             session ? (
               <Header session={session} onLogout={() => setSession(null)} />
             ) : loading ? (
-              <p>{t('Checking session…', '核对登录…')}</p>
+              <p>{t('Loading…', '加载中…')}</p>
             ) : (
               <Login onLogin={setSession} />
             )
           ) : (
             <p>
               {t(
-                'Cloud is not enabled here. Local drafts remain available.',
-                '本环境未启用云端，可继续使用本地草稿。',
+                'Cloud storage is not configured. Your local drafts are available.',
+                '云端存储尚未配置，本地草稿可正常使用。',
               )}
             </p>
           )}
           <p>
-            <Link to="/app/group-drafts">{t('Group drafts', '成团草稿')}</Link> ·{' '}
-            <Link to="/app/module-drafts">{t('Payment drafts', '付款草稿')}</Link>
-          </p>
-        </div>
-      </div>
-      <form
-        className="cloud-card"
-        onSubmit={(e) => {
-          e.preventDefault();
-          void run(restore);
-        }}
-      >
-        <label>
-          {t('Restore from an original public link', '通过原公开链接恢复')}
-          <input
-            type="text"
-            value={link}
-            onChange={(e) => setLink(e.target.value)}
-            placeholder="/box/…"
-            required
-          />
-        </label>
-        <button className="button secondary" disabled={busy}>
-          {t('Verify and open link', '核验并打开链接')}
-        </button>
-        <p className="small muted">
-          {t(
-            'This list combines local records and your signed-in cloud creations. Another browser needs the original link to find participation; a missing row does not mean missing funds.',
-            '本列表汇总本地记录和登录账号的云端创建记录。其他浏览器需用原链接查找参与权益；没有记录不代表没有资金。',
-          )}
-        </p>
-      </form>
-      {error ? <p role="alert">{error}</p> : null}
-      {rows.some((r) => r.known && r.credit === undefined) ? (
-        <p role="status">
-          {t(
-            'Some amounts are unverified. Check chain rights or open each original link; this is not a zero balance.',
-            '部分金额尚未核验。请核验权益或打开原链接，未核验不代表余额为零。',
-          )}
-        </p>
-      ) : null}
-      <div className="tabs" aria-label={t('Box views', 'Box视图')}>
-        {(
-          [
-            ['created', t('Created by me', '我创建的')],
-            ['joined', t('Joined by me', '我参与的')],
-            ['pending', t('Needs attention', '待处理')],
-            ['claim', t('To claim', '可领取')],
-            ['history', t('History', '历史')],
-          ] as const
-        ).map(([key, label]) => (
-          <button key={key} aria-pressed={view === key} onClick={() => setView(key)}>
-            {label}
-          </button>
-        ))}
-      </div>
-      {view === 'claim' && !wallet.actor ? (
-        <p role="status">
-          {t(
-            'Connect your funds wallet and check rights to find claimable credit.',
-            '连接资金钱包并核验权益后查看可领取款。',
-          )}
-        </p>
-      ) : null}
-      <div className="workspace-grid">
-        {selected.map((row) => (
-          <article className="cloud-card" key={row.id}>
-            <span className="status-label">
-              {row.tool} ·{' '}
-              {row.source === 'local'
-                ? t('Local draft', '本地草稿')
-                : row.source === 'cloud'
-                  ? t('Cloud draft', '云端草稿')
-                  : t('On-chain box', '链上 Box')}
-            </span>
-            <h2>
-              <Link to={row.href}>{row.title}</Link>
-            </h2>
-            <p>{statusLabel(row.state, t)}</p>
-            {row.credit !== undefined ? (
-              <dl className="workspace-amounts">
-                <dt>{t('My claimable credit', '我的可领取款')}</dt>
-                <dd>{formatUnits(BigInt(row.credit), 6)} AUSD</dd>
-                <dt>{t('My already transferred funds', '我的已转出款')}</dt>
-                <dd>{formatUnits(BigInt(row.withdrawn!), 6)} AUSD</dd>
-                <dt>{t('Total still held in this box', '该 Box 总保留款')}</dt>
-                <dd>{formatUnits(BigInt(row.locked!), 6)} AUSD</dd>
-              </dl>
-            ) : row.known ? (
-              <p>
-                {t('Amounts have not been verified for this wallet.', '尚未核验当前钱包的金额。')}
-              </p>
-            ) : null}
-            {row.block ? (
-              <p className="small muted">
-                {t('Verified block', '已核验区块')} {row.block}
-              </p>
-            ) : null}
-            {row.error ? <p role="status">{row.error}</p> : null}
-            <Link className="button secondary" to={row.href}>
-              {row.known
-                ? t('Open rules and actions', '查看规则与操作')
-                : t('Continue draft', '继续编辑草稿')}
+            <Link className="text-link" to="/app/group-drafts">
+              {t('Group drafts', '成团草稿')}
+            </Link>{' '}
+            ·{' '}
+            <Link className="text-link" to="/app/module-drafts">
+              {t('Other drafts', '其他草稿')}
             </Link>
-          </article>
-        ))}
-      </div>
-      {!selected.length ? (
-        <div className="cloud-card">
-          <h2>{t('No matching records', '暂无符合条件的记录')}</h2>
-          <p>
+          </p>
+        </details>
+        <details className="cloud-card">
+          <summary>{t('Find a Box from its original link', '通过原链接找回 Box')}</summary>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              void run(restore);
+            }}
+          >
+            <label>
+              {t('Original public link', '原公开链接')}
+              <input
+                value={link}
+                onChange={(e) => setLink(e.target.value)}
+                placeholder="/box/…"
+                required
+              />
+            </label>
+            <button className="button secondary" disabled={busy}>
+              {t('Verify and open', '核验并打开')}
+            </button>
+          </form>
+          <p className="small muted">
             {t(
-              'Create a draft or restore an original public link. Claimable and actionable states require a chain check.',
-              '可创建草稿或恢复原公开链接。可领取金额与当前可执行动作需要核验链上状态。',
+              'Records from another browser require their original links.',
+              '查找其他浏览器中的参与记录，需要原公开链接。',
             )}
           </p>
-        </div>
-      ) : null}
-      <p>
-        <Link to="/app/group-activity">{t('Group V1 recovery history', 'Group V1 恢复记录')}</Link>{' '}
-        · <Link to="/app/module-activity">{t('Payment recovery history', '付款恢复记录')}</Link>
+        </details>
+      </div>
+      <p className="small muted">
+        <Link to="/app/group-activity">{t('Group transaction recovery', '成团交易恢复')}</Link> ·{' '}
+        <Link to="/app/module-activity">{t('Other transaction recovery', '其他交易恢复')}</Link>
       </p>
     </section>
   );

@@ -2,15 +2,11 @@ import { test, expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import type { Address } from 'viem';
-import { encodeFunctionData, erc20Abi } from 'viem';
-import { origin, client, wallet, inject, mine, warp } from '../fixtures/funds-browser';
-import { TOKEN } from '../../src/shared/lab/network';
+import { encodeFunctionData } from 'viem';
+import { origin, client, wallet, inject, mine, warp, connect } from '../fixtures/funds-browser';
 import type { ModuleBox, ModuleData } from '../../src/shared/modules/model';
 import { moduleCall, moduleAbi } from '../../src/shared/modules/terms';
 import type { SessionInfo } from '../../src/shared/cloud/model';
-async function connect(page: Page) {
-  await page.getByRole('button', { name: 'Connect funds wallet', exact: true }).click();
-}
 async function action(page: Page, name: string) {
   await page.getByRole('button', { name: 'Prepare: ' + name, exact: true }).click();
   await page
@@ -48,12 +44,13 @@ test('Split browser publication and final payment; Group V2 successful split and
   await page.getByRole('textbox', { name: 'Recipient 2', exact: true }).fill(partner);
   await page.getByRole('button', { name: 'Review rules', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Frozen rules preview' })).toContainText(
-    '70.00% · 0.7 AUSD',
+    '70.00% · 0.7 MON',
   );
   await page.getByRole('button', { name: 'Save reviewed draft', exact: true }).click();
   await expect(page).toHaveURL(/\/app\/module-drafts\//);
   await page.goto(origin + '/app/modules');
-  await page.getByRole('button', { name: 'Connect and prepare sign-in', exact: true }).click();
+  await connect(page);
+  await page.getByRole('button', { name: 'Prepare sign-in', exact: true }).click();
   await page.getByRole('button', { name: 'Sign in (no payment)', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Sign out', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Copy to cloud', exact: true }).click();
@@ -71,18 +68,6 @@ test('Split browser publication and final payment; Group V2 successful split and
   const publicLink = page.getByRole('link', { name: 'Open verified public link', exact: true });
   await expect(publicLink).toBeVisible({ timeout: 20000 });
   const path = (await publicLink.getAttribute('href'))!;
-  const mock = JSON.parse(readFileSync('contracts/out/MockToken.sol/MockToken.json', 'utf8'));
-  for (const actor of [payer, second])
-    await client.waitForTransactionReceipt({
-      hash: await wallet.writeContract({
-        account: creator,
-        address: TOKEN,
-        abi: mock.abi,
-        functionName: 'mint',
-        args: [actor, 1000000n],
-      }),
-    });
-  await mine();
   const payerContext = await browser.newContext({ viewport: page.viewportSize() ?? undefined });
   const recipientContext = await browser.newContext({ viewport: page.viewportSize() ?? undefined });
   try {
@@ -95,19 +80,21 @@ test('Split browser publication and final payment; Group V2 successful split and
     await payPage.goto(origin + path);
     await connect(payPage);
     await expect(
-      payPage.getByText('Final payment: the payer cannot force a refund after payment.', {
-        exact: false,
-      }),
+      payPage
+        .locator('.public-payment-rule')
+        .getByText('Final payment: the payer cannot force a refund after payment.', {
+          exact: false,
+        }),
     ).toBeVisible();
     await payPage
-      .getByRole('textbox', { name: 'Final payment (AUSD)', exact: true })
-      .fill('0.000101');
-    await action(payPage, 'Approve exact amount');
+      .getByRole('textbox', { name: 'Final payment (MON)', exact: true })
+      .fill('0.000000000000000101');
+
     await action(payPage, 'Make final payment');
     await receivePage.goto(origin + path);
     await connect(receivePage);
     await expect(receivePage.getByText('Withdrawable credit', { exact: false })).toContainText(
-      '0.000071 AUSD',
+      '0.000000000000000071 MON',
     );
     await receivePage
       .getByRole('button', { name: 'Prepare: Withdraw to my wallet', exact: true })
@@ -127,32 +114,37 @@ test('Split browser publication and final payment; Group V2 successful split and
       recipient,
     );
     await receivePage.goto(origin + '/app');
+    await receivePage.locator('summary').filter({ hasText: 'Find a Box' }).click();
     await receivePage
-      .getByRole('textbox', { name: 'Restore from an original public link', exact: true })
+      .getByRole('textbox', { name: 'Original public link', exact: true })
       .fill(path!);
-    await receivePage.getByRole('button', { name: 'Verify and open link', exact: true }).click();
+    await receivePage.getByRole('button', { name: 'Verify and open', exact: true }).click();
     await expect(receivePage).toHaveURL(origin + path);
     await receivePage.goto(origin + '/app');
     await connect(receivePage);
-    await receivePage.getByRole('button', { name: 'Check chain rights', exact: true }).click();
+    await receivePage.getByRole('button', { name: 'Refresh balances', exact: true }).click();
     await receivePage.getByRole('button', { name: 'To claim', exact: true }).click();
-    await expect(receivePage.locator('.workspace-grid article')).toContainText('0.000071 AUSD');
-    await receivePage.getByRole('link', { name: 'Open rules and actions', exact: true }).click();
+    await expect(receivePage.locator('.workspace-table tbody tr')).toContainText(
+      '0.000000000000000071 MON',
+    );
+    await receivePage.getByRole('link', { name: 'View actions', exact: true }).click();
     await connect(receivePage);
     await action(receivePage, 'Withdraw to my wallet');
     await expect(
       receivePage.getByText('Already transferred to wallet', { exact: false }),
-    ).toContainText('0.000071 AUSD');
+    ).toContainText('0.000000000000000071 MON');
     await receivePage.goto(origin + '/app');
     await connect(receivePage);
-    await receivePage.getByRole('button', { name: 'Check chain rights', exact: true }).click();
+    await receivePage.getByRole('button', { name: 'Refresh balances', exact: true }).click();
     await expect(
       receivePage.getByRole('status').filter({ hasText: 'Checked 1 / 1' }),
     ).toBeVisible();
     await receivePage.getByRole('button', { name: 'To claim', exact: true }).click();
-    await expect(receivePage.locator('.workspace-grid article')).toHaveCount(0);
+    await expect(receivePage.locator('.workspace-table tbody tr')).toHaveCount(0);
     await receivePage.getByRole('button', { name: 'History', exact: true }).click();
-    await expect(receivePage.locator('.workspace-grid article')).toContainText('0.000071 AUSD');
+    await expect(receivePage.locator('.workspace-table tbody tr')).toContainText(
+      '0.000000000000000071 MON',
+    );
     // Two immutable V2 groups on the same isolated local chain. Publication HTTP uses the real verifier.
     const session = (await (await page.request.get(origin + '/api/v1/auth/session')).json())
       .data as SessionInfo;
@@ -207,21 +199,13 @@ test('Split browser publication and final payment; Group V2 successful split and
     for (const b of groups) {
       await payPage.goto(origin + '/box/' + b.publicId);
       await connect(payPage);
-      await action(payPage, 'Approve exact amount');
+
       await action(payPage, 'Pay and join');
     }
     const success = groups[0]!,
       failed = groups[1]!,
       p = success.publication!.publication;
     for (const call of [
-      {
-        to: TOKEN,
-        data: encodeFunctionData({
-          abi: erc20Abi,
-          functionName: 'approve',
-          args: [p.deployment.address, 100000n],
-        }),
-      },
       {
         to: p.deployment.address,
         data: encodeFunctionData({
@@ -232,7 +216,7 @@ test('Split browser publication and final payment; Group V2 successful split and
       },
     ])
       await client.waitForTransactionReceipt({
-        hash: await wallet.sendTransaction({ account: second, ...call, value: 0n }),
+        hash: await wallet.sendTransaction({ account: second, ...call, value: 100000n }),
       });
     await warp(start + 3600);
     await payPage.goto(origin + '/box/' + failed.publicId);
@@ -246,7 +230,7 @@ test('Split browser publication and final payment; Group V2 successful split and
     await receivePage.goto(origin + '/box/' + success.publicId);
     await connect(receivePage);
     await expect(receivePage.getByText('Withdrawable credit', { exact: false })).toContainText(
-      '0.14 AUSD',
+      '0.00000000000014 MON',
     );
     await action(receivePage, 'Withdraw to my wallet');
     expect(

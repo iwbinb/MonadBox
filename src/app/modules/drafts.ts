@@ -8,7 +8,8 @@ const schema = z.strictObject({
   data: moduleDataSchema,
 });
 export type ModuleDraft = z.infer<typeof schema>;
-export const draftKey = (environment: string) => `monadbox.module-drafts.v1:${environment}:10143`;
+export const draftKey = (environment: string) =>
+  `monadbox.module-drafts.mon-v2:${environment}:10143`;
 export function readDrafts(key: string): ModuleDraft[] {
   const raw = localStorage.getItem(key);
   if (!raw) return [];
@@ -60,11 +61,21 @@ export async function deleteDraft(key: string, original: ModuleDraft) {
   });
 }
 export function exportModule(data: ModuleData) {
-  return JSON.stringify({ schema: 1, chainId: 10143, data: moduleDataSchema.parse(data) }, null, 2);
+  return JSON.stringify(
+    { schema: 2, asset: 'MON', decimals: 18, chainId: 10143, data: moduleDataSchema.parse(data) },
+    null,
+    2,
+  );
 }
 export function importModule(raw: string) {
   if (raw.length > 16000) throw Error('Import too large / 导入内容过大');
   return z
-    .strictObject({ schema: z.literal(1), chainId: z.literal(10143), data: moduleDataSchema })
+    .strictObject({
+      schema: z.literal(2),
+      asset: z.literal('MON'),
+      decimals: z.literal(18),
+      chainId: z.literal(10143),
+      data: moduleDataSchema,
+    })
     .parse(JSON.parse(raw)).data;
 }

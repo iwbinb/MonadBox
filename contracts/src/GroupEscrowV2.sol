@@ -41,7 +41,7 @@ contract GroupEscrowV2 is PullCredit {
             return g.activeCount >= g.terms.minParticipants ? State.READY : State.REFUNDABLE;
         return g.state;
     }
-    function contribute(bytes32 id) external intakeOpen nonReentrant {
+    function contribute(bytes32 id) external payable intakeOpen nonReentrant {
         Group storage g = _group(id);
         if (g.state != State.OPEN) revert InvalidState();
         if (block.timestamp < g.terms.startsAt) revert WindowNotStarted();

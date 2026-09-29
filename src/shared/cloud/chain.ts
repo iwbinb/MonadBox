@@ -1,7 +1,7 @@
 import { encodeFunctionData, keccak256, stringToHex } from 'viem';
 import type { Address, Hex } from 'viem';
-import { makeClient, TOKEN, inspectNetwork } from '../lab/network';
-import type { ChainClient } from '../lab/network';
+import { makeClient, TOKEN, inspectNetwork } from '../network';
+import type { ChainClient } from '../network';
 import { recoverNonce } from '../nonce-recovery';
 import { groupArtifact } from '../group/generated/group';
 import { groupMetadata, groupTerms, groupTermsHash, groupId } from '../group/terms';

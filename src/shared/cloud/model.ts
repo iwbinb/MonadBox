@@ -6,6 +6,7 @@ export const addressSchema = z
   .string()
   .refine((x) => isAddress(x) && !/^0x0{40}$/i.test(x))
   .transform((x) => getAddress(x));
+export const assetSchema = z.literal('0x0000000000000000000000000000000000000000');
 export const hashSchema = z
   .string()
   .regex(/^0x[0-9a-fA-F]{64}$/)
@@ -14,7 +15,7 @@ export const deploymentSchema = z.strictObject({
   chainId: z.literal(10143),
   version: z.literal(1),
   address: addressSchema,
-  asset: addressSchema,
+  asset: assetSchema,
   intakeAdmin: addressSchema,
   runtimeHash: hashSchema,
 });

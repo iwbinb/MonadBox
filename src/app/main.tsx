@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import { AppProvider } from './context';
+import { WalletProvider } from './shared/FundsWallet';
 import { Layout } from './components';
 import {
   HomePage,
@@ -13,6 +14,8 @@ import {
   NotFoundPage,
 } from './pages';
 import './styles.css';
+import './redesign.css';
+const SetupPage = lazy(() => import('./SetupPage'));
 const WorkspacePage = lazy(() => import('./WorkspacePage'));
 const PolicyPage = lazy(() => import('./PolicyPage'));
 const GroupActivityPage = lazy(() =>
@@ -88,73 +91,79 @@ createRoot(root).render(
   <React.StrictMode>
     <ErrorBoundary>
       <AppProvider>
-        <BrowserRouter>
-          <Routes>
-            <Route element={<Layout />}>
-              <Route index element={<HomePage />} />
-              <Route path="tools/:id" element={<ToolPage />} />
-              <Route path="app" element={groupSurface(<WorkspacePage />)} />
-              <Route path="help/refunds" element={<RefundsPage />} />
-              <Route path="status" element={<StatusPage />} />
-              <Route path="privacy" element={groupSurface(<PolicyPage kind="privacy" />)} />
-              <Route path="terms" element={groupSurface(<PolicyPage kind="terms" />)} />
-              <Route
-                path="lab"
-                element={
-                  <Suspense fallback={<p className="container">Loading lab / 加载实验室…</p>}>
-                    <LabPage />
-                  </Suspense>
-                }
-              />
-              <Route path="create/group" element={groupSurface(<GroupBuilderPage />)} />
-              <Route path="app/group-drafts" element={groupSurface(<GroupDraftListPage />)} />
-              <Route path="app/group-drafts/:draftId" element={groupSurface(<GroupDraftPage />)} />
-              <Route
-                path="app/group-drafts/:draftId/edit"
-                element={groupSurface(<GroupBuilderPage />)}
-              />
-              <Route
-                path="create/split"
-                element={groupSurface(<ModuleBuilderPage kind="split" />)}
-              />
-              <Route
-                path="create/group-split"
-                element={groupSurface(<ModuleBuilderPage kind="group" />)}
-              />
-              <Route
-                path="create/deliver"
-                element={groupSurface(<ModuleBuilderPage kind="deliver" />)}
-              />
-              <Route
-                path="create/rewards"
-                element={groupSurface(<ModuleBuilderPage kind="rewards" />)}
-              />
-              <Route
-                path="create/milestones"
-                element={groupSurface(<ModuleBuilderPage kind="milestones" />)}
-              />
-              <Route
-                path="create/attend"
-                element={groupSurface(<ModuleBuilderPage kind="attend" />)}
-              />
-              <Route path="create/:id" element={<UnavailablePage />} />
-              <Route path="app/module-drafts" element={groupSurface(<ModuleDraftsPage />)} />
-              <Route
-                path="app/module-drafts/:draftId"
-                element={groupSurface(<ModuleBuilderPage />)}
-              />
-              <Route path="app/modules" element={groupSurface(<CloudModulesPage />)} />
-              <Route path="app/modules/:id" element={groupSurface(<CloudModulePage />)} />
-              <Route path="app/module-activity" element={groupSurface(<ModuleActivityPage />)} />
-              <Route path="box/:id" element={groupSurface(<PublicModulePage />)} />
-              <Route path="app/group-activity" element={groupSurface(<GroupActivityPage />)} />
-              <Route path="app/groups" element={groupSurface(<CloudGroupsPage />)} />
-              <Route path="app/groups/:id" element={groupSurface(<CloudGroupPage />)} />
-              <Route path="b/:id" element={groupSurface(<PublicGroupPage />)} />
-              <Route path="*" element={<NotFoundPage />} />
-            </Route>
-          </Routes>
-        </BrowserRouter>
+        <WalletProvider>
+          <BrowserRouter>
+            <Routes>
+              <Route element={<Layout />}>
+                <Route index element={<HomePage />} />
+                <Route path="tools/:id" element={<ToolPage />} />
+                <Route path="app" element={groupSurface(<WorkspacePage />)} />
+                <Route path="help/refunds" element={<RefundsPage />} />
+                <Route path="status" element={<StatusPage />} />
+                <Route path="setup" element={groupSurface(<SetupPage />)} />
+                <Route path="privacy" element={groupSurface(<PolicyPage kind="privacy" />)} />
+                <Route path="terms" element={groupSurface(<PolicyPage kind="terms" />)} />
+                <Route
+                  path="lab"
+                  element={
+                    <Suspense fallback={<p className="container">Loading lab / 加载实验室…</p>}>
+                      <LabPage />
+                    </Suspense>
+                  }
+                />
+                <Route path="create/group" element={groupSurface(<GroupBuilderPage />)} />
+                <Route path="app/group-drafts" element={groupSurface(<GroupDraftListPage />)} />
+                <Route
+                  path="app/group-drafts/:draftId"
+                  element={groupSurface(<GroupDraftPage />)}
+                />
+                <Route
+                  path="app/group-drafts/:draftId/edit"
+                  element={groupSurface(<GroupBuilderPage />)}
+                />
+                <Route
+                  path="create/split"
+                  element={groupSurface(<ModuleBuilderPage kind="split" />)}
+                />
+                <Route
+                  path="create/group-split"
+                  element={groupSurface(<ModuleBuilderPage kind="group" />)}
+                />
+                <Route
+                  path="create/deliver"
+                  element={groupSurface(<ModuleBuilderPage kind="deliver" />)}
+                />
+                <Route
+                  path="create/rewards"
+                  element={groupSurface(<ModuleBuilderPage kind="rewards" />)}
+                />
+                <Route
+                  path="create/milestones"
+                  element={groupSurface(<ModuleBuilderPage kind="milestones" />)}
+                />
+                <Route
+                  path="create/attend"
+                  element={groupSurface(<ModuleBuilderPage kind="attend" />)}
+                />
+                <Route path="create/:id" element={<UnavailablePage />} />
+                <Route path="app/module-drafts" element={groupSurface(<ModuleDraftsPage />)} />
+                <Route
+                  path="app/module-drafts/:draftId"
+                  element={groupSurface(<ModuleBuilderPage />)}
+                />
+                <Route path="app/modules" element={groupSurface(<CloudModulesPage />)} />
+                <Route path="app/modules/:id" element={groupSurface(<CloudModulePage />)} />
+                <Route path="app/module-activity" element={groupSurface(<ModuleActivityPage />)} />
+                <Route path="box/:id" element={groupSurface(<PublicModulePage />)} />
+                <Route path="app/group-activity" element={groupSurface(<GroupActivityPage />)} />
+                <Route path="app/groups" element={groupSurface(<CloudGroupsPage />)} />
+                <Route path="app/groups/:id" element={groupSurface(<CloudGroupPage />)} />
+                <Route path="b/:id" element={groupSurface(<PublicGroupPage />)} />
+                <Route path="*" element={<NotFoundPage />} />
+              </Route>
+            </Routes>
+          </BrowserRouter>
+        </WalletProvider>
       </AppProvider>
     </ErrorBoundary>
   </React.StrictMode>,

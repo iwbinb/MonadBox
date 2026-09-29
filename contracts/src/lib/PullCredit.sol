@@ -31,6 +31,7 @@ abstract contract PullCredit is ReentrancyGuard {
     error NothingToWithdraw();
     error TransferAmountMismatch();
     error IntakePaused();
+    error NativeTransferFailed();
     error InvalidSignature();
 
     event BoxCreated(bytes32 indexed boxId, address indexed creator, address indexed asset, uint256 version, bytes32 termsHash, bytes32 metadataHash);
@@ -41,7 +42,7 @@ abstract contract PullCredit is ReentrancyGuard {
 
     constructor(address token, address admin) {
         if (block.chainid != CHAIN_ID) revert WrongChain();
-        if (token.code.length == 0 || admin == address(0)) revert InvalidTerms();
+        if ((token != address(0) && token.code.length == 0) || admin == address(0)) revert InvalidTerms();
         asset = IERC20(token);
         intakeAdmin = admin;
     }
@@ -61,9 +62,15 @@ abstract contract PullCredit is ReentrancyGuard {
     function _deposit(bytes32 id, address payer, uint256 amount) internal {
         if (amount == 0) revert InvalidTerms();
         locked[id] += amount; totalLocked += amount; totalDeposited += amount;
-        uint256 beforeBalance = asset.balanceOf(address(this));
-        asset.safeTransferFrom(payer, address(this), amount);
-        if (asset.balanceOf(address(this)) != beforeBalance + amount) revert TransferAmountMismatch();
+        if (address(asset) == address(0)) {
+            // Native MON is delivered with this exact call; direct transfers do not create credit.
+            if (msg.value != amount) revert TransferAmountMismatch();
+        } else {
+            if (msg.value != 0) revert TransferAmountMismatch();
+            uint256 beforeBalance = asset.balanceOf(address(this));
+            asset.safeTransferFrom(payer, address(this), amount);
+            if (asset.balanceOf(address(this)) != beforeBalance + amount) revert TransferAmountMismatch();
+        }
         emit Funded(id, payer, amount);
     }
     function _credit(bytes32 id, address recipient, uint256 amount, bytes32 reason) internal {
@@ -77,11 +84,16 @@ abstract contract PullCredit is ReentrancyGuard {
         if (amount == 0) revert NothingToWithdraw();
         creditForBox[id][beneficiary] = 0; creditOf[beneficiary] -= amount; totalCredits -= amount;
         withdrawnForBox[id][beneficiary] += amount; totalWithdrawn += amount;
-        uint256 beforeSender = asset.balanceOf(address(this));
-        uint256 beforeRecipient = asset.balanceOf(beneficiary);
-        asset.safeTransfer(beneficiary, amount);
-        if (asset.balanceOf(address(this)) != beforeSender - amount || asset.balanceOf(beneficiary) != beforeRecipient + amount)
-            revert TransferAmountMismatch();
+        if (address(asset) == address(0)) {
+            (bool sent,) = payable(beneficiary).call{value: amount}("");
+            if (!sent) revert NativeTransferFailed();
+        } else {
+            uint256 beforeSender = asset.balanceOf(address(this));
+            uint256 beforeRecipient = asset.balanceOf(beneficiary);
+            asset.safeTransfer(beneficiary, amount);
+            if (asset.balanceOf(address(this)) != beforeSender - amount || asset.balanceOf(beneficiary) != beforeRecipient + amount)
+                revert TransferAmountMismatch();
+        }
         emit Withdrawal(id, beneficiary, amount);
     }
 }

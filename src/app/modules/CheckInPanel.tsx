@@ -6,9 +6,9 @@ import type { ModulePublication } from '../../shared/modules/model';
 import type { ModuleSnapshot, ModuleActionOptions } from '../../shared/modules/chain';
 import { moduleSnapshot } from '../../shared/modules/chain';
 import { checkInTypedData, validateCheckIn } from '../../shared/modules/checkin';
-import { makeClient } from '../../shared/lab/network';
-import { requireWallet } from '../../shared/lab/wallet';
-import type { InjectedProvider } from '../../shared/lab/wallet';
+import { makeClient } from '../../shared/network';
+import { requireWallet } from '../../shared/wallet';
+import type { InjectedProvider } from '../../shared/wallet';
 export function CheckInPanel({
   publication: p,
   snapshot: s,

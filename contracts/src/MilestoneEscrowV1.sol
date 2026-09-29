@@ -36,7 +36,7 @@ contract MilestoneEscrowV1 is AgreementCredit {
         emit BoxCreated(id,msg.sender,address(asset),1,o.termsHash,t.metadataHash);
     }
     function getOffer(bytes32 id) external view returns(Offer memory){return _offer(id);}
-    function fund(bytes32 id) external intakeOpen nonReentrant {
+    function fund(bytes32 id) external payable intakeOpen nonReentrant {
         Offer storage o=_offer(id);if(o.state!=State.AWAITING_FUNDS)revert InvalidState();
         if(msg.sender!=o.terms.buyer)revert NotAuthorized();
         if(block.timestamp>=o.terms.fundBy)revert WindowClosed();

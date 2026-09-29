@@ -14,7 +14,7 @@ export function PrivateFiles({ publication: p }: { publication: ModulePublicatio
   const { state, t } = useApp(),
     enabled = state.status === 'ready' && state.config.capabilities.privateFiles;
   return (
-    <section className="cloud-card">
+    <section className="cloud-card private-files">
       <h2>{t('Private delivery files', '私密交付文件')}</h2>
       {enabled ? (
         <Files publication={p} />
@@ -63,12 +63,15 @@ function Files({ publication: p }: { publication: ModulePublication }) {
   }, [base, allowed, session?.address, revision]);
   return (
     <>
-      <p>
-        {t(
-          'Only the fixed buyer and seller may upload or download. Up to 5 files per delivery, 10 MiB each: UTF-8 .txt, .png or .jpg. Files may be removed 90 days after settlement; keep your own copies. Files are not malware-scanned; open only content you trust.',
-          '仅固定客户和服务者可以上传或下载。每次交付最多5件，每件10 MiB，支持 UTF-8 .txt、.png 或 .jpg。结算90天后文件可能被清理，请自行保存。未提供恶意软件扫描，请只打开可信内容。',
-        )}
-      </p>
+      <details className="file-policy">
+        <summary>{t('Private file access and limits', '文件权限与限制')}</summary>
+        <p>
+          {t(
+            'Only the fixed buyer and seller may upload or download. Up to 5 files per delivery, 10 MiB each: UTF-8 .txt, .png or .jpg. Files may be removed 90 days after settlement; keep your own copies. Files are not malware-scanned; open only content you trust.',
+            '仅固定客户和服务者可以上传或下载。每次交付最多5件，每件10 MiB，支持 UTF-8 .txt、.png 或 .jpg。结算90天后文件可能被清理，请自行保存。未提供恶意软件扫描，请只打开可信内容。',
+          )}
+        </p>
+      </details>
       {session ? (
         <Header session={session} onLogout={() => setSession(null)} />
       ) : loading ? (
@@ -86,6 +89,39 @@ function Files({ publication: p }: { publication: ModulePublication }) {
       ) : null}
       {allowed ? (
         <>
+          <ul className="cloud-list">
+            {rows.map((r) => (
+              <li key={r.id}>
+                <div>
+                  {r.state === 'ready' && r.mime !== 'text/plain' ? (
+                    <PrivateImage
+                      key={`${session.address}:${r.id}`}
+                      file={r}
+                      path={`/api/v1${base}/${r.id}`}
+                    />
+                  ) : null}
+                  {r.name} · {(r.bytes / 1024).toFixed(1)} KiB{' '}
+                  {d.tool === 'milestones' ? `· ${t('Stage', '阶段')} ${r.stageIndex + 1}` : ''}
+                  <details>
+                    <summary>{t('File integrity', '文件完整性')}</summary>
+                    <code>{r.sha256}</code>
+                  </details>
+                  {r.state === 'ready' ? (
+                    <a href={`/api/v1${base}/${r.id}`} download>
+                      {t('Download with access check', '核验权限并下载')}
+                    </a>
+                  ) : (
+                    <p>
+                      {t(
+                        'Upload reserved; choose the same file to retry.',
+                        '已预留上传，请选择同一文件重试。',
+                      )}
+                    </p>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
           {d.tool === 'milestones' ? (
             <label>
               {t('File stage', '文件所属阶段')}
@@ -194,34 +230,60 @@ function Files({ publication: p }: { publication: ModulePublication }) {
           >
             {t('Refresh file list', '刷新文件列表')}
           </button>
-          <ul className="cloud-list">
-            {rows.map((r) => (
-              <li key={r.id}>
-                <div>
-                  {r.name} · {(r.bytes / 1024).toFixed(1)} KiB{' '}
-                  {d.tool === 'milestones' ? `· ${t('Stage', '阶段')} ${r.stageIndex + 1}` : ''}
-                  <p>
-                    SHA-256: <code>{r.sha256}</code>
-                  </p>
-                  {r.state === 'ready' ? (
-                    <a href={`/api/v1${base}/${r.id}`} download>
-                      {t('Download with access check', '核验权限并下载')}
-                    </a>
-                  ) : (
-                    <p>
-                      {t(
-                        'Upload reserved; choose the same file to retry.',
-                        '已预留上传，请选择同一文件重试。',
-                      )}
-                    </p>
-                  )}
-                </div>
-              </li>
-            ))}
-          </ul>
         </>
       ) : null}
       {error ? <p role="alert">{error}</p> : null}
     </>
+  );
+}
+
+function PrivateImage({ file, path }: { file: PrivateFile; path: string }) {
+  const { t } = useApp(),
+    [open, setOpen] = useState(false),
+    [url, setUrl] = useState(''),
+    [error, setError] = useState('');
+  useEffect(() => {
+    if (!open) return;
+    const controller = new AbortController();
+    let objectUrl = '';
+    void (async () => {
+      const response = await fetch(path, { credentials: 'same-origin', signal: controller.signal });
+      if (!response.ok)
+        throw Error('Unable to preview this private file. / 暂时无法预览此私密文件。');
+      const body = await response.arrayBuffer();
+      if (
+        body.byteLength !== file.bytes ||
+        (await fileDigest(body)) !== file.sha256 ||
+        !validFileContent(body, file.mime)
+      )
+        throw Error('File verification failed. / 文件核验失败。');
+      if (controller.signal.aborted) return;
+      objectUrl = URL.createObjectURL(new Blob([body], { type: file.mime }));
+      setUrl(objectUrl);
+    })().catch((e) => {
+      if (!controller.signal.aborted) setError(errorText(e));
+    });
+    return () => {
+      controller.abort();
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [open, path, file.bytes, file.sha256, file.mime]);
+  return (
+    <div className="private-image-preview">
+      {url ? <img src={url} alt={file.name} /> : null}
+      <button
+        type="button"
+        className="button secondary"
+        onClick={() => {
+          setOpen(!open);
+          setUrl('');
+          setError('');
+        }}
+      >
+        {open ? t('Close image preview', '关闭图片预览') : t('Preview image', '预览图片')}
+      </button>
+      {open && !url && !error ? <p>{t('Loading private image…', '正在读取私密图片…')}</p> : null}
+      {error ? <p role="alert">{error}</p> : null}
+    </div>
   );
 }

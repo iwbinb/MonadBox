@@ -13,7 +13,6 @@ import {
   moduleId,
   termsHashFor,
   validatePublication,
-  approvalAmount,
 } from '../../shared/modules/terms';
 import type { ModuleChain } from '../../shared/modules/chain';
 import { authenticate, CloudError, limited } from '../cloud/router';
@@ -22,6 +21,7 @@ const uuid = z.string().uuid();
 const now = () => Math.floor(Date.now() / 1000);
 const hash = (text: string) => keccak256(stringToHex(text));
 export interface Row {
+  currency: string;
   id: string;
   public_id: string;
   owner: string;
@@ -37,6 +37,7 @@ export interface Row {
   verified_block_hash: Hex | null;
 }
 export function fromRow(r: Row): ModuleBox {
+  if (r.currency !== 'MON') throw new CloudError('LEGACY_ASSET', 409);
   const data = moduleDataSchema.parse(JSON.parse(r.data_json));
   if (r.tool !== data.tool || r.metadata !== metadataFor(data))
     throw new CloudError('INTEGRITY_ERROR', 503);
@@ -44,22 +45,8 @@ export function fromRow(r: Row): ModuleBox {
   if (publication) {
     const p = validatePublication(publication.publication);
     if (
-      (publication.action !== 'create' &&
-        !(
-          data.tool === 'rewards' &&
-          publication.action === 'approve' &&
-          r.state !== 'published'
-        )) ||
-      (publication.action === 'approve' &&
-        (publication.amount !== approvalAmount(publication) || !!publication.fundingApproval)) ||
-      (data.tool === 'rewards' &&
-        publication.action === 'create' &&
-        !publication.fundingApproval) ||
-      (data.tool !== 'rewards' && !!publication.fundingApproval) ||
-      (publication.fundingApproval &&
-        (publication.fundingApproval.nonce >= publication.nonce ||
-          publication.fundingApproval.id === publication.id ||
-          BigInt(publication.fundingApproval.block) > BigInt(publication.startBlock))) ||
+      publication.action !== 'create' ||
+      !!publication.fundingApproval ||
       !same(publication.actor, r.owner) ||
       !same(p.creator, r.owner) ||
       p.id !== r.id ||
@@ -90,7 +77,9 @@ export function fromRow(r: Row): ModuleBox {
 }
 async function owned(db: D1DatabaseSession, id: string, actor: string) {
   const r = await db
-    .prepare("SELECT * FROM module_boxes WHERE id=? AND owner=? AND state!='deleted'")
+    .prepare(
+      "SELECT * FROM module_boxes WHERE id=? AND owner=? AND currency='MON' AND state!='deleted'",
+    )
     .bind(uuid.parse(id), actor.toLowerCase())
     .first<Row>();
   if (!r) throw new CloudError('NOT_FOUND', 404);
@@ -108,7 +97,7 @@ export function mountModuleRoutes(app: Hono<AppEnv>, chain: ModuleChain) {
         .get('db')
         .prepare('SELECT version FROM module_schema WHERE id=1')
         .first<{ version: number }>();
-      if (schema?.version !== 1) throw new CloudError('MODULES_UNAVAILABLE', 503);
+      if (schema?.version !== 2) throw new CloudError('MODULES_UNAVAILABLE', 503);
       if (!c.req.path.includes('/public/')) await authenticate(c);
       await next();
     });
@@ -117,7 +106,7 @@ export function mountModuleRoutes(app: Hono<AppEnv>, chain: ModuleChain) {
     const rows = await c
       .get('db')
       .prepare(
-        "SELECT * FROM module_boxes WHERE owner=? AND state!='deleted' ORDER BY created_at DESC,id DESC LIMIT 40",
+        "SELECT * FROM module_boxes WHERE owner=? AND currency='MON' AND state!='deleted' ORDER BY created_at DESC,id DESC LIMIT 40",
       )
       .bind(c.get('session').address.toLowerCase())
       .all<Row>();
@@ -135,7 +124,7 @@ export function mountModuleRoutes(app: Hono<AppEnv>, chain: ModuleChain) {
     await limited(db, `module-create:${actor}`, 50, 3600);
     await db
       .prepare(
-        "INSERT INTO module_boxes(id,public_id,owner,tool,data_json,metadata,created_at,create_key,create_hash) SELECT ?,?,?,?,?,?,?,?,? WHERE (SELECT COUNT(*) FROM module_boxes WHERE owner=? AND state!='deleted')<40 ON CONFLICT(owner,create_key) DO NOTHING",
+        "INSERT INTO module_boxes(id,public_id,owner,tool,data_json,metadata,created_at,create_key,create_hash,currency) SELECT ?,?,?,?,?,?,?,?,?,'MON' WHERE (SELECT COUNT(*) FROM module_boxes WHERE owner=? AND currency='MON' AND state!='deleted')<40 ON CONFLICT(owner,create_key) DO NOTHING",
       )
       .bind(
         crypto.randomUUID(),
@@ -205,48 +194,7 @@ export function mountModuleRoutes(app: Hono<AppEnv>, chain: ModuleChain) {
       db = c.get('db'),
       b = await owned(db, c.req.param('id'), actor),
       config = readConfig(c.env);
-    if (b.publication) {
-      if (b.data.tool !== 'rewards' || b.publication.action !== 'approve')
-        return c.json({ data: b, requestId: c.get('requestId') });
-      if (b.revision !== revision) throw new CloudError('DRAFT_CHANGED_OR_FROZEN', 409);
-      if (!config.MODULE_PUBLISH_ENABLED || !config.NETWORK_WRITES_ENABLED)
-        throw new CloudError('PUBLISH_UNAVAILABLE', 503);
-      if (b.receipt?.state !== 'finalized' || !b.receipt.hash)
-        return c.json({ data: b, requestId: c.get('requestId') });
-      registered(config, b.publication.publication.deployment);
-      await limited(db, `module-prepare:${actor}`, 20, 60);
-      const proof = await chain.confirm(b.publication, b.receipt.hash);
-      if (
-        proof.state !== 'finalized' ||
-        proof.hash !== b.receipt.hash ||
-        !proof.block ||
-        !proof.blockHash
-      )
-        throw new CloudError('CHAIN_RECHECK_REQUIRED', 503);
-      const prepared = await chain.prepare(b.publication.publication, actor, 'create');
-      if (prepared.nonce <= b.publication.nonce)
-        throw new CloudError('CHAIN_RECHECK_REQUIRED', 503);
-      const intent = moduleIntentSchema.parse({
-        ...prepared,
-        fundingApproval: {
-          id: b.publication.id,
-          nonce: b.publication.nonce,
-          startBlock: b.publication.startBlock,
-          expiresAt: b.publication.expiresAt,
-          hash: proof.hash,
-          block: proof.block,
-          blockHash: proof.blockHash,
-        },
-      });
-      // Advance only from this exact finalized approval; retain its complete public proof in the frozen intent.
-      await db
-        .prepare(
-          "UPDATE module_boxes SET intent_json=?,receipt_state='prepared',tx_hash=NULL,verified_block=NULL,verified_block_hash=NULL WHERE id=? AND owner=? AND state='prepared' AND receipt_state='finalized' AND intent_json=?",
-        )
-        .bind(JSON.stringify(intent), b.id, actor.toLowerCase(), JSON.stringify(b.publication))
-        .run();
-      return c.json({ data: await owned(db, b.id, actor), requestId: c.get('requestId') });
-    }
+    if (b.publication) return c.json({ data: b, requestId: c.get('requestId') });
     if (b.revision !== revision) throw new CloudError('DRAFT_CHANGED_OR_FROZEN', 409);
     const deployment = config.MODULE_DEPLOYMENTS.find(
       (r) => r.current && r.deployment.tool === b.data.tool,
@@ -269,7 +217,7 @@ export function mountModuleRoutes(app: Hono<AppEnv>, chain: ModuleChain) {
       metadata: b.metadata,
       metadataHash: hash(b.metadata),
     };
-    const intent = await chain.prepare(p, actor, b.data.tool === 'rewards' ? 'approve' : 'create');
+    const intent = await chain.prepare(p, actor, 'create');
     await db
       .prepare(
         "UPDATE module_boxes SET intent_json=?,receipt_state='prepared',state='prepared' WHERE id=? AND owner=? AND revision=? AND state='draft'",
@@ -316,7 +264,9 @@ export function mountModuleRoutes(app: Hono<AppEnv>, chain: ModuleChain) {
     if (!parsed.success) throw new CloudError('NOT_FOUND', 404);
     const r = await c
       .get('db')
-      .prepare("SELECT * FROM module_boxes WHERE public_id=? AND state='published'")
+      .prepare(
+        "SELECT * FROM module_boxes WHERE public_id=? AND currency='MON' AND state='published'",
+      )
       .bind(parsed.data)
       .first<Row>();
     if (!r) throw new CloudError('NOT_FOUND_OR_NOT_PUBLISHED', 404);

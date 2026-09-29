@@ -5,8 +5,8 @@ import { intentSchema, addressSchema } from '../cloud/model';
 import type { PublishIntent } from '../cloud/model';
 import { calldata, groupAbi, makeCloudChain, same, verifyDeployment } from '../cloud/chain';
 import type { ReceiptResult } from '../cloud/chain';
-import { inspectNetwork, TOKEN } from '../lab/network';
-import type { ChainClient } from '../lab/network';
+import { inspectNetwork, TOKEN } from '../network';
+import type { ChainClient } from '../network';
 import { recoverNonce } from '../nonce-recovery';
 
 export const groupActions = [
@@ -31,23 +31,19 @@ export const actionIntentSchema = z.strictObject({
 });
 export type GroupActionIntent = z.infer<typeof actionIntentSchema>;
 
-export function actionCall(i: GroupActionIntent): { to: Address; data: Hex } {
+export function actionCall(i: GroupActionIntent): { to: Address; data: Hex; value: bigint } {
   calldata(i.group); // Validate the complete frozen terms and domain before encoding a funds action.
   const id = i.group.chainBoxId;
-  if (i.action === 'approve')
-    return {
-      to: TOKEN,
-      data: encodeFunctionData({
-        abi: erc20Abi,
-        functionName: 'approve',
-        args: [i.group.deployment.address, BigInt(i.group.data.unitPrice)],
-      }),
-    };
+  if (i.action === 'approve') throw Error('ACTION_UNAVAILABLE');
   const data =
     i.action === 'creditRefund' || i.action === 'withdrawFor'
       ? encodeFunctionData({ abi: groupAbi, functionName: i.action, args: [id, i.actor] })
       : encodeFunctionData({ abi: groupAbi, functionName: i.action, args: [id] });
-  return { to: i.group.deployment.address, data };
+  return {
+    to: i.group.deployment.address,
+    data,
+    value: i.action === 'contribute' ? BigInt(i.group.data.unitPrice) : 0n,
+  };
 }
 
 export async function groupAccount(client: ChainClient, group: PublishIntent, actor: Address) {
@@ -77,20 +73,8 @@ export async function groupAccount(client: ChainClient, group: PublishIntent, ac
       args: [group.chainBoxId, actor],
       blockNumber,
     }),
-    client.readContract({
-      address: TOKEN,
-      abi: erc20Abi,
-      functionName: 'allowance',
-      args: [actor, address],
-      blockNumber,
-    }),
-    client.readContract({
-      address: TOKEN,
-      abi: erc20Abi,
-      functionName: 'balanceOf',
-      args: [actor],
-      blockNumber,
-    }),
+    Promise.resolve(0n),
+    client.getBalance({ address: actor, blockNumber }),
     client.readContract({ address, abi: groupAbi, functionName: 'intakePaused', blockNumber }),
     client.readContract({
       address,
@@ -127,7 +111,7 @@ export function availableActions(
     s.position === 0 &&
     BigInt(s.balance) >= BigInt(group.data.unitPrice)
   )
-    actions.push(BigInt(s.allowance) < BigInt(group.data.unitPrice) ? 'approve' : 'contribute');
+    actions.push('contribute');
   if (s.storedState === 1 && time < group.data.fundingDeadline && s.position === 1)
     actions.push('leave');
   if (s.storedState === 1 && time >= group.data.fundingDeadline) actions.push('finalize');
@@ -163,7 +147,7 @@ export async function prepareAction(
     expiresAt: Number(block.timestamp) + 600,
   };
   const call = actionCall(intent);
-  await client.estimateGas({ account: actor, ...call, value: 0n });
+  await client.estimateGas({ account: actor, ...call });
   return intent;
 }
 
@@ -260,7 +244,7 @@ export async function confirmAction(
     return { state: 'unknown', hash };
   const result = { hash, block: receipt.blockNumber.toString(), blockHash: receipt.blockHash };
   if (receipt.status !== 'success') return { ...result, state: 'reverted' };
-  if (!tx.to || !same(tx.to, call.to) || !same(tx.input, call.data) || tx.value !== 0n)
+  if (!tx.to || !same(tx.to, call.to) || !same(tx.input, call.data) || tx.value !== call.value)
     return { ...result, state: 'replaced' };
   if (!matchingEvent(i, receipt)) throw Error('TRANSACTION_MISMATCH');
   await groupAccount(client, i.group, i.actor);

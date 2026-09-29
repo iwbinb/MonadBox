@@ -3,14 +3,14 @@ import type { Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import type { Address } from 'viem';
 import { origin, client, wallet, inject, mine, warp, connect } from '../fixtures/funds-browser';
-import { TOKEN } from '../../src/shared/lab/network';
 import { localDateInput } from '../../src/shared/group/draft';
 import { moduleAbi, moduleCall, agreementTerms } from '../../src/shared/modules/terms';
 import { agreementHash } from '../../src/shared/modules/agreement';
 import type { Agreement, ModuleBox, ModuleData } from '../../src/shared/modules/model';
 import type { SessionInfo } from '../../src/shared/cloud/model';
 async function login(page: Page) {
-  await page.getByRole('button', { name: 'Connect and prepare sign-in', exact: true }).click();
+  await connect(page);
+  await page.getByRole('button', { name: 'Prepare sign-in', exact: true }).click();
   await page.getByRole('button', { name: 'Sign in (no payment)', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Sign out', exact: true })).toBeVisible();
 }
@@ -36,18 +36,7 @@ test('Deliver normal acceptance, private files, missing delivery, silent review,
   const f = JSON.parse(readFileSync('artifacts/funds-test.json', 'utf8')) as {
     accounts: Address[];
   };
-  const [admin, buyer, seller] = f.accounts as [Address, Address, Address];
-  const mock = JSON.parse(readFileSync('contracts/out/MockToken.sol/MockToken.json', 'utf8'));
-  await client.waitForTransactionReceipt({
-    hash: await wallet.writeContract({
-      account: admin,
-      address: TOKEN,
-      abi: mock.abi,
-      functionName: 'mint',
-      args: [buyer, 1000000n],
-    }),
-  });
-  await mine();
+  const [, buyer, seller] = f.accounts as [Address, Address, Address];
   const sellerContext = await browser.newContext({ viewport: page.viewportSize() ?? undefined }),
     sellPage = await sellerContext.newPage();
   sellPage.setDefaultTimeout(20000);
@@ -61,8 +50,8 @@ test('Deliver normal acceptance, private files, missing delivery, silent review,
     await page.getByRole('textbox', { name: 'Buyer wallet', exact: true }).fill(buyer);
     await page.getByRole('textbox', { name: 'Seller wallet', exact: true }).fill(seller);
     await page
-      .getByRole('textbox', { name: 'Full prepayment (AUSD)', exact: true })
-      .fill('0.000101');
+      .getByRole('textbox', { name: 'Full prepayment (MON)', exact: true })
+      .fill('0.000000000000000101');
     await page
       .getByLabel('Fund before (local time)', { exact: true })
       .fill(localDateInput(Number((await client.getBlock()).timestamp) + 86400));
@@ -80,7 +69,7 @@ test('Deliver normal acceptance, private files, missing delivery, silent review,
     await page.getByRole('button', { name: 'Copy to cloud', exact: true }).click();
     await expect(page).toHaveURL(/\/app\/modules\//);
     await page.getByRole('button', { name: 'Freeze and prepare publication', exact: true }).click();
-    await page.getByRole('button', { name: 'Connect funds wallet', exact: true }).click();
+    await connect(page);
     await page.getByRole('button', { name: 'Prepare: Publish fixed rules', exact: true }).click();
     await page
       .getByRole('checkbox', {
@@ -106,7 +95,7 @@ test('Deliver normal acceptance, private files, missing delivery, silent review,
       await connect(sellPage);
     }
     await go(path);
-    await action(page, 'Approve exact amount');
+
     await action(page, 'Pay full escrow');
     await sellPage.getByRole('button', { name: 'Read my rights', exact: true }).click();
     await login(sellPage);
@@ -188,7 +177,7 @@ test('Deliver normal acceptance, private files, missing delivery, silent review,
         { id: prepared.id, hash, csrf: session.csrf },
       );
       await go('/box/' + prepared.publicId);
-      await action(page, 'Approve exact amount');
+
       await action(page, 'Pay full escrow');
       return intent.publication;
     };
@@ -226,8 +215,8 @@ test('Deliver normal acceptance, private files, missing delivery, silent review,
       .fill('Missing agreed feature');
     await action(page, 'Open formal dispute');
     await page
-      .getByRole('textbox', { name: 'Refund to buyer (AUSD)', exact: true })
-      .fill('0.000031');
+      .getByRole('textbox', { name: 'Refund to buyer (MON)', exact: true })
+      .fill('0.000000000000000031');
     await page.getByRole('button', { name: 'Review allocation proposal', exact: true }).click();
     await expect(
       page.getByRole('textbox', { name: 'Proposal JSON to exchange (no signatures)', exact: true }),

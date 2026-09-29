@@ -1,3 +1,4 @@
+import { EditorAside } from './EditorAside';
 import { useState } from 'react';
 import { formatUnits } from 'viem';
 import { useApp } from '../context';
@@ -14,7 +15,7 @@ export function MilestoneRules({ data: d }: { data: Milestones }) {
     <section className="cloud-card" aria-label={t('Frozen rules preview', '固定规则预览')}>
       <h2>{d.title}</h2>
       <p>{d.description}</p>
-      <p>Monad Testnet · 10143 · AUSD</p>
+      <p>Monad Testnet · 10143 · MON</p>
       <p>
         {t('Buyer', '客户')}：<code>{d.buyer}</code>
       </p>
@@ -22,7 +23,7 @@ export function MilestoneRules({ data: d }: { data: Milestones }) {
         {t('Seller', '服务者')}：<code>{d.seller}</code>
       </p>
       <p>
-        {t('Full prepayment', '全额预付')}：{formatUnits(total, 6)} AUSD
+        {t('Full prepayment', '全额预付')}：{formatUnits(total, 18)} MON
       </p>
       <p>
         {t('Fund before', '付款截止')}：{new Date(d.fundBy * 1000).toLocaleString()} ·{' '}
@@ -39,7 +40,7 @@ export function MilestoneRules({ data: d }: { data: Milestones }) {
             </h3>
             <p>{s.description}</p>
             <p>
-              {formatUnits(BigInt(s.amount), 6)} AUSD ·{' '}
+              {formatUnits(BigInt(s.amount), 18)} MON ·{' '}
               {t('Work / review hours', '工作 / 验收小时')}：{s.workDuration / 3600} /{' '}
               {s.reviewDuration / 3600}
             </p>
@@ -84,7 +85,7 @@ export function MilestoneEditor({
       initial?.stages.map((s) => ({
         title: s.title,
         description: s.description,
-        amount: formatUnits(BigInt(s.amount), 6),
+        amount: formatUnits(BigInt(s.amount), 18),
         work: String(s.workDuration / 3600),
         review: String(s.reviewDuration / 3600),
       })) ?? [blank(), blank()],
@@ -97,14 +98,14 @@ export function MilestoneEditor({
   let total = '—';
   try {
     total = formatUnits(
-      stages.reduce((sum, s) => sum + parseAmount(s.amount, 6), 0n),
-      6,
+      stages.reduce((sum, s) => sum + parseAmount(s.amount, 18), 0n),
+      18,
     );
   } catch {
     /* Keep invalid totals visibly unavailable. */
   }
   return (
-    <>
+    <div className="module-editor-layout">
       <form
         className="cloud-card"
         onChange={() => setPreview(null)}
@@ -122,7 +123,7 @@ export function MilestoneEditor({
               stages: stages.map((s) => ({
                 title: s.title,
                 description: s.description,
-                amount: parseAmount(s.amount, 6).toString(),
+                amount: parseAmount(s.amount, 18).toString(),
                 workDuration: Number(s.work) * 3600,
                 reviewDuration: Number(s.review) * 3600,
               })),
@@ -204,7 +205,7 @@ export function MilestoneEditor({
               />
             </label>
             <label>
-              {t('Stage amount (AUSD)', '阶段金额（AUSD）')}
+              {t('Stage amount (MON)', '阶段金额（MON）')}
               <input
                 inputMode="decimal"
                 required
@@ -259,7 +260,7 @@ export function MilestoneEditor({
           {t('Add stage', '增加阶段')}
         </button>
         <p>
-          {t('Total prepayment', '预付总额')}：{total} AUSD
+          {t('Total prepayment', '预付总额')}：{total} MON
         </p>
         <p>
           {t(
@@ -272,6 +273,16 @@ export function MilestoneEditor({
         </button>
         {error ? <p role="alert">{error}</p> : null}
       </form>
+      {!preview ? (
+        <EditorAside
+          tool="milestones"
+          amount={total}
+          rows={stages.map((s, i) => ({
+            label: s.title || `${t('Stage', '阶段')} ${i + 1}`,
+            value: s.amount + ' MON',
+          }))}
+        />
+      ) : null}
       {preview ? (
         <>
           <MilestoneRules data={preview} />
@@ -291,6 +302,6 @@ export function MilestoneEditor({
           </button>
         </>
       ) : null}
-    </>
+    </div>
   );
 }

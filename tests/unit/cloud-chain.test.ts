@@ -11,7 +11,7 @@ import {
   groupAbi,
 } from '../../src/shared/cloud/chain';
 import type { PublishIntent } from '../../src/shared/cloud/model';
-import type { ChainClient } from '../../src/shared/lab/network';
+import type { ChainClient } from '../../src/shared/network';
 import { readConfig } from '../../src/shared/config';
 const A = '0x0000000000000000000000000000000000000011',
   M = '0x0000000000000000000000000000000000000022';

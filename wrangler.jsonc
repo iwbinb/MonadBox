@@ -26,28 +26,14 @@
     "MAINNET_ENABLED": "false",
     "ASSET_ALLOWLIST": "[]",
     "CONTRACT_REGISTRY": "[]",
-    "TESTNET_LAB_ENABLED": "true",
+    "TESTNET_LAB_ENABLED": "false",
     "CLOUD_ENABLED": "false",
+    "ATTACHMENTS_ENABLED": "false",
     "GROUP_PUBLISH_ENABLED": "false",
     "GROUP_DEPLOYMENT": "null",
-    "APP_ORIGIN": ""
-  },
-  "previews": {
-    "vars": {
-      "APP_ENV": "preview",
-      "CHAIN_ID": "10143",
-      "STORAGE_NAMESPACE": "monadbox-preview",
-      "STORAGE_ENABLED": "false",
-      "BACKGROUND_ENABLED": "false",
-      "NETWORK_WRITES_ENABLED": "false",
-      "MAINNET_ENABLED": "false",
-      "ASSET_ALLOWLIST": "[]",
-      "CONTRACT_REGISTRY": "[]",
-      "TESTNET_LAB_ENABLED": "true",
-      "CLOUD_ENABLED": "false",
-      "GROUP_PUBLISH_ENABLED": "false",
-      "GROUP_DEPLOYMENT": "null",
-      "APP_ORIGIN": ""
-    }
+    "APP_ORIGIN": "",
+    "MODULES_ENABLED": "false",
+    "MODULE_PUBLISH_ENABLED": "false",
+    "MODULE_DEPLOYMENTS": "[]"
   }
 }

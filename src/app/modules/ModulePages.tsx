@@ -1,7 +1,9 @@
+import { getTool } from '../../shared/tools';
+import { ToolIcon } from '../components';
 import { PrivateFiles } from './PrivateFiles';
-import { formatUnits } from 'viem';
 import { statusLabel } from '../shared/status';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { PublicOverview, PublicAmount } from './PublicOverview';
 import type { ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import type { Hex } from 'viem';
@@ -86,14 +88,23 @@ function Builder({
   }, [key, draftId]);
   return (
     <section className="container cloud-page">
-      <h1>{t('Create fixed payment rules', '创建固定付款规则')}</h1>
-      <p className="notice">
-        {t(
-          'Local draft only. Saving does not upload data or request a wallet. Publishing is a separate reviewed step.',
-          '本地草稿。保存不会上传数据或请求钱包；发布需要单独核对。',
-        )}
-      </p>
-      <p>
+      <div className="editor-title">
+        <span className="tool-icon">
+          <ToolIcon id={draft?.data.tool ?? tool} />
+        </span>
+        <div>
+          <h1>
+            {t('Create ', '创建')}
+            {t(
+              getTool(draft?.data.tool ?? tool)!.name + ' Box',
+              getTool(draft?.data.tool ?? tool)!.label.zh,
+            )}
+          </h1>
+          <p>{t(getTool(tool)!.description.en, getTool(tool)!.description.zh)}</p>
+        </div>
+      </div>
+
+      <p className="creation-nav">
         <Link to="/app/module-drafts">{t('My local drafts', '我的本地草稿')}</Link> ·{' '}
         <Link to="/app/modules">{t('Cloud boxes', '云端 Box')}</Link>
       </p>
@@ -294,7 +305,7 @@ function CloudModules() {
   return (
     <section className="container cloud-page">
       <h1>{t('My cloud payment boxes', '我的云端付款 Box')}</h1>
-      <p>
+      <p className="creation-nav">
         <Link to="/app/module-drafts">{t('Local drafts', '本地草稿')}</Link> ·{' '}
         <Link to="/app/module-activity">{t('Funds workbench', '资金工作台')}</Link> ·{' '}
         <Link to="/app/groups">{t('Original Group V1', '原版 Group V1')}</Link>
@@ -472,53 +483,15 @@ function CloudModule() {
               </p>
             </>
           ) : null}
-          {box.data.tool === 'rewards' && box.publication?.action === 'approve' ? (
+          {box.data.tool === 'rewards' && box.state !== 'published' ? (
             <p className="notice">
               {t(
-                'Step 1: approve only the frozen total. This does not publish or fund the rewards. After confirmation, prepare a separate transaction that publishes and funds the complete list.',
-                '第1步：只授权已冻结的总额，不会发布或入金奖励。确认后再准备一笔单独交易，发布并全额入金完整名单。',
+                'Publishing funds the entire reward list in one MON transaction.',
+                '发布时将通过一笔 MON 交易存入全部奖励。',
               )}
             </p>
           ) : null}
-          {box.data.tool === 'rewards' &&
-          box.publication?.action === 'approve' &&
-          box.receipt?.state === 'finalized' ? (
-            <button
-              className="button primary"
-              disabled={
-                busy ||
-                state.status !== 'ready' ||
-                !state.config.capabilities.payments ||
-                !state.config.capabilities.modulePublishing
-              }
-              onClick={() =>
-                void run(async () =>
-                  setBox(
-                    await api<ModuleBox>(
-                      `/modules/${box.id}/prepare`,
-                      'POST',
-                      { revision: box.revision },
-                      session.csrf,
-                    ),
-                  ),
-                )
-              }
-            >
-              {t('Prepare funded publication', '准备全额入金发布')}
-            </button>
-          ) : null}
-          {box.publication?.fundingApproval ? (
-            <p>
-              {t(
-                'Original approval confirmed; this publication transfers the full frozen amount.',
-                '原授权已确认；本次发布会转入全部冻结金额。',
-              )}{' '}
-              <code>{box.publication.fundingApproval.hash}</code>
-            </p>
-          ) : null}
-          {box.publication &&
-          box.state !== 'published' &&
-          !(box.publication.action === 'approve' && box.receipt?.state === 'finalized') ? (
+          {box.publication && box.state !== 'published' ? (
             <>
               <ModuleFunds
                 key={box.publication.id}
@@ -533,9 +506,7 @@ function CloudModule() {
               />
               <div className="cloud-card">
                 <label>
-                  {box.publication.action === 'approve'
-                    ? t('Approval transaction hash (optional)', '授权交易哈希（选填）')
-                    : t('Publication transaction hash (optional)', '发布交易哈希（选填）')}
+                  {t('Publication transaction hash (optional)', '发布交易哈希（选填）')}
                   <input value={hash} onChange={(e) => setHash(e.target.value)} />
                 </label>
                 <button
@@ -593,6 +564,9 @@ export function PublicModulePage() {
     [box, setBox] = useState<PublicBox | null>(null),
     [error, setError] = useState(''),
     [revision, setRevision] = useState(0);
+  const updateSnapshot = useCallback((snapshot: ModuleSnapshot) => {
+    setBox((current) => (current ? { ...current, snapshot } : current));
+  }, []);
   useEffect(() => {
     let active = true;
     setBox(null);
@@ -610,37 +584,70 @@ export function PublicModulePage() {
     };
   }, [id, revision]);
   return (
-    <section className="container cloud-page">
-      <h1>{t('Verified payment rules', '已核验付款规则')}</h1>
+    <section
+      className="container cloud-page public-module-page"
+      data-tool={box?.publication.data.tool}
+    >
+      <Link className="back-link" to="/app">
+        {t('Back to my boxes', '返回我的 Box')}
+      </Link>
+      <div className="public-heading">
+        <div>
+          <p className="eyebrow">
+            {box ? getTool(box.publication.data.tool)!.name : 'MonadBox'} ·{' '}
+            {t('Verified payment rules', '已核验付款规则')}
+          </p>
+          <h1>{box?.publication.data.title ?? t('Payment rules', '付款规则')}</h1>
+        </div>
+        {box ? <span className="status-label">{statusLabel(box.snapshot.state, t)}</span> : null}
+        <button
+          className="button secondary public-refresh"
+          onClick={() => setRevision((n) => n + 1)}
+        >
+          {t('Refresh verified rules', '刷新已核验规则')}
+        </button>
+      </div>
       {error ? <p role="alert">{error}</p> : null}
       {!box && !error ? (
         <p>{t('Verifying original contract and transaction…', '核验原合约和交易…')}</p>
       ) : null}
-      <button className="button secondary" onClick={() => setRevision((n) => n + 1)}>
-        {t('Refresh verified rules', '刷新已核验规则')}
-      </button>
       {box ? (
-        <>
-          <ModuleRules data={box.publication.data} />
-          <p>
-            {t('Verified contract version', '已核验合约版本')}：{box.publication.deployment.version}{' '}
-            · <code>{box.publication.deployment.address}</code>
-          </p>
-          <p>
-            {t('Contract state', '合约状态')}：{statusLabel(box.snapshot.state, t)} ·{' '}
-            {t('Locked', '锁定金额')}：{formatUnits(BigInt(box.snapshot.locked), 6)} AUSD
-          </p>
-          <p>
-            {t(
-              'Save this original link for recovery in another browser.',
-              '保存原链接，可在其他浏览器恢复查询。',
-            )}
-          </p>
-          {box.publication.data.tool === 'deliver' || box.publication.data.tool === 'milestones' ? (
-            <PrivateFiles publication={box.publication} />
-          ) : null}
-          <ModuleFunds publication={box.publication} paymentsEnabled={box.paymentsEnabled} />
-        </>
+        <div className="public-box-layout">
+          <div>
+            <PublicOverview publication={box.publication} snapshot={box.snapshot}>
+              {box.publication.data.tool === 'deliver' ||
+              box.publication.data.tool === 'milestones' ? (
+                <PrivateFiles publication={box.publication} />
+              ) : null}
+            </PublicOverview>
+            <details className="cloud-card">
+              <summary>{t('All fixed rules', '完整固定规则')}</summary>
+              <ModuleRules data={box.publication.data} />
+            </details>
+            <details className="cloud-card">
+              <summary>{t('Verified contract and recovery', '合约与恢复信息')}</summary>
+              <p>Monad Testnet · MON · v{box.publication.deployment.version}</p>
+              <code>{box.publication.deployment.address}</code>
+              <p>
+                {t('Original transaction', '原交易')}：<code>{box.transactionHash}</code>
+              </p>
+              <p>
+                {t(
+                  'Save this link to find your Box from another browser.',
+                  '保存此链接，可在其他浏览器查找你的 Box。',
+                )}
+              </p>
+            </details>
+          </div>
+          <div>
+            <PublicAmount publication={box.publication} snapshot={box.snapshot} />
+            <ModuleFunds
+              publication={box.publication}
+              paymentsEnabled={box.paymentsEnabled}
+              onSnapshot={updateSnapshot}
+            />
+          </div>
+        </div>
       ) : null}
     </section>
   );

@@ -1,5 +1,5 @@
 import { CheckInPanel } from './CheckInPanel';
-import { attendanceDates } from './AttendanceEditor';
+import { attendanceDates } from '../../shared/modules/attendance-fields';
 import { addressSchema } from '../../shared/cloud/model';
 import { AgreementPanel } from './AgreementPanel';
 import { RecoveryHistory } from '../shared/RecoveryHistory';
@@ -10,8 +10,8 @@ import { formatUnits, keccak256, stringToHex } from 'viem';
 import type { Address, Hex } from 'viem';
 import { useApp } from '../context';
 import { useFundsWallet, WalletChoice } from '../shared/FundsWallet';
-import { userError } from '../../shared/lab/wallet';
-import { makeClient } from '../../shared/lab/network';
+import { userError } from '../../shared/wallet';
+import { makeClient } from '../../shared/network';
 import { parseAmount } from '../../shared/amount';
 import type { ModuleAction, ModuleIntent, ModulePublication } from '../../shared/modules/model';
 import { moduleActions, moduleSnapshot, prepareModuleAction } from '../../shared/modules/chain';
@@ -111,11 +111,13 @@ export function ModuleFunds({
   creation,
   paymentsEnabled,
   onCreationChecked,
+  onSnapshot,
 }: {
   publication: ModulePublication;
   creation?: ModuleIntent;
   paymentsEnabled: boolean;
   onCreationChecked?: (hash?: Hex) => Promise<void>;
+  onSnapshot?: (snapshot: ModuleSnapshot) => void;
 }) {
   const { state, t } = useApp(),
     wallet = useFundsWallet(),
@@ -134,6 +136,9 @@ export function ModuleFunds({
   const [participant, setParticipant] = useState<Address | undefined>(),
     [participantInput, setParticipantInput] = useState('');
   const renderEpoch = epoch.current;
+  useEffect(() => {
+    if (snapshot) onSnapshot?.(snapshot);
+  }, [snapshot, onSnapshot]);
   useEffect(() => {
     setParticipant(undefined);
     setParticipantInput('');
@@ -192,7 +197,7 @@ export function ModuleFunds({
   }
   let value: string | undefined;
   try {
-    value = parseAmount(amount, 6).toString();
+    value = parseAmount(amount, 18).toString();
   } catch {
     /* Keep amount invalid until corrected. */
   }
@@ -223,7 +228,7 @@ export function ModuleFunds({
   }
   return (
     <>
-      <section className="cloud-card">
+      <section className="cloud-card funds-panel">
         <h2>{t('My funds and actions', '我的资金与操作')}</h2>
         <WalletChoice
           value={wallet}
@@ -278,16 +283,19 @@ export function ModuleFunds({
               {t('Contract state', '合约状态')}：{statusLabel(snapshot.state, t)}
             </p>
             <p>
-              {t('Withdrawable credit', '可领取余额')}：{formatUnits(BigInt(snapshot.credit), 6)}{' '}
-              AUSD
+              {t('Withdrawable credit', '可领取余额')}：{formatUnits(BigInt(snapshot.credit), 18)}{' '}
+              MON
             </p>
             <p>
               {t('Already transferred to wallet', '已转入钱包')}：
-              {formatUnits(BigInt(snapshot.withdrawn), 6)} AUSD
+              {formatUnits(BigInt(snapshot.withdrawn), 18)} MON
             </p>
-            <p>
-              {t('Snapshot block', '快照区块')}：{snapshot.block}
-            </p>
+            <details className="verification-note">
+              <summary>{t('Chain verification', '链上核验')}</summary>
+              <p>
+                {t('Snapshot block', '快照区块')}：{snapshot.block}
+              </p>
+            </details>
             <button className="button secondary" disabled={busy} onClick={() => void run(refresh)}>
               {t('Read my rights', '读取我的权益')}
             </button>
@@ -297,7 +305,7 @@ export function ModuleFunds({
         (publication.data.tool === 'deliver' || publication.data.tool === 'milestones') ? (
           <>
             <p>
-              {t('Remaining escrow', '剩余托管款')}：{formatUnits(BigInt(snapshot.locked), 6)} AUSD
+              {t('Remaining escrow', '剩余托管款')}：{formatUnits(BigInt(snapshot.locked), 18)} MON
             </p>
             {publication.data.tool === 'milestones' ? (
               <>
@@ -307,12 +315,12 @@ export function ModuleFunds({
                 </p>
                 <p>
                   {t('Released stages total', '已释放阶段总额')}：
-                  {formatUnits(BigInt(snapshot.released ?? '0'), 6)} AUSD
+                  {formatUnits(BigInt(snapshot.released ?? '0'), 18)} MON
                 </p>
                 <ol className="cloud-list">
                   {publication.data.stages.map((stage, index) => (
                     <li key={index}>
-                      {index + 1}. {stage.title} · {formatUnits(BigInt(stage.amount), 6)} AUSD ·{' '}
+                      {index + 1}. {stage.title} · {formatUnits(BigInt(stage.amount), 18)} MON ·{' '}
                       {index < (snapshot.currentStage ?? 0) || snapshot.state === 'COMPLETED'
                         ? t('Released', '已释放')
                         : index === snapshot.currentStage
@@ -342,14 +350,16 @@ export function ModuleFunds({
                 </p>
               ))}
             {snapshot.evidenceHash && !/^0x0+$/.test(snapshot.evidenceHash) ? (
-              <p>
-                {t('Delivery digest', '交付摘要')}：<code>{snapshot.evidenceHash}</code>
-              </p>
+              <details className="verification-note">
+                <summary>{t('Delivery digest', '交付摘要')}</summary>
+                <code>{snapshot.evidenceHash}</code>
+              </details>
             ) : null}
             {snapshot.reasonHash && !/^0x0+$/.test(snapshot.reasonHash) ? (
-              <p>
-                {t('Dispute digest', '争议摘要')}：<code>{snapshot.reasonHash}</code>
-              </p>
+              <details className="verification-note">
+                <summary>{t('Dispute digest', '争议摘要')}</summary>
+                <code>{snapshot.reasonHash}</code>
+              </details>
             ) : null}
             {actions.some((a) => ['submitDelivery', 'dispute', 'challengeNoShow'].includes(a)) ? (
               <label>
@@ -399,7 +409,7 @@ export function ModuleFunds({
           <>
             <p>
               {t('My listed reward', '名单中我的奖励')}：
-              {formatUnits(BigInt(snapshot.allocation ?? '0'), 6)} AUSD ·{' '}
+              {formatUnits(BigInt(snapshot.allocation ?? '0'), 18)} MON ·{' '}
               {snapshot.position === 2
                 ? t('Already claimed', '已领取权益')
                 : snapshot.position === 1
@@ -407,7 +417,7 @@ export function ModuleFunds({
                   : t('Not on this list', '不在此名单')}
             </p>
             <p>
-              {t('Unclaimed total', '尚未领取总额')}：{formatUnits(BigInt(snapshot.locked), 6)} AUSD
+              {t('Unclaimed total', '尚未领取总额')}：{formatUnits(BigInt(snapshot.locked), 18)} MON
               · {t('Claims completed', '已领取人数')}：{snapshot.claimedCount}/
               {publication.data.recipients.length}
             </p>
@@ -431,7 +441,7 @@ export function ModuleFunds({
             </p>
             <p>
               {t('This participant’s pending deposit', '此参加者尚未结算押金')}：
-              {formatUnits(BigInt(snapshot.positionLocked ?? '0'), 6)} AUSD ·{' '}
+              {formatUnits(BigInt(snapshot.positionLocked ?? '0'), 18)} MON ·{' '}
               {t('Registered / capacity', '已报名 / 上限')}：{snapshot.activeCount}/
               {publication.data.capacity}
             </p>
@@ -508,7 +518,7 @@ export function ModuleFunds({
         ) : null}
         {!creation && publication.data.tool === 'split' ? (
           <label>
-            {t('Final payment (AUSD)', '最终付款金额（AUSD）')}
+            {t('Final payment (MON)', '最终付款金额（MON）')}
             <input
               inputMode="decimal"
               value={amount}
@@ -522,8 +532,8 @@ export function ModuleFunds({
         ) : null}
         <p>
           {t(
-            'Approval is separate from payment. Claimable credit needs a separate withdrawal. Every transaction requires your explicit review.',
-            '授权与付款分开，可领取余额需要单独提款。每笔交易都需要明确核对。',
+            'Pay directly in MON. Claimable credit needs a withdrawal to your wallet. Review each transaction before confirming.',
+            '直接使用 MON 付款，可领取款需单独提到钱包。确认前请核对每笔交易。',
           )}
         </p>
         {!paymentsEnabled ? (
@@ -546,7 +556,22 @@ export function ModuleFunds({
         {actions.map((action) => (
           <button
             key={action}
-            className="button secondary"
+            className={
+              'button action-button ' +
+              ([
+                'pay',
+                'fund',
+                'contribute',
+                'register',
+                'accept',
+                'withdrawFor',
+                'claimFor',
+                'submitDelivery',
+                'create',
+              ].includes(action)
+                ? 'primary'
+                : 'secondary')
+            }
             disabled={
               busy ||
               unresolved ||
@@ -594,10 +619,10 @@ export function ModuleFunds({
           </button>
         ))}
         {prepared ? (
-          <div className="notice">
+          <div className="checkout-review">
             <h3>{t(...moduleActionLabels(prepared.action, publication.data.tool))}</h3>
             <p>
-              Monad Testnet · AUSD · <code>{prepared.publication.deployment.address}</code>
+              Monad Testnet · MON · <code>{prepared.publication.deployment.address}</code>
             </p>
             <p>
               {t('Signing wallet', '签名钱包')}：<code>{prepared.actor}</code> · nonce{' '}
@@ -616,7 +641,7 @@ export function ModuleFunds({
             ) : null}
             {prepared.amount ? (
               <p>
-                {t('Amount', '金额')}：{formatUnits(BigInt(prepared.amount), 6)} AUSD
+                {t('Amount', '金额')}：{formatUnits(BigInt(prepared.amount), 18)} MON
               </p>
             ) : null}
             <p>
@@ -685,11 +710,13 @@ export function ModuleFunds({
         {notice ? <p role="status">{notice}</p> : null}
         {error ? <p role="alert">{error}</p> : null}
       </section>
-      <TransactionHistory
-        rows={rows.filter((r) => r.intent.publication.publicId === publication.publicId)}
-        busy={busy}
-        onRecheck={(row, hash) => void run(() => check(row, hash))}
-      />
+      {rows.some((r) => r.intent.publication.publicId === publication.publicId) ? (
+        <TransactionHistory
+          rows={rows.filter((r) => r.intent.publication.publicId === publication.publicId)}
+          busy={busy}
+          onRecheck={(row, hash) => void run(() => check(row, hash))}
+        />
+      ) : null}
     </>
   );
 }

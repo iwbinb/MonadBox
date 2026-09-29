@@ -23,7 +23,7 @@ contract SplitPaymentsV1 is PullCredit {
     }
     function getSplit(bytes32 id) external view returns (Split memory) { return _split(id); }
     function getReceipt(bytes32 id) external view returns (Receipt memory) { return _receipts[id]; }
-    function pay(bytes32 id, uint256 amount, bytes32 paymentNonce) external intakeOpen nonReentrant returns (bytes32 paymentId) {
+    function pay(bytes32 id, uint256 amount, bytes32 paymentNonce) external payable intakeOpen nonReentrant returns (bytes32 paymentId) {
         Split storage s = _split(id);
         if (usedNonce[msg.sender][paymentNonce]) revert AlreadyProcessed();
         usedNonce[msg.sender][paymentNonce] = true;

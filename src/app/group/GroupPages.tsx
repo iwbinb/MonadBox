@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import type { FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useApp } from '../context';
-import { Arrow } from '../components';
+import { Arrow, ToolIcon } from '../components';
 import { formatAmount } from '../../shared/amount';
 import {
   GROUP_ASSET,
@@ -155,7 +155,7 @@ export function GroupSummary({ data }: { data: GroupData }) {
         <div>
           <dt>{t('Each participant', '每人金额')}</dt>
           <dd>
-            {formatAmount(BigInt(data.unitPrice), 6)} {t('test AUSD', '测试 AUSD')}
+            {formatAmount(BigInt(data.unitPrice), 18)} {t('test MON', '测试 MON')}
           </dd>
         </div>
         <div>
@@ -167,15 +167,15 @@ export function GroupSummary({ data }: { data: GroupData }) {
         <div>
           <dt>{t('Target amount (not collected)', '成团目标金额（尚未收款）')}</dt>
           <dd>
-            {formatAmount(BigInt(data.unitPrice) * BigInt(data.minimum), 6)}{' '}
-            {t('test AUSD', '测试 AUSD')}
+            {formatAmount(BigInt(data.unitPrice) * BigInt(data.minimum), 18)}{' '}
+            {t('test MON', '测试 MON')}
           </dd>
         </div>
         <div>
           <dt>{t('Maximum collection', '最大收款金额')}</dt>
           <dd>
-            {formatAmount(BigInt(data.unitPrice) * BigInt(data.capacity), 6)}{' '}
-            {t('test AUSD', '测试 AUSD')}
+            {formatAmount(BigInt(data.unitPrice) * BigInt(data.capacity), 18)}{' '}
+            {t('test MON', '测试 MON')}
           </dd>
         </div>
         <div>
@@ -375,7 +375,7 @@ function Builder({ storageKey, initial }: { storageKey: string; initial: GroupDr
       </Link>
       <div className="page-heading">
         <div>
-          <h1>{t('Plan a group collection', '创建成团收款草稿')}</h1>
+          <h1>{t('Plan a group collection', '创建成团收款')}</h1>
           <p>
             {t(
               'Agree on the amount, deadline and exit before anyone pays.',
@@ -413,10 +413,7 @@ function Builder({ storageKey, initial }: { storageKey: string; initial: GroupDr
           {step === 1 ? (
             <>
               <p className="small muted">
-                {t(
-                  'Candidate asset: test AUSD · 6 decimal places. No dollar deposits.',
-                  '候选资产：测试 AUSD · 6 位小数。不是美元充值。',
-                )}
+                {t('Pay with MON on Monad Testnet.', '使用 Monad 测试网 MON 付款。')}
               </p>
               {field('amount', t('Amount per participant', '每人金额'))}
               <div className="group-field-pair">
@@ -428,8 +425,18 @@ function Builder({ storageKey, initial }: { storageKey: string; initial: GroupDr
                 {Intl.DateTimeFormat().resolvedOptions().timeZone}
               </p>
               {field('startsAt', t('Collection starts', '募集开始时间'), 'datetime-local')}
-              {field('fundingDeadline', t('Collection deadline', '募集截止时间'), 'datetime-local')}
-              {field('settleNotBefore', t('Earliest settlement', '最早结算时间'), 'datetime-local')}
+              <div className="group-field-pair">
+                {field(
+                  'fundingDeadline',
+                  t('Collection deadline', '募集截止时间'),
+                  'datetime-local',
+                )}
+                {field(
+                  'settleNotBefore',
+                  t('Earliest settlement', '最早结算时间'),
+                  'datetime-local',
+                )}
+              </div>
             </>
           ) : null}
           {step === 2 ? (
@@ -439,8 +446,8 @@ function Builder({ storageKey, initial }: { storageKey: string; initial: GroupDr
                 t('Beneficiary wallet address', '收款钱包地址'),
                 'text',
                 t(
-                  'Fixed single beneficiary. Group splitting comes in a later stage.',
-                  '固定单个收款人，合伙分账将在后续阶段接入。',
+                  'Fixed single beneficiary. For multiple recipients, choose Group with split.',
+                  '此流程固定单个收款人；多人收款请选择成团分账。',
                 ),
               )}
               <p>
@@ -505,15 +512,64 @@ function Builder({ storageKey, initial }: { storageKey: string; initial: GroupDr
             )}
           </p>
         </form>
-        <aside className="rule-panel group-sidebar">
-          <h2>{t('The rules stay visible', '规则始终可见')}</h2>
-          <GroupRules />
-          <p className="small muted">
-            {t(
-              'Participants are wallet addresses, not verified people. Network fees remain separate.',
-              '参与人数按钱包地址计算，不代表已验证的自然人数；网络费用另计。',
-            )}
+        <aside className="rule-panel group-sidebar group-live-preview">
+          <h2>{t('What participants will see', '参与者将看到')}</h2>
+          <p className="muted">
+            {t('A preview of your agreement.', '同一份约定，所有参与者都能查看。')}
           </p>
+          <div className="group-preview-card">
+            <div className="example-title">
+              <span className="tool-icon">
+                <ToolIcon id="group" />
+              </span>
+              <div>
+                <h3>{fields.title || t('Your group title', '你的成团标题')}</h3>
+                <p>Group · {t('Testnet preview', '测试网预览')}</p>
+              </div>
+            </div>
+            <div className="summary-amount">
+              <strong>
+                {/^\d+(?:\.\d{0,18})?$/.test(fields.amount) ? fields.amount : '—'}{' '}
+                <small>MON / {t('person', '份')}</small>
+              </strong>
+            </div>
+            <p>
+              {fields.minimum} {t('to form a group', '份成团')} · {t('Up to', '最多')}{' '}
+              {fields.capacity} {t('participants', '份')}
+            </p>
+            <progress
+              max={100}
+              value={0}
+              aria-label={t('Draft: no payments yet', '草稿：尚未收款')}
+            />
+            <p className="small muted">
+              {t('Funding deadline', '募集截止')} · {fields.fundingDeadline.replace('T', ' ')}
+            </p>
+            <ol className="preview-flow">
+              <li>
+                <strong>1. {t('Pay to join', '支付参与')}</strong>
+                <p>{t('MON stays in the contract.', 'MON 保留在合约中。')}</p>
+              </li>
+              <li>
+                <strong>2. {t('Check the target', '截止时判定')}</strong>
+                <p>{t('Unsuccessful groups can refund.', '未成团可领取退款。')}</p>
+              </li>
+              <li>
+                <strong>3. {t('Settle as agreed', '按约定结算')}</strong>
+                <p>{t('Recipients withdraw their credit.', '到约定时间由收款方领取。')}</p>
+              </li>
+            </ol>
+            <p className="notice">
+              {t(
+                'Review the rules before publishing. Payments start only after verified publication.',
+                '发布前请核对规则，核验发布后才能参与付款。',
+              )}
+            </p>
+          </div>
+          <details>
+            <summary>{t('All rules and exit rights', '完整规则与退出方式')}</summary>
+            <GroupRules />
+          </details>
         </aside>
       </div>
     </div>
@@ -718,8 +774,8 @@ export function GroupDraftListPage() {
                 <Link to={`/app/group-drafts/${row.id}`}>{row.data.title}</Link>
               </h2>
               <p>
-                {formatAmount(BigInt(row.data.unitPrice), 6)}{' '}
-                {t('test AUSD per wallet', '测试 AUSD / 钱包')} · {row.data.minimum}/
+                {formatAmount(BigInt(row.data.unitPrice), 18)}{' '}
+                {t('test MON per wallet', '测试 MON / 钱包')} · {row.data.minimum}/
                 {row.data.capacity}
               </p>
             </div>

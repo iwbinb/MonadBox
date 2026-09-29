@@ -2,21 +2,17 @@ import { readFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 export function assertBranch(mode, branch) {
   if (mode === 'production' && branch === 'main') return;
-  if (mode === 'preview' && branch === 'dev') return;
   throw new Error('Deployment mode and Git branch do not match');
 }
 export function validateConfig(config, pkg) {
   if (config.name !== 'monadbox') throw new Error('Worker name must be monadbox');
-  if (config.env) throw new Error('Use one Worker and previews, not env-specific Workers');
+  if (config.env || config.previews) throw new Error('Use one Production Worker from main');
   const version = pkg.devDependencies?.wrangler;
   if (!/^4\.\d+\.\d+$/.test(version ?? '') || Number(version.split('.')[1]) < 135)
-    throw new Error('Pin Wrangler >=4.135 for Worker Previews');
+    throw new Error('Pin Wrangler >=4.135');
   const databases = [];
   const origins = [];
-  for (const [target, settings] of [
-    ['production', config],
-    ['preview', config.previews],
-  ]) {
+  for (const [target, settings] of [['production', config]]) {
     if (!settings || settings.vars?.APP_ENV !== target)
       throw new Error(`Invalid ${target} environment`);
     if (
@@ -33,11 +29,12 @@ export function validateConfig(config, pkg) {
       throw new Error('Invalid namespace');
     if (settings.vars.STORAGE_ENABLED !== 'false' || settings.vars.BACKGROUND_ENABLED !== 'false')
       throw new Error('Remote bindings not yet accepted; keep them disabled');
-    if (settings.r2_buckets?.length || settings.queues || settings.triggers)
+    if (settings.queues || settings.triggers)
       throw new Error(
         'Remote resources require a reviewed binding configuration, not placeholders',
       );
     for (const key of [
+      'ATTACHMENTS_ENABLED',
       'CLOUD_ENABLED',
       'GROUP_PUBLISH_ENABLED',
       'MODULES_ENABLED',
@@ -62,6 +59,18 @@ export function validateConfig(config, pkg) {
       databases.push(db[0].database_id.toLowerCase());
     } else if (settings.d1_databases?.length)
       throw new Error('Unused remote database must not be bound');
+    if (settings.vars.ATTACHMENTS_ENABLED === 'true') {
+      const buckets = settings.r2_buckets;
+      if (
+        settings.vars.MODULES_ENABLED !== 'true' ||
+        !Array.isArray(buckets) ||
+        buckets.length !== 1 ||
+        buckets[0].binding !== 'FILES' ||
+        buckets[0].bucket_name !== 'monadbox-private-files-production'
+      )
+        throw new Error('Attachments require the reviewed private FILES bucket and modules');
+    } else if (settings.r2_buckets?.length)
+      throw new Error('Unused private storage must not be bound');
     let deployment, previous, modules;
     try {
       deployment = JSON.parse(settings.vars.GROUP_DEPLOYMENT ?? 'null');
@@ -78,10 +87,12 @@ export function validateConfig(config, pkg) {
           !entry ||
           typeof entry.current !== 'boolean' ||
           !entry.deployment ||
-          !['split', 'group'].includes(entry.deployment.tool) ||
+          !['split', 'group', 'deliver', 'attend', 'milestones', 'rewards'].includes(
+            entry.deployment.tool,
+          ) ||
           entry.deployment.version !== (entry.deployment.tool === 'group' ? 2 : 1) ||
           entry.deployment.chainId !== 10143 ||
-          entry.deployment.asset?.toLowerCase() !== '0xa9012a055bd4e0edff8ce09f960291c09d5322dc' ||
+          entry.deployment.asset?.toLowerCase() !== '0x0000000000000000000000000000000000000000' ||
           !/^0x[0-9a-f]{40}$/i.test(entry.deployment.address) ||
           /^0x0{40}$/i.test(entry.deployment.address) ||
           !/^0x[0-9a-f]{40}$/i.test(entry.deployment.intakeAdmin) ||
@@ -125,7 +136,7 @@ export function validateConfig(config, pkg) {
           !entry ||
           entry.chainId !== 10143 ||
           entry.version !== 1 ||
-          entry.asset?.toLowerCase() !== '0xa9012a055bd4e0edff8ce09f960291c09d5322dc' ||
+          entry.asset?.toLowerCase() !== '0x0000000000000000000000000000000000000000' ||
           !/^0x[0-9a-f]{40}$/i.test(entry.address) ||
           /^0x0{40}$/i.test(entry.address) ||
           !/^0x[0-9a-f]{40}$/i.test(entry.intakeAdmin) ||
@@ -137,11 +148,9 @@ export function validateConfig(config, pkg) {
       throw new Error('Unverified Group deployment structure');
   }
   if (new Set(databases).size !== databases.length || new Set(origins).size !== origins.length)
-    throw new Error('Production and Preview must use different origins and databases');
+    throw new Error('Duplicate database or origin');
   if (!config.assets?.run_worker_first || config.assets.binding !== 'ASSETS')
     throw new Error('API must run before SPA fallback');
-  if (config.previews.routes || config.previews.triggers || config.previews.queues?.consumers)
-    throw new Error('Unsupported Preview event routing');
 }
 export async function validateDeployment() {
   validateConfig(
@@ -149,7 +158,7 @@ export async function validateDeployment() {
     JSON.parse(await readFile('package.json', 'utf8')),
   );
   console.log(
-    'Deployment config: one Worker, isolated Preview vars, no server-side signing or resource provisioning.',
+    'Deployment config: main → Production, native MON on Monad Testnet, explicit browser signing.',
   );
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href)

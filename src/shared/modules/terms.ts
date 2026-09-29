@@ -1,4 +1,4 @@
-import { encodeAbiParameters, encodeFunctionData, erc20Abi, keccak256, stringToHex } from 'viem';
+import { encodeAbiParameters, encodeFunctionData, keccak256, stringToHex } from 'viem';
 import type { Abi, AbiParameter, Address, Hex } from 'viem';
 import { artifact as split } from './generated/SplitPaymentsV1';
 import { artifact as group } from './generated/GroupEscrowV2';
@@ -15,7 +15,7 @@ import type {
   CheckInProof,
   Agreement,
 } from './model';
-import { TOKEN } from '../lab/network';
+import { TOKEN } from '../network';
 import { same } from '../cloud/chain';
 export const definitions = {
   split: { artifact: split, create: 'createSplit', get: 'getSplit', version: 1 },
@@ -211,22 +211,11 @@ export function attendanceOrderId(id: Hex, participant: Address) {
 export function moduleCall(
   i: ModuleIntent,
   signatures?: ModuleSignatures,
-): { to: Address; data: Hex } {
+): { to: Address; data: Hex; value: bigint } {
   const p = validatePublication(i.publication),
     abi = moduleAbi(p.data.tool),
     id = p.chainBoxId;
-  if (i.action === 'approve') {
-    const amount = approvalAmount(i);
-    if (!amount) throw Error('INVALID_AMOUNT');
-    return {
-      to: TOKEN,
-      data: encodeFunctionData({
-        abi: erc20Abi,
-        functionName: 'approve',
-        args: [p.deployment.address, BigInt(amount)],
-      }),
-    };
-  }
+  if (i.action === 'approve') throw Error('ACTION_UNAVAILABLE');
   let name: string = i.action,
     args: readonly unknown[] = [id];
   if (i.action === 'create') {
@@ -289,7 +278,17 @@ export function moduleCall(
     if (p.data.tool !== 'split' || !i.amount || !i.paymentNonce) throw Error('INVALID_PAYMENT');
     args = [id, BigInt(i.amount), i.paymentNonce];
   } else if (p.data.tool !== 'group') throw Error('ACTION_UNAVAILABLE');
-  return { to: p.deployment.address, data: encodeFunctionData({ abi, functionName: name, args }) };
+  const funded =
+    ['pay', 'fund', 'register', 'contribute'].includes(i.action) ||
+    (p.data.tool === 'rewards' && i.action === 'create');
+  const value = funded ? BigInt(approvalAmount(i) ?? '0') : 0n;
+  if (funded && (value <= 0n || (i.amount !== undefined && BigInt(i.amount) !== value)))
+    throw Error('INVALID_AMOUNT');
+  return {
+    to: p.deployment.address,
+    data: encodeFunctionData({ abi, functionName: name, args }),
+    value,
+  };
 }
 /** Identical bounded integer allocation to SplitMath.sol; order resolves ties. */
 export function allocateSplit(amount: bigint, bps: readonly number[]): bigint[] {

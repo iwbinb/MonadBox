@@ -15,9 +15,9 @@ const AppContext = createContext<{
 export function AppProvider({ children }: { children: ReactNode }) {
   const [locale, setLocale] = useState<Locale>(() => {
     try {
-      return localStorage.getItem('monadbox.locale') === 'zh' ? 'zh' : 'en';
+      return localStorage.getItem('monadbox.locale') === 'en' ? 'en' : 'zh';
     } catch {
-      return 'en';
+      return 'zh';
     }
   });
   const [attempt, setAttempt] = useState(0);

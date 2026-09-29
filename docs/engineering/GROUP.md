@@ -11,7 +11,7 @@
 | `/app/groups/:id` | 编辑/删除未冻结草稿、查看规则、准备发布、签名创建、核验和恢复 |
 | `/b/:id` | 无需登录查看已经核实发布的规则与最终确认区块状态 |
 
-导航中的 Cloud / 云端进入云端记录。功能未配置时明确提示并保留本地草稿入口，不生成假记录。一个浏览器的本地草稿不是云端账号数据，上传需要用户选择并确认；不删除本地原稿。
+工作台的云端记录入口进入已登录账号的数据。功能未配置时明确提示并保留本地草稿入口，不生成假记录。一个浏览器的本地草稿不是云端账号数据，上传需要用户选择并确认；不删除本地原稿。
 
 ## 2. 本地草稿
 
@@ -19,13 +19,13 @@
 
 打开`/create/group`。依次填写基本信息、募集规则、收款人并核对预览，点击“保存草稿”。在`/app/group-drafts`查看、编辑或删除草稿。
 
-默认每份30测试AUSD、最低3份、上限20份只是可编辑的示例输入，**不是已收款或推荐价格**。人数计算按钱包份额，不验证独立自然人。
+默认每份0.1测试MON、最低3份、上限20份只是可编辑的示例输入，**不是已收款或推荐价格**。人数计算按钱包份额，不验证独立自然人。
 
 规则摘要必须保持可读：截止前可退出且同地址不能重进；未成团可退；成功组到指定时间归属固定收款人；成团不等于交付证明；credit不等于钱包已到账。这里只预览规则，尚不发送对应链上操作。
 
 ### 保存与导入导出
 
-保存在当前浏览器localStorage，按网站origin、environment与10143隔离；最多40份。不同设备、浏览器、Preview和正式域名不自动共享。未保存的输入离开页面会丢失，当前不是自动保存服务。
+保存在当前浏览器localStorage，按网站origin、environment与10143隔离；最多40份。不同设备、浏览器、本地和正式域名不自动共享。未保存的输入离开页面会丢失，当前不是自动保存服务。
 
 JSON导出备份包含标题、说明、地址、时间和金额等明文；不要填写私钥、个人敏感信息或机密交付材料。导入需匹配format/version/chain/token并通过schema，最多16KB；每次成功导入创建新ID，不覆盖现有草稿。
 
@@ -35,7 +35,7 @@ JSON导出备份包含标题、说明、地址、时间和金额等明文；不�
 
 | 情况 | 当前行为 |
 | --- | --- |
-| 标题/金额/人数/地址/时间不合法 | 对应字段提示，不保存；金额只允许6位小数以内，不接受负数或科学记数法 |
+| 标题/金额/人数/地址/时间不合法 | 对应字段提示，不保存；金额最多18位小数，不接受负数或科学记数法 |
 | localStorage不可写或安全锁不可用 | 不显示保存成功；保留表单并允许导出备份 |
 | 原草稿数据损坏 | 显示错误，不清空/覆盖原记录 |
 | 另一个标签已保存新版 | revision冲突，拒绝旧编辑覆盖；可导出本次内容后重新读取 |
@@ -62,10 +62,10 @@ D1 保存标题、说明、结构化规则、原始 UTF-8 metadata、metadataHas
 ## 5. 发布流程
 
 1. 保存云端草稿，核对完整规则与收款地址。
-2. 准备发布：服务器验证注册的测试网 Group 合约、固定官方测试 AUSD、实际 runtime hash、当前链时间/nonce及开始时间，冻结元数据和规则，保存唯一 salt/Box ID/intent。
+2. 准备发布：服务器验证注册的测试网 Group 合约、固定原生 MON 标识 address(0)、实际 runtime hash、当前链时间/nonce及开始时间，冻结元数据和规则，保存唯一 salt/Box ID/intent。
 3. 页面显示固定合约、Box ID、条款、签名期限。用户勾选确认，再显式让同一登录钱包发送 `createGroup`；value=0，不调用approve或contribute。仍会消耗测试 MON Gas。
 4. 服务端重新读链，核对发起人、nonce、交易类型/授权字段、to、calldata、value、BoxCreated事件、规则哈希、原区块canonical及finalized高度，并读回Group状态。仅接受legacy、EIP-2930、EIP-1559且不携带authorizationList的交易；EIP-7702、未知或缺失类型拒绝，即使调用参数和事件都匹配也不能发布。仅提供交易hash不算发布成功。
-5. 核验通过后产生公开页面。另一浏览器无需登录即可读取；默认环境仍显示“付款尚未开放”；完成配置放行后展示独立授权和付款操作。
+5. 核验通过后产生公开页面。另一浏览器无需登录即可读取；默认环境仍显示“付款尚未开放”；完成配置放行后展示 MON 付款操作。
 
 服务器和用户浏览器均核验编译生成的合约运行时代码；不可变字段位置由编译产物确定，另核验固定token/admin getters及已登记runtime hash。匹配代码不等于已经安全审计。Group合约部署本身是单独的用户授权操作，本页面只发布实例，CI不代部署。
 
@@ -85,11 +85,11 @@ D1 保存标题、说明、结构化规则、原始 UTF-8 metadata、metadataHas
 
 仓库当前默认：`CLOUD_ENABLED=false`、`GROUP_PUBLISH_ENABLED=false`、`GROUP_DEPLOYMENT=null`。本地模拟不构成真实D1资源授权。以后启用云端只需要D1，不必开R2/Queues。
 
-先在用户控制台分别建立生产/Preview数据库，通过独立PR记录真实ID及精确origin；根配置与 `previews` 各自绑定 `DB`，不能复用同一ID。对每个新库依次应用 `0001_foundation.sql`、`0002_cloud_groups.sql`，再写入对应 `environment_guard`，分别为 `monadbox-production`、`monadbox-preview`。已应用0001的库只应用0002，不能重复执行ALTER TABLE。
+在用户授权后创建唯一数据库 monadbox-production，按顺序应用0001至0005，写入 environment_guard=monadbox-production；登记实际DB ID与精确Production origin。详细步骤见[部署说明](DEPLOYMENT.md)。已有迁移不能重复执行。
 
 | 参数 | 开启云端时的要求 |
 | --- | --- |
-| `CLOUD_ENABLED` | `true`，仅在该环境D1与schema2/marker验证后 |
+| `CLOUD_ENABLED` | `true`，仅在Production D1与cloud schema3/module schema2及marker验证后 |
 | `APP_ORIGIN` | 该环境实际HTTPS origin，无路径/尾斜线；不接受通配符 |
 | D1绑定 | 名称 `DB`、该环境实际database_id，migrations目录为migrations |
 | `STORAGE_ENABLED` | 保持 `false`；这是历史通用R2/队列组合原语开关，不是新的D1-only云端开关 |
@@ -97,9 +97,9 @@ D1 保存标题、说明、结构化规则、原始 UTF-8 metadata、metadataHas
 | `GROUP_PUBLISH_ENABLED` | 先保持 `false`；不因云端可保存就自动允许链上创建 |
 | `NETWORK_WRITES_ENABLED`、`MAINNET_ENABLED` | 公开配置继续 `false`；本地资金功能已实现，真实验收前不开放公众付款或主网 |
 
-启用Group发布还需要经过核验的实际测试网部署：chainId、version、address、asset、intakeAdmin、runtimeHash。不能填写本地Anvil地址/哈希冒充公开部署。登记后才经PR显式启用 `GROUP_PUBLISH_ENABLED`。后台仍不持有钱包私钥；用户浏览器签名只调用已登记目标。
+启用Group发布还需要经过核验的实际测试网部署：chainId、version、address、asset、intakeAdmin、runtimeHash。不能填写本地Anvil地址/哈希冒充公开部署。登记后才在main配置中显式启用 `GROUP_PUBLISH_ENABLED`。后台仍不持有钱包私钥；用户浏览器签名只调用已登记目标。
 
-没有绑定时云端API返回503，不报数据库已保存；绑定错marker/schema也拒绝。健康响应新增 `cloudGroups`，旧 `storage: disabled` 与新 D1-only云端不矛盾。生产/Preview真实跨环境隔离仍待M1-D验收。
+没有绑定时云端API返回503，不报数据库已保存；绑定错marker/schema也拒绝。健康响应新增 `cloudGroups`，旧 `storage: disabled` 与新 D1-only云端不矛盾。Production资源归属、marker和同源校验仍待实际验收。
 
 ## 8. 实际 API
 

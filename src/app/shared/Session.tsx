@@ -1,10 +1,9 @@
 import { useEffect, useState } from 'react';
-import type { Address } from 'viem';
 import { useApp } from '../context';
 import type { SessionInfo } from '../../shared/cloud/model';
 import { api, ApiError, signIn, validateLogin } from '../cloud/api';
-import { discoverWallets, walletState, switchTestnet, userError } from '../../shared/lab/wallet';
-import type { WalletOption } from '../../shared/lab/wallet';
+import { userError } from '../../shared/wallet';
+import { useFundsWallet, WalletChoice } from './FundsWallet';
 export function errorText(e: unknown) {
   if (e instanceof ApiError) {
     const errors: Record<string, string> = {
@@ -58,28 +57,21 @@ export function useSession(enabled = true) {
 }
 export function Login({ onLogin }: { onLogin: (s: SessionInfo) => void }) {
   const { t } = useApp();
-  const [wallets, setWallets] = useState<WalletOption[]>([]),
-    [selected, setSelected] = useState(''),
-    [account, setAccount] = useState<Address | null>(null);
+  const funds = useFundsWallet(),
+    { wallet, actor: account } = funds;
   const [challenge, setChallenge] = useState<{ id: string; message: string } | null>(null),
     [busy, setBusy] = useState(false),
     [error, setError] = useState('');
-  const wallet = wallets.find((w) => w.id === selected) ?? wallets[0];
-  useEffect(() => discoverWallets(window, setWallets), []);
   async function connect() {
     setBusy(true);
     setError('');
     setChallenge(null);
     try {
-      if (!wallet) throw Error('No browser wallet / 未找到浏览器钱包');
-      let s = await walletState(wallet.provider, true);
-      if (s.chainId !== 10143) s = await switchTestnet(wallet.provider);
-      if (!s.account) throw Error();
-      setAccount(s.account);
+      const actor = await funds.connect();
       const c = await api<{ id: string; message: string }>('/auth/nonce', 'POST', {
-        address: s.account,
+        address: actor,
       });
-      validateLogin(c.message, c.id, s.account);
+      validateLogin(c.message, c.id, actor);
       setChallenge(c);
     } catch (e) {
       setError(errorText(e));
@@ -87,6 +79,9 @@ export function Login({ onLogin }: { onLogin: (s: SessionInfo) => void }) {
       setBusy(false);
     }
   }
+  useEffect(() => {
+    setChallenge(null);
+  }, [account, wallet]);
   async function login() {
     if (!wallet || !account || !challenge) return;
     setBusy(true);
@@ -104,40 +99,17 @@ export function Login({ onLogin }: { onLogin: (s: SessionInfo) => void }) {
       <h2>{t('Sign in with your wallet', '使用钱包签名登录')}</h2>
       <p>
         {t(
-          'This signature creates a website session. It does not approve tokens or transfer money.',
-          '该签名仅建立网站会话，不授权代币，也不会转账。',
+          'This signature creates a website session. No funds are transferred.',
+          '该签名仅建立网站会话，不会转账。',
         )}
       </p>
-      <label>
-        {t('Browser wallet', '浏览器钱包')}
-        <select
-          value={wallet?.id ?? ''}
-          onChange={(e) => {
-            setSelected(e.target.value);
-            setChallenge(null);
-            setAccount(null);
-          }}
-        >
-          <option value="" disabled>
-            {t('Select wallet', '选择钱包')}
-          </option>
-          {wallets.map((w) => (
-            <option key={w.id} value={w.id}>
-              {w.name}
-            </option>
-          ))}
-        </select>
-      </label>
-      {!wallets.length ? (
-        <p>
-          {t(
-            'Use a browser with an injected wallet. WalletConnect is not enabled.',
-            '请使用提供钱包扩展或注入钱包的浏览器，尚未接入 WalletConnect。',
-          )}
-        </p>
-      ) : null}
-      <button className="button primary" disabled={busy || !wallet} onClick={() => void connect()}>
-        {t('Connect and prepare sign-in', '连接并准备登录')}
+      <WalletChoice value={funds} busy={busy} connect={() => void connect()} />
+      <button
+        className="button secondary"
+        disabled={busy || !account}
+        onClick={() => void connect()}
+      >
+        {t('Prepare sign-in', '准备登录签名')}
       </button>
       {challenge ? (
         <>

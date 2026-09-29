@@ -2,9 +2,8 @@ import { test, expect } from '@playwright/test';
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { decodeFunctionData, toHex } from 'viem';
 import type { Address, Hex } from 'viem';
-import { origin, client, wallet, inject, mine, warp, connect } from '../fixtures/funds-browser';
+import { origin, client, inject, warp, connect } from '../fixtures/funds-browser';
 import { action, login } from '../fixtures/modules-browser';
-import { TOKEN } from '../../src/shared/lab/network';
 import { localDateInput } from '../../src/shared/group/draft';
 import { moduleAbi } from '../../src/shared/modules/terms';
 import type { ModuleBox } from '../../src/shared/modules/model';
@@ -19,7 +18,7 @@ test.afterEach(async ({ page }, info) => {
   }
 });
 
-test('100 rewards: exact funding, two-step recovery, fixed claims and expiry preserve credit', async ({
+test('100 rewards: exact funding, atomic native funding recovery, fixed claims and expiry preserve credit', async ({
   page,
   browser,
 }, info) => {
@@ -28,20 +27,7 @@ test('100 rewards: exact funding, two-step recovery, fixed claims and expiry pre
   const { accounts } = JSON.parse(readFileSync('artifacts/funds-test.json', 'utf8')) as {
     accounts: Address[];
   };
-  const [admin, creator, recipient, other] = accounts as [Address, Address, Address, Address];
-  const tokenAbi = JSON.parse(
-    readFileSync('contracts/out/MockToken.sol/MockToken.json', 'utf8'),
-  ).abi;
-  await client.waitForTransactionReceipt({
-    hash: await wallet.writeContract({
-      account: admin,
-      address: TOKEN,
-      abi: tokenAbi,
-      functionName: 'mint',
-      args: [creator, 1000000n],
-    }),
-  });
-  await mine();
+  const [, creator, recipient, other] = accounts as [Address, Address, Address, Address];
   const context = await browser.newContext({
     viewport: page.viewportSize() ?? undefined,
     recordVideo: { dir: 'test-results/rewards-recipient-' + info.project.name },
@@ -54,7 +40,7 @@ test('100 rewards: exact funding, two-step recovery, fixed claims and expiry pre
       await target.addInitScript(() => {
         addEventListener('DOMContentLoaded', () => {
           const label = document.createElement('div');
-          label.textContent = 'LOCAL DEMO · Anvil / MockToken · simulated wallet';
+          label.textContent = 'LOCAL DEMO · Anvil / native MON · simulated wallet';
           label.style.cssText =
             'position:fixed;bottom:0;left:0;right:0;z-index:99999;padding:6px;background:#111;color:white;font:12px sans-serif;text-align:center;pointer-events:none';
           document.body.append(label);
@@ -73,19 +59,22 @@ test('100 rewards: exact funding, two-step recovery, fixed claims and expiry pre
       .fill(localDateInput(start + 3600));
     const csv = [
       'address,amount',
-      `${recipient},0.000031`,
-      `${other},0.000070`,
-      ...Array.from({ length: 98 }, (_, n) => `${toHex(n + 100, { size: 20 })},0.000001`),
+      `${recipient},0.000000000000000031`,
+      `${other},0.000000000000000070`,
+      ...Array.from(
+        { length: 98 },
+        (_, n) => `${toHex(n + 100, { size: 20 })},0.000000000000000001`,
+      ),
     ].join('\n');
     await page
       .getByLabel('Import a local reward CSV', { exact: true })
       .setInputFiles({ name: 'rewards.csv', mimeType: 'text/csv', buffer: Buffer.from(csv) });
-    await expect(
-      page.getByRole('textbox', { name: 'Reward list: wallet, AUSD amount', exact: true }),
-    ).toHaveValue(csv);
+    await expect(page.getByLabel('Reward list: wallet, MON amount', { exact: true })).toHaveValue(
+      csv,
+    );
     await page.getByRole('button', { name: 'Review rules', exact: true }).click();
     const preview = page.getByRole('region', { name: 'Frozen rules preview', exact: true });
-    await expect(preview).toContainText('0.000199');
+    await expect(preview).toContainText('0.000000000000000199');
     await expect(preview).toContainText('become public');
     await expect(preview.getByRole('listitem')).toHaveCount(100);
     await page.getByRole('button', { name: 'Save reviewed draft', exact: true }).click();
@@ -94,9 +83,7 @@ test('100 rewards: exact funding, two-step recovery, fixed claims and expiry pre
     await login(page);
     await page.getByRole('button', { name: 'Copy to cloud', exact: true }).click();
     await page.getByRole('button', { name: 'Freeze and prepare publication', exact: true }).click();
-    await expect(
-      page.getByRole('button', { name: 'Connect funds wallet', exact: true }),
-    ).toBeVisible();
+
     async function box() {
       return page.evaluate(
         async () =>
@@ -107,6 +94,9 @@ test('100 rewards: exact funding, two-step recovery, fixed claims and expiry pre
           ).data as ModuleBox,
       );
     }
+    await expect(
+      page.getByRole('button', { name: 'Prepare: Publish and fund full reward list', exact: true }),
+    ).toBeVisible();
     const first = await box();
     const p = first.publication!.publication;
     const read = async (name: string, args: unknown[]) =>
@@ -117,7 +107,7 @@ test('100 rewards: exact funding, two-step recovery, fixed claims and expiry pre
         args,
       });
     const credit = (who: Address) => read('creditForBox', [p.chainBoxId, who]);
-    await page.getByRole('button', { name: 'Connect funds wallet', exact: true }).click();
+    await connect(page);
     async function sign(name: string) {
       await page.getByRole('button', { name: 'Prepare: ' + name, exact: true }).click();
       await page
@@ -128,13 +118,8 @@ test('100 rewards: exact funding, two-step recovery, fixed claims and expiry pre
         .check();
       await page.getByRole('button', { name: 'Sign this action', exact: true }).click();
     }
-    await sign('Approve exact amount');
-    await expect(
-      page.getByRole('button', { name: 'Prepare funded publication', exact: true }),
-    ).toBeVisible();
-    const approved = await box();
-    expect(approved.state).toBe('prepared');
-    expect(approved.publication!.action).toBe('approve');
+    expect(first.publication!.action).toBe('create');
+    expect(first.publication!.fundingApproval).toBeUndefined();
     expect(
       await page.evaluate(
         async (id) => (await fetch('/api/v1/public/modules/' + id)).status,
@@ -142,27 +127,13 @@ test('100 rewards: exact funding, two-step recovery, fixed claims and expiry pre
       ),
     ).toBe(404);
     await expect(read('getBatch', [p.chainBoxId])).rejects.toThrow();
-    // A separate explicit local transaction proves creation must refresh the nonce.
-    await client.waitForTransactionReceipt({
-      hash: await wallet.sendTransaction({ account: creator, to: creator, value: 0n }),
-    });
-    await mine();
-    await page.getByRole('button', { name: 'Prepare funded publication', exact: true }).click();
-    await expect(
-      page.getByRole('button', { name: 'Connect funds wallet', exact: true }),
-    ).toBeVisible();
-    const prepared = await box();
-    expect(prepared.publication!.nonce).toBe(approved.publication!.nonce + 2);
-    expect(prepared.publication!.publication).toEqual(p);
-    expect(prepared.publication!.fundingApproval?.hash).toBe(approved.receipt!.hash);
-    await page.getByRole('button', { name: 'Connect funds wallet', exact: true }).click();
     await page.evaluate(() => {
       (window as Window & { __fundsLost: boolean }).__fundsLost = true;
     });
     await sign('Publish and fund full reward list');
     await expect(page.getByRole('alert')).toBeVisible();
     await page.reload();
-    await page.getByRole('button', { name: 'Connect funds wallet', exact: true }).click();
+    await connect(page);
     const history = page
       .getByRole('listitem')
       .filter({ hasText: 'Publish and fund full reward list' });
@@ -174,15 +145,25 @@ test('100 rewards: exact funding, two-step recovery, fixed claims and expiry pre
     const published = await box();
     const creation = await client.getTransactionReceipt({ hash: published.receipt!.hash! });
     expect(await read('locked', [p.chainBoxId])).toBe(199n);
-    const balance = (who: Address) =>
-      client.readContract({
-        address: TOKEN,
-        abi: tokenAbi,
-        functionName: 'balanceOf',
-        args: [who],
-      }) as Promise<bigint>;
+    const balance = (who: Address) => client.getBalance({ address: who });
     const before = await balance(recipient),
       beforeCreator = await balance(creator);
+    const fees = async (who: Address) => {
+      const logs = await client.getLogs({
+        address: p.deployment.address,
+        fromBlock: creation.blockNumber + 1n,
+        toBlock: 'latest',
+      });
+      let fee = 0n;
+      for (const hash of new Set(logs.map((l) => l.transactionHash))) {
+        const tx = await client.getTransaction({ hash: hash! });
+        if (tx.from.toLowerCase() === who.toLowerCase()) {
+          const receipt = await client.getTransactionReceipt({ hash: hash! });
+          fee += tx.gas * receipt.effectiveGasPrice;
+        }
+      }
+      return fee;
+    };
     await claimPage.goto(origin + '/box/' + p.publicId);
     await connect(claimPage);
     await expect(
@@ -192,7 +173,7 @@ test('100 rewards: exact funding, two-step recovery, fixed claims and expiry pre
     await claimPage.getByRole('button', { name: 'Read my rights', exact: true }).click();
     await action(claimPage, 'Claim my reward credit');
     expect(await credit(recipient)).toBe(31n);
-    expect(await balance(recipient)).toBe(before);
+    expect(await balance(recipient)).toBe(before - (await fees(recipient)));
     await expect(
       claimPage.getByRole('button', { name: 'Prepare: Claim my reward credit', exact: true }),
     ).toHaveCount(0);
@@ -211,10 +192,10 @@ test('100 rewards: exact funding, two-step recovery, fixed claims and expiry pre
     expect(await credit(recipient)).toBe(31n);
     expect(await read('locked', [p.chainBoxId])).toBe(0n);
     await action(page, 'Withdraw to my wallet');
-    expect(await balance(creator)).toBe(beforeCreator + 168n);
+    expect(await balance(creator)).toBe(beforeCreator + 168n - (await fees(creator)));
     await claimPage.getByRole('button', { name: 'Read my rights', exact: true }).click();
     await action(claimPage, 'Withdraw to my wallet');
-    expect(await balance(recipient)).toBe(before + 31n);
+    expect(await balance(recipient)).toBe(before + 31n - (await fees(recipient)));
     const events = await client.getLogs({
       address: p.deployment.address,
       fromBlock: creation.blockNumber,

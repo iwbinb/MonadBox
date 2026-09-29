@@ -9,7 +9,7 @@ import { createPublicClient, createWalletClient, defineChain, http, keccak256 } 
 const funds = process.env.MONADBOX_LOCAL_FUNDS_TEST === '1';
 const rpc = funds ? 'http://127.0.0.1:18746' : 'http://127.0.0.1:18745';
 const origin = funds ? 'http://127.0.0.1:18890' : 'http://127.0.0.1:18889';
-const token = '0xa9012a055bd4e0eDfF8Ce09f960291C09D5322dC';
+const token = '0x0000000000000000000000000000000000000000';
 const binary = existsSync('tools/anvil') ? 'tools/anvil' : 'anvil';
 if (!execFileSync(binary, ['--version'], { encoding: 'utf8' }).includes('Version: 1.8.3'))
   throw Error('Anvil 1.8.3 required');
@@ -73,8 +73,6 @@ try {
   )
     throw Error('Local Anvil did not start');
   const accounts = await raw('eth_accounts');
-  const mock = JSON.parse(readFileSync('contracts/out/MockToken.sol/MockToken.json', 'utf8'));
-  await raw('anvil_setCode', [token, mock.deployedBytecode.object]);
   const artifact = JSON.parse(readFileSync('artifacts/group/GroupEscrowV1.json', 'utf8'));
   const chain = defineChain({
     id: 10143,
@@ -200,6 +198,7 @@ try {
     '0002_cloud_groups.sql',
     '0003_modules.sql',
     '0004_delivery_files.sql',
+    '0005_native_mon.sql',
   ]) {
     const text = readFileSync('migrations/' + file, 'utf8').replace(/^--.*$/gm, '');
     for (const sql of text

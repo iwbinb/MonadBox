@@ -19,8 +19,8 @@ import { moduleActions, confirmModuleAction, verifyModule } from '../../src/shar
 import type { ModuleSnapshot } from '../../src/shared/modules/chain';
 import { deliverySchema, moduleIntentSchema } from '../../src/shared/modules/model';
 import type { Agreement, ModuleIntent, ModulePublication } from '../../src/shared/modules/model';
-import { TOKEN } from '../../src/shared/lab/network';
-import type { ChainClient } from '../../src/shared/lab/network';
+import { TOKEN } from '../../src/shared/network';
+import type { ChainClient } from '../../src/shared/network';
 const a = privateKeyToAccount(toHex(101, { size: 32 })),
   b = privateKeyToAccount(toHex(102, { size: 32 })),
   M = '0x3333333333333333333333333333333333333333' as Address,
@@ -149,7 +149,7 @@ describe('Deliver permissions and typed settlement', () => {
   });
   it('offers role-correct funding, exits and exact time boundaries even during intake pause', () => {
     const s = { ...snapshot, state: 'AWAITING_FUNDS', storedState: 1 };
-    expect(moduleActions(p, a.address, s)).toEqual(['approve', 'cancelOffer']);
+    expect(moduleActions(p, a.address, s)).toEqual(['fund', 'cancelOffer']);
     expect(moduleActions(p, b.address, s)).toEqual(['cancelOffer']);
     expect(moduleActions(p, a.address, { ...s, allowance: '101' })).toContain('fund');
     expect(moduleActions(p, a.address, { ...s, timestamp: data.fundBy })).toEqual(['cancelOffer']);
@@ -176,11 +176,9 @@ describe('Deliver permissions and typed settlement', () => {
     expect(() => moduleCall(i)).toThrow('EVIDENCE_REQUIRED');
     expect(() => moduleCall({ ...i, evidenceHash: toHex(0, { size: 32 }) })).toThrow();
     expect(moduleCall({ ...i, evidenceHash: H }).to).toBe(M);
-    expect(
-      moduleCall({ ...i, action: 'approve', amount: '999' }).data.endsWith(
-        toHex(101, { size: 32 }).slice(2),
-      ),
-    ).toBe(true);
+    expect(moduleCall({ ...i, action: 'fund' }).value).toBe(101n);
+    expect(() => moduleCall({ ...i, action: 'fund', amount: '999' })).toThrow('INVALID_AMOUNT');
+    expect(() => moduleCall({ ...i, action: 'approve' })).toThrow('ACTION_UNAVAILABLE');
   });
 });
 async function fake() {
@@ -216,6 +214,7 @@ async function fake() {
   const receipt = { status: 'success', blockNumber: 100n, blockHash: H, logs: [log] };
   const c = {
     getChainId: vi.fn(async () => 10143),
+    getBalance: vi.fn(async () => 100000000000000000000n),
     getCode: vi.fn(async () => definitions.deliver.artifact.runtime),
     getTransaction: vi.fn(async () => tx),
     getTransactionReceipt: vi.fn(async () => receipt),

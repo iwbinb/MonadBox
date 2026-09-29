@@ -1,12 +1,14 @@
 import { errorText, useSession, Login, Header } from '../shared/Session';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { formatUnits } from 'viem';
+import { GroupOverview } from '../group/GroupOverview';
 import type { ReactNode } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useApp } from '../context';
 import { GroupRules } from '../group/GroupPages';
 import { CloudSummary as GroupSummary } from './CloudSummary';
-import { discoverWallets, walletState } from '../../shared/lab/wallet';
-import type { WalletOption } from '../../shared/lab/wallet';
+import { discoverWallets, walletState } from '../../shared/wallet';
+import type { WalletOption } from '../../shared/wallet';
 import {
   draftKey,
   readDrafts,
@@ -291,7 +293,11 @@ function CloudGroup() {
     const account = (await walletState(wallet.provider, true)).account;
     if (!account || !sameAccount(account, session.address))
       throw Error('Select the signed-in wallet account / 请使用当前登录的钱包账号');
-    const tx = await sendPublication(wallet.provider, b.publication.intent);
+    const tx = await sendPublication(
+      wallet.provider,
+      b.publication.intent,
+      state.status === 'ready' ? state.config.environment : 'unavailable',
+    );
     setHash(tx);
     setNotice(
       t(
@@ -587,6 +593,9 @@ export function PublicGroupPage() {
     [error, setError] = useState(''),
     [loading, setLoading] = useState(true),
     [attempt, setAttempt] = useState(0);
+  const updateSnapshot = useCallback((snapshot: PublicGroup['snapshot']) => {
+    setValue((current) => (current ? { ...current, snapshot } : current));
+  }, []);
   useEffect(() => {
     let active = true;
     setLoading(true);
@@ -617,42 +626,49 @@ export function PublicGroupPage() {
     SETTLED: ['Settled', '已结算'],
   };
   return (
-    <section className="container cloud-page">
-      <h1>{t('Group collection', '成团收款')}</h1>
+    <section className="container cloud-page public-group-page">
+      <p className="eyebrow">Group · Monad Testnet</p>
+      <h1>
+        <span className="group-page-title">{t('Group collection', '成团收款')}</span>
+        <span className="group-checkout-title">{t('Confirm payment', '确认付款')}</span>
+      </h1>
       {loading ? (
         <p role="status">
           {t('Verifying published rules and chain state…', '正在核验公开规则与链状态…')}
         </p>
       ) : value ? (
-        <div className="cloud-layout">
-          <div className="cloud-card">
-            <p className="status-label">
+        <div className="public-box-layout">
+          <div>
+            <span className="status-label">
               {t(...(names[value.snapshot.state] ?? ['Unknown', '未知']))}
-            </p>
-            <GroupSummary data={value.data} published />
-            <p>
-              {t('Creator', '创建者')}：<code>{value.creator}</code>
-            </p>
+            </span>
+            <GroupOverview group={value} />
+            <details className="cloud-card">
+              <summary>{t('All fixed rules', '完整固定规则')}</summary>
+              <GroupSummary data={value.data} published />
+              <GroupRules />
+            </details>
           </div>
-          <aside className="cloud-card">
-            <h2>{t('Verified on-chain snapshot', '已核验的链上快照')}</h2>
-            <p>
-              {t('Active participants', '有效参与数')}：{value.snapshot.activeCount}
-            </p>
-            <p>
-              {t('Confirmed block', '确认区块')}：{value.snapshot.blockNumber}
-            </p>
-            <p>
-              {t('Snapshot time', '快照时间')}：
-              {new Date(value.snapshot.timestamp * 1000).toISOString()}
-            </p>
-            <GroupRules />
+          <aside className="public-checkout">
+            <div className="cloud-card public-amount-card">
+              <h2>{t('Participation amount', '每次参与金额')}</h2>
+              <p className="group-payment-title">{value.data.title}</p>
+              <div className="payment-amount">
+                {formatUnits(BigInt(value.data.unitPrice), 18)} <small>MON</small>
+              </div>
+              <p>
+                {t(
+                  'Monad Testnet · network fee paid separately in MON',
+                  'Monad 测试网 · 网络费另以 MON 支付',
+                )}
+              </p>
+            </div>
             {!value.paymentsEnabled ? (
               <button className="button primary" disabled>
                 {t('Payments are not enabled yet', '付款功能尚未开放')}
               </button>
             ) : null}
-            <GroupFunds key={value.publicId} group={value} />
+            <GroupFunds key={value.publicId} group={value} onSnapshot={updateSnapshot} />
             <button className="button secondary" onClick={() => setAttempt((x) => x + 1)}>
               {t('Refresh chain state', '刷新链状态')}
             </button>
@@ -672,6 +688,12 @@ export function PublicGroupPage() {
             </button>
             <details>
               <summary>{t('Verification details', '核验详情')}</summary>
+              <p>
+                {t('Confirmed block', '确认区块')}：{value.snapshot.blockNumber}
+              </p>
+              <p>
+                {t('Creator', '创建者')}：<code>{value.creator}</code>
+              </p>
               <p>
                 Contract: <code>{value.module}</code>
               </p>

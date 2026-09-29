@@ -6,9 +6,9 @@ import { Link } from 'react-router-dom';
 import type { Address, Hex } from 'viem';
 import { formatUnits } from 'viem';
 import { useApp } from '../context';
-import { userError } from '../../shared/lab/wallet';
+import { userError } from '../../shared/wallet';
 import { useFundsWallet, WalletChoice } from '../shared/FundsWallet';
-import { makeClient } from '../../shared/lab/network';
+import { makeClient } from '../../shared/network';
 import { availableActions, groupAccount, prepareAction } from '../../shared/group/actions';
 import type { GroupAction, GroupAccount, GroupActionIntent } from '../../shared/group/actions';
 import type { PublicGroup } from '../../shared/cloud/model';
@@ -66,8 +66,14 @@ export function ActionHistory({
     />
   );
 }
-export function GroupFunds({ group }: { group: PublicGroup }) {
-  const { state, t } = useApp(),
+export function GroupFunds({
+  group,
+  onSnapshot,
+}: {
+  group: PublicGroup;
+  onSnapshot?: (snapshot: PublicGroup['snapshot']) => void;
+}) {
+  const { state, t, locale } = useApp(),
     wallet = useFundsWallet();
   const environment = state.status === 'ready' ? state.config.environment : '';
   const [account, setAccount] = useState<GroupAccount | null>(null),
@@ -78,6 +84,9 @@ export function GroupFunds({ group }: { group: PublicGroup }) {
     [notice, setNotice] = useState(''),
     [ack, setAck] = useState(false);
   const epoch = useRef(0);
+  useEffect(() => {
+    if (account) onSnapshot?.(account.snapshot);
+  }, [account, onSnapshot]);
   useEffect(() => {
     epoch.current++;
     setAccount(null);
@@ -139,7 +148,7 @@ export function GroupFunds({ group }: { group: PublicGroup }) {
     account && wallet.actor ? availableActions(group.intent, wallet.actor, account) : [];
   const unresolved = rows.some((r) => !terminal.includes(r.state));
   return (
-    <div className="cloud-card">
+    <div className="cloud-card funds-panel group-funds-panel">
       <h2>{t('My funds and actions', '我的资金与操作')}</h2>
       <WalletChoice
         value={wallet}
@@ -175,11 +184,11 @@ export function GroupFunds({ group }: { group: PublicGroup }) {
             · {statusLabel(account.snapshot.state, t)}
           </p>
           <p>
-            {t('Withdrawable credit', '可领取余额')}：{formatUnits(BigInt(account.credit), 6)} AUSD
+            {t('Withdrawable credit', '可领取余额')}：{formatUnits(BigInt(account.credit), 18)} MON
           </p>
           <p>
             {t('Already transferred to wallet', '已转入钱包')}：
-            {formatUnits(BigInt(account.withdrawn), 6)} AUSD
+            {formatUnits(BigInt(account.withdrawn), 18)} MON
           </p>
           <p>
             {t('Snapshot block', '快照区块')}：{account.snapshot.blockNumber}
@@ -188,15 +197,20 @@ export function GroupFunds({ group }: { group: PublicGroup }) {
       ) : null}
       <p>
         {t(
-          'Approval is not payment. Credit is not a wallet transfer. Before the deadline you may exit once; the same address cannot rejoin. A successful group is not proof of delivery.',
-          '授权不是付款，可领取余额不是钱包到账。截止前可退出，同地址不能重新加入。成团不代表服务已交付。',
+          'Pay directly in MON. Credit requires withdrawal. Before the deadline you may exit once; the same address cannot rejoin. A successful group is not proof of delivery.',
+          '直接使用 MON 付款，可领取款需单独提款。截止前可退出，同地址不能重新加入。成团不代表服务已交付。',
         )}
       </p>
       <div className="button-row">
         {actions.map((action) => (
           <button
             key={action}
-            className="button secondary"
+            className={
+              'button action-button ' +
+              (['contribute', 'withdrawFor', 'creditRefund'].includes(action)
+                ? 'primary'
+                : 'secondary')
+            }
             disabled={
               busy ||
               unresolved ||
@@ -230,20 +244,50 @@ export function GroupFunds({ group }: { group: PublicGroup }) {
         </p>
       ) : null}
       {prepared ? (
-        <div className="notice">
+        <div className="checkout-review">
           <h3>{t(...labels[prepared.action])}</h3>
-          <p>
-            Monad Testnet · AUSD · {t('Contract', '合约')}{' '}
-            <code>{prepared.group.deployment.address}</code>
-          </p>
-          <p>
-            {t('Wallet', '钱包')} <code>{prepared.actor}</code> · nonce {prepared.nonce}
-          </p>
-          <p>
-            {t('Unit price', '每份金额')} {formatUnits(BigInt(group.data.unitPrice), 6)} AUSD ·{' '}
-            {t('Fixed beneficiary', '固定收款人')} <code>{group.data.beneficiary}</code>
-          </p>
-          <label>
+          <details className="verification-note">
+            <summary>{t('Signing details and fixed beneficiary', '签名详情与固定收款人')}</summary>
+            <p>
+              Monad Testnet · MON · {t('Contract', '合约')}{' '}
+              <code>{prepared.group.deployment.address}</code>
+            </p>
+            <p>
+              {t('Wallet', '钱包')} <code>{prepared.actor}</code> · nonce {prepared.nonce}
+            </p>
+            <p>
+              {t('Unit price', '每份金额')} {formatUnits(BigInt(group.data.unitPrice), 18)} MON ·{' '}
+              {t('Fixed beneficiary', '固定收款人')} <code>{group.data.beneficiary}</code>
+            </p>
+          </details>
+          {prepared.action === 'contribute' ? (
+            <div className="checkout-rules">
+              <h3>{t('Rules for this payment', '本次参与规则')}</h3>
+              <p>
+                <strong>{t('Exit before the deadline', '募集截止前可退出')}</strong>
+                <br />
+                {new Date(group.data.fundingDeadline * 1000).toLocaleString(
+                  locale === 'zh' ? 'zh-CN' : 'en-GB',
+                )}
+              </p>
+              <p>
+                <strong>{t('A failed group returns your principal', '未成团本金可退')}</strong>
+                <br />
+                {t(
+                  'Refunds first become credit; withdraw to receive MON.',
+                  '退款先记入可领取款，再提到钱包。',
+                )}
+              </p>
+              <p>
+                <strong>{t('Success settles at the agreed time', '成团后到约定时间结算')}</strong>
+                <br />
+                {new Date(group.data.settleNotBefore * 1000).toLocaleString(
+                  locale === 'zh' ? 'zh-CN' : 'en-GB',
+                )}
+              </p>
+            </div>
+          ) : null}
+          <label className="cloud-check">
             <input
               type="checkbox"
               disabled={busy}
@@ -261,7 +305,17 @@ export function GroupFunds({ group }: { group: PublicGroup }) {
             onClick={() =>
               void run(async () => {
                 const current = epoch.current;
-                const hash = await sendGroupAction(wallet.wallet!.provider, environment, prepared);
+                let hash: Hex;
+                try {
+                  hash = await sendGroupAction(wallet.wallet!.provider, environment, prepared);
+                } catch (e) {
+                  if (current === epoch.current) {
+                    setPrepared(null);
+                    setAck(false);
+                    setRows(readActions(localStorage, actionKey(environment, prepared.actor)));
+                  }
+                  throw e;
+                }
                 if (current !== epoch.current) return;
                 setNotice(
                   t(`Sent: ${hash}. Recheck; do not resend.`, `已发送：${hash}，请核验，勿重发。`),
@@ -275,6 +329,17 @@ export function GroupFunds({ group }: { group: PublicGroup }) {
             }
           >
             {t('Sign this action', '签署本次操作')}
+          </button>
+          <button
+            type="button"
+            className="button secondary"
+            disabled={busy}
+            onClick={() => {
+              setPrepared(null);
+              setAck(false);
+            }}
+          >
+            {t('Back to rules', '返回核对规则')}
           </button>
         </div>
       ) : null}

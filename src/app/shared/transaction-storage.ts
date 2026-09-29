@@ -5,7 +5,13 @@ export function requireResolvedTransactions(
   environment: string,
   actor: string,
 ) {
-  for (const prefix of ['monadbox.actions.v1', 'monadbox.module-actions.v1']) {
+  for (const prefix of [
+    'monadbox.setup.mon-v2',
+    'monadbox.actions.v1',
+    'monadbox.module-actions.v1',
+    'monadbox.actions.mon-v2',
+    'monadbox.module-actions.mon-v2',
+  ]) {
     const raw = storage.getItem(`${prefix}:${environment}:10143:${actor.toLowerCase()}`);
     if (!raw) continue;
     let rows: unknown;

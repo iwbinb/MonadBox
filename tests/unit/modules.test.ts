@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { encodeAbiParameters, encodeEventTopics, erc20Abi, keccak256, stringToHex } from 'viem';
+import { encodeAbiParameters, encodeEventTopics, keccak256, stringToHex } from 'viem';
 import type { Address, Hex } from 'viem';
 import {
   moduleDataSchema,
@@ -19,8 +19,8 @@ import {
 } from '../../src/shared/modules/terms';
 import { confirmModuleAction, verifyModule } from '../../src/shared/modules/chain';
 import { readRecords, saveRecord } from '../../src/app/modules/journal';
-import { TOKEN } from '../../src/shared/lab/network';
-import type { ChainClient } from '../../src/shared/lab/network';
+import { TOKEN } from '../../src/shared/network';
+import type { ChainClient } from '../../src/shared/network';
 const A = '0x1111111111111111111111111111111111111111' as Address,
   B = '0x2222222222222222222222222222222222222222' as Address,
   M = '0x3333333333333333333333333333333333333333' as Address;
@@ -122,10 +122,11 @@ describe('immutable split rules and integer allocations', () => {
     ).toThrow();
     expect(() => moduleDeploymentSchema.parse({ ...deployment, version: 2 })).toThrow();
   });
-  it('encodes exact approval and final payment amounts, rejects unsupported actions', () => {
+  it('encodes exact native value and final payment amounts, rejects unsupported actions', () => {
     const i = intent();
     expect(moduleCall(i).to).toBe(M);
-    expect(moduleCall({ ...i, action: 'approve' }).to).toBe(TOKEN);
+    expect(moduleCall(i).value).toBe(101n);
+    expect(() => moduleCall({ ...i, action: 'approve' })).toThrow('ACTION_UNAVAILABLE');
     expect(() => moduleCall({ ...i, action: 'leave' })).toThrow();
   });
 });
@@ -136,7 +137,7 @@ function fake() {
     from: A,
     to: call.to,
     input: call.data,
-    value: 0n,
+    value: call.value,
     nonce: 7,
     type: 'eip1559',
     blockHash: BH,
@@ -155,6 +156,7 @@ function fake() {
   const receipt = { status: 'success', blockNumber: 100n, blockHash: BH, logs: [log] };
   const c = {
     getChainId: vi.fn(async () => 10143),
+    getBalance: vi.fn(async () => 100000000000000000000n),
     getCode: vi.fn(async () => definitions.split.artifact.runtime),
     getTransaction: vi.fn(async () => tx),
     getTransactionReceipt: vi.fn(async () => receipt),
@@ -222,28 +224,13 @@ describe('versioned module transaction verification', () => {
     );
     await expect(verifyModule(f.client, deployment)).rejects.toThrow('UNVERIFIED_CONTRACT');
   });
-  it('checks token approvals without treating them as payments', async () => {
-    const f = fake(),
-      i = { ...f.i, action: 'approve' as const };
-    const call = moduleCall(i);
-    f.tx.to = call.to;
-    f.tx.input = call.data;
-    f.receipt.logs = [
-      {
-        address: TOKEN,
-        topics: encodeEventTopics({
-          abi: erc20Abi,
-          eventName: 'Approval',
-          args: { owner: A, spender: M },
-        }),
-        data: encodeAbiParameters([{ type: 'uint256' }], [101n]),
-      },
-    ];
-    expect((await confirmModuleAction(f.client, i, H)).state).toBe('finalized');
-    await expect(confirmModuleAction(f.client, f.i, H)).resolves.toHaveProperty(
-      'state',
-      'replaced',
-    );
+  it('rejects ERC20 approval intents and mismatched native value', async () => {
+    const f = fake();
+    expect(() => moduleCall({ ...f.i, action: 'approve' })).toThrow('ACTION_UNAVAILABLE');
+    f.tx.value = 0n;
+    expect((await confirmModuleAction(f.client, f.i, H)).state).toBe('replaced');
+    f.tx.value = 102n;
+    expect((await confirmModuleAction(f.client, f.i, H)).state).toBe('replaced');
   });
 });
 describe('module recovery journal', () => {

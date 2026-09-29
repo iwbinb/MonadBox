@@ -8,14 +8,14 @@ export function parseRewardList(raw: string) {
     .split(/\r?\n/)
     .map((v) => v.trim())
     .filter(Boolean);
-  if (/^address[,\t]amount(?:_ausd)?$/i.test(lines[0] ?? '')) lines.shift();
+  if (/^address[,\t]amount(?:_mon)?$/i.test(lines[0] ?? '')) lines.shift();
   if (lines.length < 1 || lines.length > 100) throw Error('LIST_COUNT');
   const rows = lines.map((line, index) => {
     try {
       const values = line.split(/[,\t]/).map((v) => v.trim());
       if (values.length !== 2) throw Error();
       const address = addressSchema.parse(values[0]),
-        amount = parseAmount(values[1]!, 6);
+        amount = parseAmount(values[1]!, 18);
       if (amount <= 0n || amount > MAX_UINT256) throw Error();
       return { address, amount: amount.toString() };
     } catch {

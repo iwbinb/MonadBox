@@ -8,14 +8,13 @@
 
 用户明确真实钱包测试后置，允许继续编码和本地测试。M0-C真实交易及M1-D仍待验收，但不再阻塞写功能；不能因此声称已验收或自行放行主网/公众资金（ADR-19）。
 
-## Git
+## Git 与交付（2026-09-28 用户最新决定）
 
-- 只在长期dev开发；先读取最新dev/main/文件/PR，不覆盖外部更新。
-- 每阶段提交dev并维护dev→main PR，说明实际测试和未验证项。普通单批请求完成后报告；用户明确授权全阶段时持续推进计划，不反复等待阶段确认或合并。
-- 同一dev→main已有开放PR时更新该PR及说明；用户合并后同步main，下一批再开PR。不创建重复PR，不因旧阶段文档里的停止句覆盖最新授权。
-- 不自动合并、不强推、不删除dev、不启用自动合并、不额外建功能分支。
-- 用户合并后检查远端，快进或普通合并main回dev，不重置历史。
-- 不未经授权更改仓库可见性、协作者、保护规则或Cloudflare账户。
+- 直接在 main 开发，小步提交；一个 Production 网站，不使用 dev/PR/Preview 作为前置流程。
+- 修改前读取最新状态，不覆盖外部更新，不强推、不删除其他分支。
+- 当前任务：按已选11张设计稿完成全站，资产仅 Monad Testnet 原生 MON，钱包 MetaMask、Keplr、OKX。
+- 本地做相关检查，交付前做完整回归；以实际可操作流程验收，代码或测试通过不等于真实钱包已经验收。
+- 不更改仓库权限/可见性，不收集钱包私钥；公开链交易由用户钱包明确签署。
 
 ## 资金与签名
 
@@ -31,9 +30,9 @@ M0CProbe仅是限额技术探针，原地址原子退款不代替Group pull-cred
 
 ## 工程、数据与恢复
 
-- 一个monadbox Worker，main正式发布，dev Worker Previews；数据、origin、会话和密钥隔离，不能用旧两Worker方案。
-- M1-B的CLOUD仅依赖DB；需要schema2和environment_guard。不要为了D1云端强制打开旧STORAGE的R2/Queue依赖。
-- 当前CLOUD_ENABLED/GROUP_PUBLISH_ENABLED=false，业务付款和MAINNET=false。实验室TESTNET_LAB独立显式签名能力不变。
+- 一个monadbox Worker，main部署到Production；仅Monad测试网。会话、origin和数据绑定仍要核验。
+- M1-B的CLOUD仅依赖DB；需要cloud schema3、module schema2和environment_guard。不要为了D1云端强制打开旧STORAGE的R2/Queue依赖。
+- 当前CLOUD_ENABLED/GROUP_PUBLISH_ENABLED=false，业务付款和MAINNET=false。Production的旧实验室入口关闭，历史探针仅保留本地测试。
 - 真实资源创建/迁移/ID登记由用户配置或另行授权；不随main自动应用远端迁移。预览不能消费Queues或自动运行Cron。
 - 所有云端写操作验证origin、浏览器会话、CSRF、owner和revision；登录挑战单次消费，存签名文本规则而非签名原文。
 - 原metadata字节不可重编码冒充原哈希。发布准备后冻结规则与salt/nonce；不能因unknown/expired就解冻或自动重新发送。

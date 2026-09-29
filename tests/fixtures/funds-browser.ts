@@ -2,7 +2,7 @@ import { expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { createPublicClient, createWalletClient, http } from 'viem';
 import type { Address, Hex } from 'viem';
-import { TEST_CHAIN } from '../../src/shared/lab/network';
+import { TEST_CHAIN } from '../../src/shared/network';
 export const origin = 'http://127.0.0.1:18890',
   rpc = 'http://127.0.0.1:18746';
 export const client = createPublicClient({
@@ -75,7 +75,9 @@ export async function inject(page: Page, actor: Address) {
         for (const listener of listeners.get('accountsChanged') ?? []) listener([next]);
       };
       w.__fundsActor = actor;
+      localStorage.setItem('monadbox.locale', 'en');
       w.ethereum = {
+        isMetaMask: true,
         request: async ({ method, params = [] }: { method: string; params?: unknown[] }) => {
           if (method === 'eth_accounts') return connected ? [w.__fundsActor] : [];
           if (method === 'eth_requestAccounts') {
@@ -109,6 +111,14 @@ export async function inject(page: Page, actor: Address) {
   );
 }
 export async function connect(page: Page) {
-  await page.getByRole('button', { name: 'Connect funds wallet', exact: true }).click();
-  await expect(page.getByText('Snapshot block', { exact: false })).toBeVisible();
+  const trigger = page.locator('.wallet-trigger');
+  await expect(trigger).toBeVisible();
+  if ((await trigger.textContent())?.includes('Connect wallet')) {
+    await trigger.click();
+    await page
+      .getByRole('dialog')
+      .getByRole('button', { name: /MetaMask.*Detected/ })
+      .click();
+  }
+  await expect(trigger).toContainText('0x');
 }

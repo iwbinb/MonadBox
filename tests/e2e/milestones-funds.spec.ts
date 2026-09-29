@@ -1,9 +1,8 @@
 import { test, expect } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import type { Address } from 'viem';
-import { origin, client, wallet, inject, mine, warp, connect } from '../fixtures/funds-browser';
+import { origin, client, inject, warp, connect } from '../fixtures/funds-browser';
 import { action, login, publish } from '../fixtures/modules-browser';
-import { TOKEN } from '../../src/shared/lab/network';
 import { localDateInput } from '../../src/shared/group/draft';
 import { moduleAbi, agreementTerms } from '../../src/shared/modules/terms';
 import { agreementHash } from '../../src/shared/modules/agreement';
@@ -22,18 +21,7 @@ test('Milestones full sequence, stage files, recovery, remaining refund and bila
   const { accounts } = JSON.parse(readFileSync('artifacts/funds-test.json', 'utf8')) as {
     accounts: Address[];
   };
-  const [admin, buyer, seller] = accounts as [Address, Address, Address],
-    tokenAbi = JSON.parse(readFileSync('contracts/out/MockToken.sol/MockToken.json', 'utf8')).abi;
-  await client.waitForTransactionReceipt({
-    hash: await wallet.writeContract({
-      account: admin,
-      address: TOKEN,
-      abi: tokenAbi,
-      functionName: 'mint',
-      args: [buyer, 1000000n],
-    }),
-  });
-  await mine();
+  const [, buyer, seller] = accounts as [Address, Address, Address];
   const sellerContext = await browser.newContext({ viewport: page.viewportSize() ?? undefined }),
     sellPage = await sellerContext.newPage();
   sellPage.setDefaultTimeout(20000);
@@ -60,8 +48,8 @@ test('Milestones full sequence, stage files, recovery, remaining refund and bila
         .getByRole('textbox', { name: 'Acceptance criteria (public)', exact: true })
         .fill('Reviewed output ' + (n + 1));
       await group
-        .getByRole('textbox', { name: 'Stage amount (AUSD)', exact: true })
-        .fill(['0.000031', '0.00004', '0.00003'][n]!);
+        .getByRole('textbox', { name: 'Stage amount (MON)', exact: true })
+        .fill(['0.000000000000000031', '0.00000000000000004', '0.00000000000000003'][n]!);
       await group
         .getByRole('spinbutton', { name: 'Delivery hours (1–720)', exact: true })
         .fill('1');
@@ -72,7 +60,7 @@ test('Milestones full sequence, stage files, recovery, remaining refund and bila
       'Released stages cannot be clawed back',
     );
     await expect(page.getByRole('region', { name: 'Frozen rules preview' })).toContainText(
-      '0.000101',
+      '0.000000000000000101',
     );
     await page.getByRole('button', { name: 'Save reviewed draft', exact: true }).click();
     await expect(page).toHaveURL(/\/app\/module-drafts\//);
@@ -80,7 +68,7 @@ test('Milestones full sequence, stage files, recovery, remaining refund and bila
     await login(page);
     await page.getByRole('button', { name: 'Copy to cloud', exact: true }).click();
     await page.getByRole('button', { name: 'Freeze and prepare publication', exact: true }).click();
-    await page.getByRole('button', { name: 'Connect funds wallet', exact: true }).click();
+    await connect(page);
     await action(page, 'Publish fixed rules');
     const box = await page.evaluate(
       async () => (await (await fetch('/api/v1/modules')).json()).data[0] as ModuleBox,
@@ -136,11 +124,11 @@ test('Milestones full sequence, stage files, recovery, remaining refund and bila
       } as ModuleData;
       p = await publish(page, data, buyer);
       await go(p);
-      await action(page, 'Approve exact amount');
+
       await action(page, 'Pay full escrow');
     }
     await go(p);
-    await action(page, 'Approve exact amount');
+
     await action(page, 'Pay full escrow');
     await login(sellPage);
     const choose = sellPage.getByLabel('Choose a private file', { exact: true });
@@ -235,8 +223,8 @@ test('Milestones full sequence, stage files, recovery, remaining refund and bila
       .fill('Second stage dispute');
     await action(page, 'Open formal dispute');
     await page
-      .getByRole('textbox', { name: 'Refund to buyer (AUSD)', exact: true })
-      .fill('0.00005');
+      .getByRole('textbox', { name: 'Refund to buyer (MON)', exact: true })
+      .fill('0.00000000000000005');
     await page.getByRole('button', { name: 'Review allocation proposal', exact: true }).click();
     await expect(
       page.getByRole('textbox', { name: 'Proposal JSON to exchange (no signatures)', exact: true }),

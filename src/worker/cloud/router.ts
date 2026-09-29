@@ -64,7 +64,7 @@ export async function requireCloud(env: Env): Promise<D1DatabaseSession> {
     db.prepare('SELECT namespace FROM environment_guard WHERE id=1').first<{ namespace: string }>(),
     db.prepare('SELECT version FROM cloud_schema WHERE id=1').first<{ version: number }>(),
   ]);
-  if (guard?.namespace !== config.STORAGE_NAMESPACE || schema?.version !== 2)
+  if (guard?.namespace !== config.STORAGE_NAMESPACE || schema?.version !== 3)
     throw new CloudError('CLOUD_UNAVAILABLE', 503);
   return db;
 }
@@ -105,6 +105,7 @@ export async function limited(db: D1DatabaseSession, key: string, limit: number,
   if (!row) throw new CloudError('RATE_LIMITED', 429);
 }
 interface Row {
+  currency: string;
   id: string;
   owner_id: string;
   revision: number;
@@ -123,13 +124,16 @@ interface Pub {
 async function box(db: D1DatabaseSession, id: string, actor: string): Promise<CloudBox> {
   uuid.parse(id);
   const row = await db
-    .prepare("SELECT * FROM boxes WHERE id=? AND owner_id=? AND tool='group' AND state!='deleted'")
+    .prepare(
+      "SELECT * FROM boxes WHERE id=? AND owner_id=? AND tool='group' AND currency='MON' AND state!='deleted'",
+    )
     .bind(id, actor)
     .first<Row>();
   if (!row) throw new CloudError('NOT_FOUND', 404);
   return fromRow(db, row);
 }
 async function fromRow(db: D1DatabaseSession, r: Row): Promise<CloudBox> {
+  if (r.currency !== 'MON') throw new CloudError('LEGACY_ASSET', 409);
   if (r.state === 'deleted') throw new CloudError('NOT_FOUND', 404);
   const data = groupDataSchema.parse(JSON.parse(r.draft_json));
   if (r.metadata_json !== groupMetadata(data) || !same(digest(r.metadata_json), r.metadata_hash))
@@ -377,7 +381,7 @@ export function createCloudRouter(
     const rows = await c
       .get('db')
       .prepare(
-        "SELECT * FROM boxes WHERE owner_id=? AND tool='group' AND state!='deleted' ORDER BY created_at DESC,id DESC LIMIT 40",
+        "SELECT * FROM boxes WHERE owner_id=? AND tool='group' AND currency='MON' AND state!='deleted' ORDER BY created_at DESC,id DESC LIMIT 40",
       )
       .bind(c.get('session').address.toLowerCase())
       .all<Row>();
@@ -395,7 +399,7 @@ export function createCloudRouter(
       id = crypto.randomUUID();
     await db
       .prepare(
-        "INSERT INTO boxes(id,owner_id,tool,draft_json,created_at,public_id,metadata_json,metadata_hash,create_key,create_hash) SELECT ?,?,'group',?,?,?,?,?,?,? WHERE (SELECT COUNT(*) FROM boxes WHERE owner_id=? AND state!='deleted')<40 ON CONFLICT(owner_id,create_key) DO NOTHING",
+        "INSERT INTO boxes(id,owner_id,tool,draft_json,created_at,public_id,metadata_json,metadata_hash,create_key,create_hash,currency) SELECT ?,?,'group',?,?,?,?,?,?,?,'MON' WHERE (SELECT COUNT(*) FROM boxes WHERE owner_id=? AND currency='MON' AND state!='deleted')<40 ON CONFLICT(owner_id,create_key) DO NOTHING",
       )
       .bind(
         id,
@@ -565,7 +569,9 @@ export function createCloudRouter(
     if (!id.success) throw new CloudError('NOT_FOUND', 404);
     const db = c.get('db');
     const r = await db
-      .prepare("SELECT * FROM boxes WHERE public_id=? AND tool='group' AND state='published'")
+      .prepare(
+        "SELECT * FROM boxes WHERE public_id=? AND tool='group' AND currency='MON' AND state='published'",
+      )
       .bind(id.data)
       .first<Row>();
     if (!r) throw new CloudError('NOT_FOUND_OR_NOT_PUBLISHED', 404);

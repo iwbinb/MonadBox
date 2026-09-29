@@ -6,7 +6,7 @@ import { modulePublicationSchema } from '../../shared/modules/model';
 import type { ModulePublication } from '../../shared/modules/model';
 import { groupAccount, availableActions } from '../../shared/group/actions';
 import { moduleSnapshot, moduleActions } from '../../shared/modules/chain';
-import { makeClient } from '../../shared/lab/network';
+import { makeClient } from '../../shared/network';
 import { actionKey, readActions } from '../group/action-journal';
 import { journalKey, readRecords } from '../modules/journal';
 
@@ -37,7 +37,7 @@ export const knownSchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('group-v1'), publication: intentSchema }),
   z.strictObject({ kind: z.literal('module'), publication: modulePublicationSchema }),
 ]);
-const bookmarkKey = (environment: string) => `monadbox.workspace.v1:${environment}:10143`;
+const bookmarkKey = (environment: string) => `monadbox.workspace.mon-v2:${environment}:10143`;
 export const boxKey = (box: KnownBox) =>
   `${box.publication.deployment.address.toLowerCase()}:${box.publication.chainBoxId}`;
 export function readBookmarks(storage: Pick<Storage, 'getItem'>, environment: string): KnownBox[] {

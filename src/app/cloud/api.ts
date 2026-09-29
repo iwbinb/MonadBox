@@ -1,7 +1,8 @@
+import { requireResolvedTransactions } from '../shared/transaction-storage';
 import { calldata, same, verifyDeployment } from '../../shared/cloud/chain';
 import { intentSchema, LOGIN_STATEMENT } from '../../shared/cloud/model';
 import type { PublishIntent, SessionInfo } from '../../shared/cloud/model';
-import { makeClient } from '../../shared/lab/network';
+import { makeClient } from '../../shared/network';
 import type { InjectedProvider } from '../../shared/lab/wallet';
 import { requireWallet } from '../../shared/lab/wallet';
 import { parseSiweMessage, validateSiweMessage } from 'viem/siwe';
@@ -99,10 +100,12 @@ export function readJournal(intent: PublishIntent): Journal | null {
 export async function sendPublication(
   provider: InjectedProvider,
   input: PublishIntent,
+  environment: string,
 ): Promise<Hex> {
   const i = intentSchema.parse(input);
   if (!navigator.locks) throw Error('Safe multi-tab signing unavailable / 浏览器不支持安全签名锁');
   return navigator.locks.request(`monadbox.sign:${i.creator.toLowerCase()}`, async () => {
+    requireResolvedTransactions(localStorage, environment, i.creator);
     const previous = readJournal(i);
     if (previous && previous.state !== 'rejected')
       throw Error('Recheck the previous transaction; do not resend. / 请核实前一笔交易，勿重发。');

@@ -4,9 +4,9 @@ import { assertBranch, validateConfig } from '../../scripts/validate-config.mjs'
 const config = JSON.parse(readFileSync('wrangler.jsonc', 'utf8'));
 const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
 describe('deployment guards (no publishing)', () => {
-  it('accepts only the two intended branch-mode pairs', () => {
+  it('accepts Production from main only', () => {
     expect(() => assertBranch('production', 'main')).not.toThrow();
-    expect(() => assertBranch('preview', 'dev')).not.toThrow();
+    expect(() => assertBranch('preview', 'dev')).toThrow();
   });
   it.each([
     ['production', 'dev'],
@@ -24,7 +24,7 @@ describe('deployment guards (no publishing)', () => {
       validateConfig(
         {
           ...config,
-          previews: { vars: { ...config.previews.vars, STORAGE_NAMESPACE: 'monadbox-production' } },
+          previews: { vars: { ...config.vars, STORAGE_NAMESPACE: 'monadbox-production' } },
         },
         pkg,
       ),
