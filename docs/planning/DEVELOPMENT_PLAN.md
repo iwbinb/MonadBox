@@ -12,7 +12,16 @@
 - [x] N4 main/Production脚本、部署配置与操作说明；准备测试网部署和真实资源接入。
 - [x] N5 原生MON合约/集成/浏览器回归与设计对照，真实钱包及线上证据分开记录。
 
-本轮本地通过396项应用测试、161项合约测试、76项浏览器场景；证据见[MON验收](../archive/NATIVE_MON_ACCEPTANCE.md)与[设计核对](../../design-qa.md)。公开链部署、资源和真实钱包仍按部署说明单独验收。
+本轮通过396项应用测试、161项合约测试、76项浏览器场景，完整远端[CI 57](https://github.com/iwbinb/MonadBox/actions/runs/36502349693)通过；证据见[MON验收](../archive/NATIVE_MON_ACCEPTANCE.md)与[设计核对](../../design-qa.md)。
+
+### 当前线上启用任务（2026-09-29）
+
+- [x] 用户授权 D1 与线上测试 MON 支付；本轮不使用 R2。
+- [x] 创建 monadbox-production（APAC），执行0001–0005迁移、登记迁移记录，核验环境及3份schema版本。
+- [x] Production配置绑定DB，启用CLOUD/MODULES与精确origin；关闭附件，Deliver/Milestones保留私下交换文件及链上摘要路径。
+- 本次main构建、Production绑定、云端健康与登录入口的实际核对结果记于artifacts/d1-activation.json；资源与迁移证据见[D1接入](../archive/D1_ACTIVATION.md)。
+- [ ] 用户在/setup逐笔签署7个合约部署并提供核验后的登记JSON；收到后继续核验并启用发布/付款，无需重复请求授权。
+- [ ] 三钱包、手机与小额测试MON真实流程验收；未取得真实证据前不得标完成。
 
 以下M0–M7表为改造前历史工程基线，不能作为本轮MON与新界面验收证据。
 

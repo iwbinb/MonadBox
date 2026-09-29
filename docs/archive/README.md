@@ -33,3 +33,4 @@
 ## 当前原生 MON 改造
 
 - [原生 MON 与全站改造](NATIVE_MON_ACCEPTANCE.md)：三钱包、11张设计、原生资金、部署与恢复，公开资源/真实钱包另列。
+- [Production D1 接入](D1_ACTIVATION.md)：实际数据库、5份迁移与不使用R2的配置，真实合约登记待用户钱包完成。

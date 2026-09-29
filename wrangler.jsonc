@@ -16,6 +16,14 @@
   "observability": {
     "enabled": true
   },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "monadbox-production",
+      "database_id": "37b5d014-4297-40b4-aa3c-4d1a1471dcb0",
+      "migrations_dir": "migrations"
+    }
+  ],
   "vars": {
     "APP_ENV": "production",
     "CHAIN_ID": "10143",
@@ -27,12 +35,12 @@
     "ASSET_ALLOWLIST": "[]",
     "CONTRACT_REGISTRY": "[]",
     "TESTNET_LAB_ENABLED": "false",
-    "CLOUD_ENABLED": "false",
+    "CLOUD_ENABLED": "true",
     "ATTACHMENTS_ENABLED": "false",
     "GROUP_PUBLISH_ENABLED": "false",
     "GROUP_DEPLOYMENT": "null",
-    "APP_ORIGIN": "",
-    "MODULES_ENABLED": "false",
+    "APP_ORIGIN": "https://monadbox.iwbinb.workers.dev",
+    "MODULES_ENABLED": "true",
     "MODULE_PUBLISH_ENABLED": "false",
     "MODULE_DEPLOYMENTS": "[]"
   }

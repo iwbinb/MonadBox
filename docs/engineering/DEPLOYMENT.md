@@ -22,29 +22,29 @@
 - 部署返回丢失后，根据原账户和 nonce 恢复，禁止自动重发。核验原始交易、确认区块、代码、资产、管理员和签名域后才输出地址及 runtimeHash。
 - 0005 迁移将旧记录保留为 legacy；新记录标记 MON。旧 6 位金额不转换为 18 位 MON。
 
-## 3. 待启用资源清单
+## 3. D1 已创建，R2 暂不启用
 
-2026-09-28 通过 Cloudflare API 核验：monadbox 的云端与业务付款开关关闭，没有 D1 绑定；同名 D1 查询没有现存数据库。以下清单用于实际启用，不使用本地测试地址或占位 ID。
+2026-09-29 用户授权启动 D1 和线上测试 MON 支付，暂不使用 R2。通过 Cloudflare API 创建 Production D1 并执行5份迁移，读回确认 cloud_schema=3、module_schema=2、attachment_schema=1、environment_guard正确且外键检查无错误。配置已绑定该库并启用云端草稿；合约发布和付款仍需真实部署登记。
 
 | 资源 | 名称 / 值 | 用途 |
 | --- | --- | --- |
 | D1 | monadbox-production | 登录会话、公开规则、草稿、交易索引、私密附件元数据 |
-| D1 binding | DB | 唯一 Production 数据库，ID由创建结果填入 |
-| 私有 R2 | monadbox-private-files-production | Deliver / Milestones 的双方附件 |
-| R2 binding | FILES | 桶保持私有，无公开域名 |
+| D1 binding / ID | DB / 37b5d014-4297-40b4-aa3c-4d1a1471dcb0 | 已创建，APAC |
+| 私有 R2（延期） | monadbox-private-files-production | 未创建；仅以后启用私密附件时需要 |
+| R2 binding（延期） | FILES | 当前没有绑定 |
 | Origin | https://monadbox.iwbinb.workers.dev | 精确同源校验 |
 | Namespace | monadbox-production | 数据库和附件环境核验 |
 
-资源创建和远端迁移遵守仓库 AGENTS 的授权边界。无需 Queue 或 Cron。
+D1 创建与本次迁移已经用户授权并执行，后续 main 构建仍不自动迁移。无需 Queue 或 Cron。R2 不参与登录、草稿、发布或链上资金结算；Deliver / Milestones 可私下交换文件并提交链上交付摘要，页面暂不提供站内文件上传、预览或下载。不要把文件内容塞进 D1 替代私有对象存储。
 
-### D1 顺序
+### D1 初始化记录与后续维护
 
-1. 新库按顺序应用 migrations/0001 至 0005；已有库仅应用尚未执行的迁移。
+1. 本库已按顺序应用 migrations/0001 至 0005，并写入 Wrangler 兼容的 d1_migrations；后续仅应用尚未执行的迁移。
 2. 写入 `environment_guard` 的唯一行 `(id=1, namespace='monadbox-production')`。若已有不同 namespace，停止并核对资源，不能覆盖。
 3. 核验 `cloud_schema=3`、`module_schema=2`、`attachment_schema=1`。
 4. 将实际 database_id 写入 wrangler.jsonc 的 DB 绑定。
 
-### R2 顺序
+### R2 顺序（本轮延期）
 
 1. 创建私有桶并绑定 FILES。
 2. 写入对象 `.monadbox-environment`，正文 `monadbox-production`，自定义元数据 `namespace=monadbox-production`。
@@ -63,9 +63,9 @@ Monad 按交易设置的 Gas 上限收费，页面提供预计费用，最终由
 
 ## 5. 分两步启用
 
-数据库就绪后可启用 `CLOUD_ENABLED` 与 `MODULES_ENABLED`。完成原生 MON 合约登记后，启用 `GROUP_PUBLISH_ENABLED`、`MODULE_PUBLISH_ENABLED`。完成真实钱包小额流程检查后再启用 `NETWORK_WRITES_ENABLED`。
+本轮启用 `CLOUD_ENABLED` 与 `MODULES_ENABLED`。用户已授权线上测试 MON 支付；完成用户钱包签署的真实合约部署并核验登记后，启用 `GROUP_PUBLISH_ENABLED`、`MODULE_PUBLISH_ENABLED`、`NETWORK_WRITES_ENABLED`，随后用小额测试 MON 进行真实钱包验收。缺少真实合约配置时不能打开付款开关。
 
-私有桶就绪后启用 `ATTACHMENTS_ENABLED`。始终保持 `MAINNET_ENABLED=false`、`TESTNET_LAB_ENABLED=false`、`STORAGE_ENABLED=false`、`BACKGROUND_ENABLED=false`；旧 ASSET_ALLOWLIST/CONTRACT_REGISTRY 保持空值。
+当前保持 `ATTACHMENTS_ENABLED=false`，无需 R2；以后另行启用私有桶时再打开附件功能。始终保持 `MAINNET_ENABLED=false`、`TESTNET_LAB_ENABLED=false`、`STORAGE_ENABLED=false`、`BACKGROUND_ENABLED=false`；旧 ASSET_ALLOWLIST/CONTRACT_REGISTRY 保持空值。
 
 运行配置检查、构建、部署预检，再通过 main 发布。核对 `/api/v1/health` 与 `/api/v1/config` 的 revision、环境、链、合约和开关。
 

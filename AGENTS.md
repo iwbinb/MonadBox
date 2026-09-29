@@ -32,7 +32,8 @@ M0CProbe仅是限额技术探针，原地址原子退款不代替Group pull-cred
 
 - 一个monadbox Worker，main部署到Production；仅Monad测试网。会话、origin和数据绑定仍要核验。
 - M1-B的CLOUD仅依赖DB；需要cloud schema3、module schema2和environment_guard。不要为了D1云端强制打开旧STORAGE的R2/Queue依赖。
-- 当前CLOUD_ENABLED/GROUP_PUBLISH_ENABLED=false，业务付款和MAINNET=false。Production的旧实验室入口关闭，历史探针仅保留本地测试。
+- 2026-09-29 用户已授权启用线上测试 MON 支付并创建 D1；暂不使用 R2。D1 已创建并执行0001–0005迁移，CLOUD_ENABLED/MODULES_ENABLED=true；真实合约登记前发布与付款开关保持false。收到用户钱包部署的配置并核验后可继续启用测试网发布/付款，无需重复索取授权。
+- MAINNET、ATTACHMENTS、旧STORAGE和BACKGROUND保持false。Production的旧实验室入口关闭，历史探针仅保留本地测试。
 - 真实资源创建/迁移/ID登记由用户配置或另行授权；不随main自动应用远端迁移。预览不能消费Queues或自动运行Cron。
 - 所有云端写操作验证origin、浏览器会话、CSRF、owner和revision；登录挑战单次消费，存签名文本规则而非签名原文。
 - 原metadata字节不可重编码冒充原哈希。发布准备后冻结规则与salt/nonce；不能因unknown/expired就解冻或自动重新发送。
