@@ -24,8 +24,10 @@ export function SetupRegistration({
   const output = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
     return () => {
-      controller.current?.abort();
-      onBusyChange(false);
+      if (controller.current) {
+        controller.current.abort();
+        onBusyChange(false);
+      }
     };
   }, [onBusyChange]);
   const ready = setupKinds.filter((kind) =>
